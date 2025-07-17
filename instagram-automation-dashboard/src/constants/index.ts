@@ -1,0 +1,1 @@
+// Application constants for the Instagram Automation Dashboard 

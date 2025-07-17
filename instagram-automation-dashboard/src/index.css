@@ -1,0 +1,48 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Keep useful base styles but make them Tailwind-friendly */
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  
+  /* Use light mode as default for Instagram theme */
+  color-scheme: light;
+  color: #262626;
+  background-color: #FAFAFA;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Remove the body centering that conflicts with our layout */
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  /* Removed the flex centering */
+}
+
+/* Keep useful link and button base styles */
+a {
+  font-weight: 500;
+  color: #E4405F; /* Instagram primary color */
+  text-decoration: inherit;
+}
+a:hover {
+  color: #405DE6; /* Instagram secondary color */
+}
+
+/* Basic button reset - Tailwind will handle most styling */
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+/* Remove the media query dark mode since we're using Instagram light theme */
