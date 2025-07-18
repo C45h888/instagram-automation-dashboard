@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { HeaderNavigation } from "../ui/header-navigation"
+import HeaderNavigation from "../ui/header-navigation"
 import { ContentCalendar } from "../ui/content-calendar"
 import { ContentLibraryGrid } from "../ui/content-library-grid"
 import { PostComposer } from "../ui/post-composer"

@@ -1,10 +1,15 @@
-import React from "react";
+import { AutoGenerationSettings } from "../components/ui/auto-generation-settings"
 
-const Settings = () => (
-  <div className="p-8 text-center">
-    <h1 className="text-2xl font-bold text-status-warning">System Settings</h1>
-    <p className="mt-4 text-neutral-700">Configure your system settings here.</p>
-  </div>
-);
-
-export default Settings; 
+export default function Settings() {
+  return (
+    <div className="space-y-10 animate-fade-in">
+      <div className="mb-8">
+        <h1 className="text-4xl font-bold text-white mb-2 tracking-tight">System Settings</h1>
+        <p className="text-gray-300 text-lg">Configure your automation and system preferences</p>
+      </div>
+      <div className="animate-fade-in">
+        <AutoGenerationSettings />
+      </div>
+    </div>
+  )
+} 

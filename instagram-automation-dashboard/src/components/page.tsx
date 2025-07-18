@@ -1,11 +1,11 @@
 "use client"
 
 import { useState } from "react"
-import { HeaderNavigation } from "./ui/header-navigation"
-import { StatusCard } from "./ui/status-card"
-import { MetricCard } from "./ui/metric-card"
-import { ActivityFeed } from "./ui/activity-feed"
-import { QuickActionsPanel } from "./ui/quick-actions-panel"
+import HeaderNavigation from "./ui/header-navigation"
+import StatusCard from "./ui/status-card"
+import MetricCard from "./ui/metric-card"
+import ActivityFeed from "./ui/activity-feed"
+import QuickActionsPanel from "./ui/quick-actions-panel"
 
 export default function Dashboard() {
   const [workflowStates, setWorkflowStates] = useState({

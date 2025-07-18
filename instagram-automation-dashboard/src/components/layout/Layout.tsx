@@ -1,42 +1,54 @@
 import React from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
-import { useAuthStore } from '../../stores/authStore';
+import { Outlet } from 'react-router-dom';
+
+const navigationItems = [
+  { name: 'Dashboard', href: '/', icon: '🏠' },
+  { name: 'Content', href: '/content', icon: '📅' },
+  { name: 'Engagement', href: '/engagement', icon: '💬' },
+  { name: 'Analytics', href: '/analytics', icon: '📊' },
+  { name: 'UGC', href: '/ugc', icon: '👥' },
+  { name: 'Settings', href: '/settings', icon: '⚙️' },
+];
 
 const Layout: React.FC = () => {
-  const logout = useAuthStore((s) => s.logout);
-  const user = useAuthStore((s) => s.user);
-  const navigate = useNavigate();
-
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
-
   return (
-    <div className="flex min-h-screen bg-neutral-50">
-      {/* Sidebar */}
-      <aside className="w-64 bg-white shadow-lg p-6 hidden md:block">
-        <div className="font-bold text-xl mb-8 text-instagram-primary">IG Automation</div>
-        <nav className="space-y-4">
-          <a href="/" className="block text-neutral-900 hover:text-instagram-primary">Dashboard</a>
-          <a href="/content" className="block text-neutral-900 hover:text-instagram-primary">Content</a>
-          <a href="/engagement" className="block text-neutral-900 hover:text-instagram-primary">Engagement</a>
-          <a href="/analytics" className="block text-neutral-900 hover:text-instagram-primary">Analytics</a>
-          <a href="/ugc" className="block text-neutral-900 hover:text-instagram-primary">UGC</a>
-          <a href="/settings" className="block text-neutral-900 hover:text-instagram-primary">Settings</a>
-        </nav>
-      </aside>
-      {/* Main content */}
-      <div className="flex-1 flex flex-col">
-        {/* Header */}
-        <header className="flex items-center justify-between bg-white shadow p-4">
-          <div className="font-semibold text-lg text-instagram-secondary">Welcome, {user?.username || 'User'}</div>
-          <button onClick={handleLogout} className="bg-instagram-primary text-white px-4 py-2 rounded hover:bg-instagram-secondary transition">Logout</button>
-        </header>
-        <main className="flex-1 p-6">
-          <Outlet />
-        </main>
-      </div>
+    <div className="min-h-screen bg-gray-900 flex flex-col">
+      {/* Top Navigation Bar */}
+      <header className="bg-gray-800/50 backdrop-blur-xl border-b border-gray-700 sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-8 flex items-center justify-between h-20">
+          {/* Logo/Brand */}
+          <div className="flex items-center space-x-4">
+            <div className="w-10 h-10 bg-gradient-to-r from-yellow-500 to-yellow-600 rounded-xl flex items-center justify-center shadow-lg">
+              <div className="w-6 h-6 bg-white/20 rounded-lg backdrop-blur-sm"></div>
+            </div>
+            <span className="text-white font-semibold text-xl tracking-tight">AutomationPro</span>
+          </div>
+          {/* Navigation Links */}
+          <nav className="hidden md:flex items-center space-x-2">
+            {navigationItems.map((item) => (
+              <a key={item.name} href={item.href} className="text-gray-300 hover:text-white px-4 py-2 rounded transition-all duration-300 font-medium flex items-center">
+                <span className="mr-2">{item.icon}</span>
+                {item.name}
+              </a>
+            ))}
+          </nav>
+          {/* Search and User */}
+          <div className="flex items-center space-x-4">
+            <input
+              type="text"
+              placeholder="Search..."
+              className="hidden lg:block pl-12 w-80 bg-gray-800/50 text-white placeholder:text-gray-400 border border-gray-600 rounded-md py-2 focus:border-yellow-500/50 outline-none"
+            />
+            <button className="w-9 h-9 rounded-full bg-gradient-to-tr from-yellow-500 via-yellow-400 to-yellow-300 border-2 border-white/30 flex items-center justify-center shadow">
+              <span className="text-white font-bold">U</span>
+            </button>
+          </div>
+        </div>
+      </header>
+      {/* Main Content */}
+      <main className="flex-1 max-w-7xl mx-auto px-8 py-12">
+        <Outlet />
+      </main>
     </div>
   );
 };
