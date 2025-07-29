@@ -21,6 +21,8 @@
    };
 
    return (
+   )
+ }
 -    <div className="flex flex-col items-center justify-center min-h-screen bg-neutral-50">
 -      <div className="bg-white p-8 rounded shadow-md w-full max-w-sm">
 -        <h1 className="text-2xl font-bold mb-6 text-instagram-primary">Login</h1>
