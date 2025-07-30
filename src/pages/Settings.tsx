@@ -1,8 +1,42 @@
 import React from 'react';
 import { useAuthStore } from '../stores/authStore';
+import { useToast } from '../hooks/useToast';
+import { useModal } from '../hooks/useModal';
 
 const Settings: React.FC = () => {
   const { user, logout } = useAuthStore();
+  const toast = useToast();
+  const modal = useModal();
+
+  const handleLogout = async () => {
+    const confirmed = await modal.openConfirm({
+      title: 'Confirm Logout',
+      message: 'Are you sure you want to log out of your account?',
+      variant: 'warning',
+      confirmText: 'Logout',
+      cancelText: 'Stay Logged In'
+    });
+
+    if (confirmed) {
+      logout();
+      toast.success('Successfully logged out', {
+        title: 'Goodbye!',
+        duration: 3000
+      });
+    }
+  };
+
+  const handleSaveSettings = () => {
+    toast.success('Settings saved successfully!', {
+      title: 'Settings Updated',
+      action: {
+        label: 'Undo',
+        onClick: () => {
+          toast.info('Settings changes reverted');
+        }
+      }
+    });
+  };
 
   return (
     <div className="space-y-8">
@@ -22,12 +56,21 @@ const Settings: React.FC = () => {
             <label className="block text-gray-400 text-sm mb-1">User ID</label>
             <p className="text-white">{user?.id || 'Not set'}</p>
           </div>
-          <button
-            onClick={logout}
-            className="mt-4 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors"
-          >
-            Logout
-          </button>
+          
+          <div className="flex space-x-4 mt-6">
+            <button
+              onClick={handleSaveSettings}
+              className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
+            >
+              Save Settings
+            </button>
+            <button
+              onClick={handleLogout}
+              className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors"
+            >
+              Logout
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -1,36 +1,70 @@
 import React from 'react';
 import { Plus, Calendar, BarChart3, Settings } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useToast } from '../../hooks/useToast';
+import { useModal } from '../../hooks/useModal';
 
 const QuickActions: React.FC = () => {
   const navigate = useNavigate();
+  const toast = useToast();
+  const modal = useModal();
 
   const actions = [
     {
       label: 'Create Post',
       icon: <Plus className="w-5 h-5" />,
-      onClick: () => navigate('/content'),
+      onClick: async () => {
+        const confirmed = await modal.openConfirm({
+          title: 'Create New Post',
+          message: 'This will open the content creation interface. Continue?',
+          variant: 'info',
+          confirmText: 'Create Post'
+        });
+        
+        if (confirmed) {
+          navigate('/content');
+          toast.success('Opening content creator...', {
+            title: 'Navigation'
+          });
+        }
+      },
       gradient: 'from-blue-500 to-purple-600',
       description: 'Create new content'
     },
     {
       label: 'Schedule Content',
       icon: <Calendar className="w-5 h-5" />,
-      onClick: () => navigate('/content'),
+      onClick: () => {
+        navigate('/content');
+        toast.info('Content scheduler loaded', {
+          title: 'Scheduler',
+          duration: 3000
+        });
+      },
       gradient: 'from-green-500 to-teal-600',
       description: 'Plan your posts'
     },
     {
       label: 'View Analytics',
       icon: <BarChart3 className="w-5 h-5" />,
-      onClick: () => navigate('/analytics'),
+      onClick: () => {
+        navigate('/analytics');
+        toast.info('Loading analytics dashboard...', {
+          title: 'Analytics'
+        });
+      },
       gradient: 'from-orange-500 to-red-600',
       description: 'Track performance'
     },
     {
       label: 'Settings',
       icon: <Settings className="w-5 h-5" />,
-      onClick: () => navigate('/settings'),
+      onClick: () => {
+        navigate('/settings');
+        toast.info('Opening settings panel', {
+          title: 'Settings'
+        });
+      },
       gradient: 'from-gray-500 to-gray-700',
       description: 'Configure automation'
     }
