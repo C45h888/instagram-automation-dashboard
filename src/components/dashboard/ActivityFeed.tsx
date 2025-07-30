@@ -5,7 +5,6 @@ import { useToast } from '../../hooks/useToast';
 import { useModal } from '../../hooks/useModal';
 
 interface ActivityFeedProps {
-  activities: ActivityItem[];
   isLoading?: boolean;
 }
 
