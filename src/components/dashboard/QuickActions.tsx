@@ -1,8 +1,10 @@
 import React from 'react';
 import { Plus, Calendar, BarChart3, Settings } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../../hooks/useToast';
 import { useModal } from '../../hooks/useModal';
+import AnimatedButton from '../ui/AnimatedButton';
 
 const QuickActions: React.FC = () => {
   const navigate = useNavigate();
@@ -71,25 +73,42 @@ const QuickActions: React.FC = () => {
   ];
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+    <motion.div 
+      className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, staggerChildren: 0.1 }}
+    >
       {actions.map((action, index) => (
-        <button
+        <motion.div
           key={index}
-          onClick={action.onClick}
-          className={`group p-6 rounded-xl bg-gradient-to-r ${action.gradient} hover:scale-105 transition-all duration-300 text-white font-medium shadow-lg hover:shadow-xl`}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: index * 0.1 }}
         >
-          <div className="flex flex-col items-center text-center space-y-2">
-            <div className="p-2 rounded-lg bg-white/20 group-hover:bg-white/30 transition-colors">
-              {action.icon}
+          <AnimatedButton
+            onClick={action.onClick}
+            hoverEffect="lift"
+            clickEffect="scale"
+            className={`group p-6 rounded-xl bg-gradient-to-r ${action.gradient} text-white font-medium shadow-lg w-full h-full`}
+          >
+            <div className="flex flex-col items-center text-center space-y-2">
+              <motion.div 
+                className="p-2 rounded-lg bg-white/20 group-hover:bg-white/30 transition-colors"
+                whileHover={{ scale: 1.1, rotate: 5 }}
+                transition={{ duration: 0.2 }}
+              >
+                {action.icon}
+              </motion.div>
+              <div>
+                <div className="font-semibold">{action.label}</div>
+                <div className="text-xs opacity-80">{action.description}</div>
+              </div>
             </div>
-            <div>
-              <div className="font-semibold">{action.label}</div>
-              <div className="text-xs opacity-80">{action.description}</div>
-            </div>
-          </div>
-        </button>
+          </AnimatedButton>
+        </motion.div>
       ))}
-    </div>
+    </motion.div>
   );
 };
 

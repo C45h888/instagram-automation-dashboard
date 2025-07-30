@@ -6,6 +6,8 @@ import Layout from './components/layout/Layout';
 import { ToastProvider } from './contexts/ToastContext';
 import { ModalProvider } from './contexts/ModalContext';
 import ToastContainer from './components/ui/ToastContainer';
+import { RouteAnimationProvider } from './components/transitions/RouteAnimationProvider';
+import PageTransition from './components/transitions/PageTransition';
 
 const Dashboard = React.lazy(() => import('./pages/Dashboard'));
 const ContentManagement = React.lazy(() => import('./pages/ContentManagement'));
@@ -28,9 +30,17 @@ function App() {
       <ToastProvider>
         <ModalProvider>
           <Router>
+            <RouteAnimationProvider>
             <React.Suspense fallback={<LoadingSpinner />}>
               <Routes>
-                <Route path="/login" element={<Login />} />
+                <Route 
+                  path="/login" 
+                  element={
+                    <PageTransition type="fade">
+                      <Login />
+                    </PageTransition>
+                  } 
+                />
                 <Route
                   path="/"
                   element={
@@ -39,15 +49,58 @@ function App() {
                     </RequireAuth>
                   }
                 >
-                  <Route index element={<Dashboard />} />
-                  <Route path="content" element={<ContentManagement />} />
-                  <Route path="engagement" element={<EngagementMonitor />} />
-                  <Route path="analytics" element={<Analytics />} />
-                  <Route path="ugc" element={<UGCManagement />} />
-                  <Route path="settings" element={<Settings />} />
+                  <Route 
+                    index 
+                    element={
+                      <PageTransition type="slideUp">
+                        <Dashboard />
+                      </PageTransition>
+                    } 
+                  />
+                  <Route 
+                    path="content" 
+                    element={
+                      <PageTransition type="slide">
+                        <ContentManagement />
+                      </PageTransition>
+                    } 
+                  />
+                  <Route 
+                    path="engagement" 
+                    element={
+                      <PageTransition type="slide">
+                        <EngagementMonitor />
+                      </PageTransition>
+                    } 
+                  />
+                  <Route 
+                    path="analytics" 
+                    element={
+                      <PageTransition type="slide">
+                        <Analytics />
+                      </PageTransition>
+                    } 
+                  />
+                  <Route 
+                    path="ugc" 
+                    element={
+                      <PageTransition type="slide">
+                        <UGCManagement />
+                      </PageTransition>
+                    } 
+                  />
+                  <Route 
+                    path="settings" 
+                    element={
+                      <PageTransition type="slide">
+                        <Settings />
+                      </PageTransition>
+                    } 
+                  />
                 </Route>
               </Routes>
             </React.Suspense>
+            </RouteAnimationProvider>
             <ToastContainer />
           </Router>
         </ModalProvider>

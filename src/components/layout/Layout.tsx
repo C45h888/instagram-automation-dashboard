@@ -1,15 +1,7 @@
 import React from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { Home, Calendar, MessageCircle, BarChart3, Users, Settings, Search, User } from 'lucide-react';
-
-const navigationItems = [
-  { name: 'Dashboard', href: '/', icon: Home },
-  { name: 'Content', href: '/content', icon: Calendar },
-  { name: 'Engagement', href: '/engagement', icon: MessageCircle },
-  { name: 'Analytics', href: '/analytics', icon: BarChart3 },
-  { name: 'UGC', href: '/ugc', icon: Users },
-  { name: 'Settings', href: '/settings', icon: Settings },
-];
+import { Search, User } from 'lucide-react';
+import AnimatedNavigation from './AnimatedNavigation';
 
 const Layout: React.FC = () => {
   const location = useLocation();
@@ -28,27 +20,7 @@ const Layout: React.FC = () => {
           </Link>
           
           {/* Navigation Links */}
-          <nav className="hidden md:flex items-center space-x-1">
-            {navigationItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = location.pathname === item.href;
-              
-              return (
-                <Link
-                  key={item.name}
-                  to={item.href}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 ${
-                    isActive
-                      ? 'bg-white/20 text-white'
-                      : 'text-gray-300 hover:text-white hover:bg-white/10'
-                  }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  <span className="font-medium">{item.name}</span>
-                </Link>
-              );
-            })}
-          </nav>
+          <AnimatedNavigation />
           
           {/* Right Side Actions */}
           <div className="flex items-center space-x-4">
