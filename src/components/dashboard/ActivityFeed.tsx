@@ -1,68 +1,71 @@
 import React from 'react';
-import { CheckCircle, AlertCircle, MessageSquare, Camera } from 'lucide-react';
+import { CheckCircle, AlertCircle, MessageSquare, Camera, Calendar, TrendingUp, Clock } from 'lucide-react';
+import type { ActivityItem } from '../../data/mockData';
 
-interface ActivityItem {
-  type: 'success' | 'warning' | 'info' | 'error';
-  title: string;
-  description: string;
-  timestamp: string;
-  icon: React.ReactNode;
+interface ActivityFeedProps {
+  activities: ActivityItem[];
+  isLoading?: boolean;
 }
 
-const ActivityFeed: React.FC = () => {
-  const activities: ActivityItem[] = [
-    {
-      type: 'success',
-      title: 'Post Published Successfully',
-      description: 'Summer Collection Launch reached 2.3K users',
-      timestamp: '2 minutes ago',
-      icon: <Camera className="w-4 h-4" />
-    },
-    {
-      type: 'info',
-      title: 'Auto-Reply Sent',
-      description: 'Responded to customer inquiry about sizing',
-      timestamp: '5 minutes ago',
-      icon: <MessageSquare className="w-4 h-4" />
-    },
-    {
-      type: 'error',
-      title: 'Story Upload Failed',
-      description: 'Video format not supported, converted and retried',
-      timestamp: '12 minutes ago',
-      icon: <AlertCircle className="w-4 h-4" />
-    },
-    {
-      type: 'success',
-      title: 'Engagement Milestone',
-      description: 'Reached 1000 likes on latest post',
-      timestamp: '1 hour ago',
-      icon: <CheckCircle className="w-4 h-4" />
-    }
-  ];
+const ActivityFeed: React.FC<ActivityFeedProps> = ({ activities, isLoading = false }) => {
+  const getActivityIcon = (type: ActivityItem['type']) => {
+    const icons = {
+      'post_published': Camera,
+      'auto_reply': MessageSquare,
+      'error': AlertCircle,
+      'milestone': TrendingUp,
+      'schedule': Calendar
+    };
+    const IconComponent = icons[type] || CheckCircle;
+    return <IconComponent className="w-4 h-4" />;
+  };
 
   const getStatusColor = (type: string) => {
     switch (type) {
       case 'success': return 'text-green-400 bg-green-400/10';
       case 'warning': return 'text-yellow-400 bg-yellow-400/10';
       case 'error': return 'text-red-400 bg-red-400/10';
+      case 'info': return 'text-blue-400 bg-blue-400/10';
       default: return 'text-blue-400 bg-blue-400/10';
     }
   };
 
+  if (isLoading) {
+    return (
+      <div className="glass-morphism-card p-6 rounded-2xl">
+        <h2 className="text-xl font-bold text-white mb-6">Recent Activity</h2>
+        <div className="space-y-4">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <div key={index} className="flex items-start space-x-4 p-4 rounded-lg bg-white/5 animate-pulse">
+              <div className="w-8 h-8 bg-white/10 rounded-lg"></div>
+              <div className="flex-1">
+                <div className="w-48 h-4 bg-white/10 rounded mb-2"></div>
+                <div className="w-64 h-3 bg-white/10 rounded mb-2"></div>
+                <div className="w-20 h-3 bg-white/10 rounded"></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="glass-morphism-card p-6 rounded-2xl">
       <h2 className="text-xl font-bold text-white mb-6">Recent Activity</h2>
-      <div className="space-y-4">
+      <div className="space-y-4 max-h-96 overflow-y-auto scrollbar-hide">
         {activities.map((activity, index) => (
-          <div key={index} className="flex items-start space-x-4 p-4 rounded-lg bg-white/5 hover:bg-white/10 transition-colors">
-            <div className={`p-2 rounded-lg ${getStatusColor(activity.type)}`}>
-              {activity.icon}
+          <div key={activity.id} className="flex items-start space-x-4 p-4 rounded-lg bg-white/5 hover:bg-white/10 transition-all duration-200 hover:scale-[1.02]">
+            <div className={`p-2 rounded-lg ${getStatusColor(activity.status)}`}>
+              {getActivityIcon(activity.type)}
             </div>
             <div className="flex-1 min-w-0">
               <h3 className="text-white font-medium">{activity.title}</h3>
               <p className="text-gray-400 text-sm mt-1">{activity.description}</p>
-              <span className="text-gray-500 text-xs mt-2 block">{activity.timestamp}</span>
+              <div className="flex items-center mt-2 text-gray-500 text-xs">
+                <Clock className="w-3 h-3 mr-1" />
+                <span>{activity.timestamp}</span>
+              </div>
             </div>
           </div>
         ))}
