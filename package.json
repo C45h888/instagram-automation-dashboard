@@ -1,4 +1,13 @@
 {
+  "name": "instagram-automation-dashboard",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
   "dependencies": {
     "@babel/core": "^7.28.0",
     "@types/react": "^18.2.0",
