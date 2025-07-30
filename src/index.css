@@ -16,6 +16,17 @@
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+
+    /* Instagram Color System */
+    --instagram-primary: #E4405F;
+    --instagram-secondary: #405DE6;
+    --instagram-accent: #5B51D8;
+    
+    /* Status Colors */
+    --success: #00C851;
+    --warning: #FF8800;
+    --error: #FF4444;
+    --info: #2196F3;
   }
 
   * {
@@ -46,6 +57,10 @@
   .instagram-gradient {
     @apply bg-gradient-to-r from-purple-500 via-pink-500 to-orange-400;
   }
+
+  .text-gradient {
+    @apply bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent;
+  }
 }
 
 @layer utilities {
@@ -56,5 +71,21 @@
   
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
+  }
+
+  .animate-shimmer {
+    animation: shimmer 2s infinite linear;
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.05) 0%,
+      rgba(255, 255, 255, 0.2) 50%,
+      rgba(255, 255, 255, 0.05) 100%
+    );
+    background-size: 200% 100%;
+  }
+
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
   }
 }
