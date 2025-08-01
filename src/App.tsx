@@ -9,7 +9,35 @@ import ToastContainer from './components/ui/ToastContainer';
 import { RouteAnimationProvider } from './components/transitions/RouteAnimationProvider';
 import PageTransition from './components/transitions/PageTransition';
 import RealtimeTest from './components/test/RealtimeTest';
+import { useRealtimeUpdates } from './services/realtimeService';
 
+// Add this component inside your JSX (temporarily)
+const QuickTest = () => {
+  const { isConnected, events, triggerTest } = useRealtimeUpdates();
+  
+  return (
+    <div style={{ padding: '20px', background: '#333', color: 'white', margin: '20px', borderRadius: '8px' }}>
+      <h3>🔥 Real-time Test</h3>
+      <p>Status: {isConnected ? '🟢 Connected' : '🔴 Disconnected'}</p>
+      <p>Events: {events.length}</p>
+      
+      <button 
+        onClick={() => triggerTest('response')} 
+        style={{ padding: '8px 16px', margin: '5px', background: '#0066cc', color: 'white', border: 'none', borderRadius: '4px' }}
+      >
+        Test Response
+      </button>
+      
+      {events.slice(0, 2).map((event, i) => (
+        <div key={i} style={{ fontSize: '12px', margin: '5px 0', padding: '8px', background: '#555', borderRadius: '4px' }}>
+          <strong>{event.type}</strong> - {new Date(event.timestamp).toLocaleTimeString()}
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// Then use <QuickTest /> somewhere in your JSX
 
 
 const Dashboard = React.lazy(() => import('./pages/Dashboard'));
