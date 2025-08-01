@@ -8,6 +8,9 @@ import { ModalProvider } from './contexts/ModalContext';
 import ToastContainer from './components/ui/ToastContainer';
 import { RouteAnimationProvider } from './components/transitions/RouteAnimationProvider';
 import PageTransition from './components/transitions/PageTransition';
+import RealtimeTest from './components/test/RealtimeTest';
+
+
 
 const Dashboard = React.lazy(() => import('./pages/Dashboard'));
 const ContentManagement = React.lazy(() => import('./pages/ContentManagement'));
