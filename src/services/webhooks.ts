@@ -1,7 +1,7 @@
-// src/services/webhooks.ts - Updated to connect to backend
+// src/services/webhooks.ts - FIXED VERSION
 import axios from 'axios';
 
-// Use backend port 3001, not frontend port 3000
+// FIXED: Use backend port 3001, not frontend port 3000
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
 
 // Automation Status Management
