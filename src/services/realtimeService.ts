@@ -1,4 +1,4 @@
-// src/services/realtimeService.ts
+// src/services/realtimeService.ts - NEW FILE
 import React from 'react';
 import axios from 'axios';
 
@@ -47,7 +47,7 @@ class RealtimeService {
   private isPolling: boolean = false;
 
   // Start polling for real-time updates
-  startPolling(intervalMs: number = 2000) {
+  startPolling(intervalMs: number = 3000) {
     if (this.isPolling) {
       console.log('🔄 Already polling for updates');
       return;
