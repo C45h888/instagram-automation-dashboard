@@ -1,4 +1,4 @@
-const ngrok = require('ngrok');
+import ngrok from 'ngrok';
 
 async function startTunnel() {
   try {
@@ -7,7 +7,7 @@ async function startTunnel() {
     // Connect to backend server on port 3001 WITH AUTH TOKEN
     const url = await ngrok.connect({
       addr: 3001,
-      authtoken: '30jGfwyimSMPLu4bcgiowYQ1lVS_6CgcAjPDxtX4Qe6ae1Kpt', // 🔑 REPLACE WITH YOUR REAL TOKEN
+      authtoken: '30jGfwyimSMPLu4bcgiowYQ1lVS_6CgcAjPDxtX4Qe6ae1Kpt', // 🔑 MAKE SURE YOUR REAL TOKEN IS HERE
       region: 'us',
       bind_tls: true
     });
