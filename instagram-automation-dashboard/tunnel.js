@@ -4,8 +4,13 @@ async function startTunnel() {
   try {
     console.log('🚀 Starting tunnel from frontend directory...');
     
-    // Connect to backend server on port 3001
-    const url = await ngrok.connect(3001);
+    // Connect to backend server on port 3001 WITH AUTH TOKEN
+    const url = await ngrok.connect({
+      addr: 3001,
+      authtoken: '30jGfwyimSMPLu4bcgiowYQ1lVS_6CgcAjPDxtX4Qe6ae1Kpt', // 🔑 REPLACE WITH YOUR REAL TOKEN
+      region: 'us',
+      bind_tls: true
+    });
     
     console.log('✅ SUCCESS! Tunnel is running');
     console.log('🌐 Public URL:', url);
@@ -38,7 +43,7 @@ async function startTunnel() {
       console.log('🔑 Ngrok requires authentication:');
       console.log('1. Sign up at: https://ngrok.com (free)');
       console.log('2. Get your auth token from dashboard');
-      console.log('3. Run: npx ngrok config add-authtoken YOUR_TOKEN');
+      console.log('3. Add token to tunnel.js file');
       console.log('4. Then run this script again');
     }
   }
