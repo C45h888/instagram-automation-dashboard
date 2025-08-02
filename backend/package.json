@@ -17,7 +17,8 @@
     "dotenv": "^16.4.5",
     "express": "^4.21.2",
     "grep": "^0.1.0",
-    "lsof": "^0.0.4"
+    "lsof": "^0.0.4",
+    "netstat": "^0.0.2"
   },
   "devDependencies": {
     "nodemon": "^3.1.4"
