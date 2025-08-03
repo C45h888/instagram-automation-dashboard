@@ -4,9 +4,7 @@ async function startTunnel() {
   try {
     console.log('🌐 Starting ngrok tunnel...');
     
-    // Set authtoken first (stable version method)
-    await ngrok.authtoken('30jGfwyimSMPLu4bcgiowYQ1lVS_6CgcAjPDxtX4Qe6ae1Kpt');
-    
+    // NO authtoken line needed - it's set globally via command line
     const url = await ngrok.connect({
       addr: 3001,
       proto: 'http',
