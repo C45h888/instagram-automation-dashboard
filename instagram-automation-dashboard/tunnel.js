@@ -12,7 +12,7 @@ async function startTunnel() {
       addr: 3001,
       proto: 'http',
       region: 'us',
-      authtoken: 'YOUR_ACTUAL_TOKEN_HERE',  // Replace with your real token
+      authtoken: '30jGfwyimSMPLu4bcgiowYQ1lVS_6CgcAjPDxtX4Qe6ae1Kpt',  // Replace with your real token
       binPath: (opts) => {
         // Let ngrok handle binary path automatically
         return path.join(__dirname, 'node_modules', 'ngrok', 'bin', 'ngrok');
