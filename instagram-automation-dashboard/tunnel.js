@@ -1,50 +1,52 @@
-import ngrok from 'ngrok';
+const ngrok = require('ngrok');
+const path = require('path');
 
 async function startTunnel() {
   try {
-    console.log('🚀 Starting tunnel from frontend directory...');
+    console.log('🌐 Starting ngrok tunnel...');
     
-    // Connect to backend server on port 3001 WITH AUTH TOKEN
+    // Kill any existing ngrok processes first
+    await ngrok.kill();
+    
     const url = await ngrok.connect({
       addr: 3001,
-      authtoken: '30jGfwyimSMPLu4bcgiowYQ1lVS_6CgcAjPDxtX4Qe6ae1Kpt', // 🔑 MAKE SURE YOUR REAL TOKEN IS HERE
+      proto: 'http',
       region: 'us',
-      bind_tls: true
+      authtoken: 'YOUR_ACTUAL_TOKEN_HERE',  // Replace with your real token
+      binPath: (opts) => {
+        // Let ngrok handle binary path automatically
+        return path.join(__dirname, 'node_modules', 'ngrok', 'bin', 'ngrok');
+      }
     });
     
-    console.log('✅ SUCCESS! Tunnel is running');
-    console.log('🌐 Public URL:', url);
-    console.log('📊 Backend Server: http://localhost:3001');
-    console.log('');
-    console.log('📋 N8N WEBHOOK URLS:');
-    console.log('=====================================');
-    console.log('Response Data:     ', url + '/webhook/n8n-response');
-    console.log('Performance Metrics:', url + '/webhook/n8n-metrics');
-    console.log('Urgent Alerts:     ', url + '/webhook/n8n-alerts');
-    console.log('System Status:     ', url + '/webhook/n8n-status');
-    console.log('Instagram Webhook: ', url + '/webhook/instagram');
-    console.log('=====================================');
-    console.log('');
-    console.log('🔄 Tunnel is active. Keep this terminal open.');
-    console.log('   Press Ctrl+C to stop the tunnel');
+    console.log('✅ Ngrok tunnel active!');
+    console.log('📡 Public URL:', url);
+    console.log('🔗 Webhook URL:', `${url}/webhook/instagram`);
+    console.log('💚 Health URL:', `${url}/health`);
     
-    // Keep the process running
     process.on('SIGINT', async () => {
-      console.log('\n🛑 Stopping tunnel...');
+      console.log('\n🛑 Closing tunnel...');
       await ngrok.kill();
-      process.exit();
+      process.exit(0);
     });
     
+    return url;
   } catch (error) {
-    console.error('❌ Tunnel failed:', error.message);
+    console.error('❌ Ngrok Error:', error.message);
     
-    if (error.message.includes('authtoken')) {
-      console.log('');
-      console.log('🔑 Ngrok requires authentication:');
-      console.log('1. Sign up at: https://ngrok.com (free)');
-      console.log('2. Get your auth token from dashboard');
-      console.log('3. Add token to tunnel.js file');
-      console.log('4. Then run this script again');
+    // Fallback: try without explicit binary path
+    console.log('🔄 Trying fallback method...');
+    try {
+      const fallbackUrl = await ngrok.connect({
+        addr: 3001,
+        authtoken: 'YOUR_ACTUAL_TOKEN_HERE'  // Replace with your real token
+      });
+      
+      console.log('✅ Fallback tunnel active!');
+      console.log('📡 Public URL:', fallbackUrl);
+      return fallbackUrl;
+    } catch (fallbackError) {
+      console.error('❌ Fallback failed:', fallbackError.message);
     }
   }
 }
