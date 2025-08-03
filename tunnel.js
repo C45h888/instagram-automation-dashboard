@@ -1,28 +1,25 @@
-import ngrok from 'ngrok';
+import { spawn } from 'child_process';
 
 async function startTunnel() {
   try {
     console.log('🌐 Starting ngrok tunnel...');
     
-    // NO authtoken line needed - it's set globally via command line
-    const url = await ngrok.connect({
-      addr: 3001,
-      proto: 'http',
-      region: 'us'
+    const ngrokProcess = spawn('npx', ['ngrok', 'http', '3001'], {
+      stdio: 'pipe'
     });
     
-    console.log('✅ Ngrok tunnel active!');
-    console.log('📡 Public URL:', url);
-    console.log('🔗 Webhook URL:', `${url}/webhook/instagram`);
-    console.log('💚 Health URL:', `${url}/health`);
-    
-    process.on('SIGINT', async () => {
-      console.log('\n🛑 Closing tunnel...');
-      await ngrok.kill();
-      process.exit(0);
+    ngrokProcess.stdout.on('data', (data) => {
+      const output = data.toString();
+      console.log(output);
+      
+      // Extract URL from ngrok output
+      const urlMatch = output.match(/https:\/\/[a-z0-9-]+\.ngrok\.io/);
+      if (urlMatch) {
+        console.log('📡 Public URL:', urlMatch[0]);
+        console.log('🔗 Webhook URL:', `${urlMatch[0]}/webhook/instagram`);
+      }
     });
     
-    return url;
   } catch (error) {
     console.error('❌ Ngrok Error:', error.message);
   }
