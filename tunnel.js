@@ -1,4 +1,4 @@
-const ngrok = require('ngrok');
+import ngrok from 'ngrok';
 
 async function startTunnel() {
   try {
