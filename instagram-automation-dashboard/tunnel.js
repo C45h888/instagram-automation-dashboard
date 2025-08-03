@@ -39,7 +39,7 @@ async function startTunnel() {
     try {
       const fallbackUrl = await ngrok.connect({
         addr: 3001,
-        authtoken: 'YOUR_ACTUAL_TOKEN_HERE'  // Replace with your real token
+        authtoken: '30jGfwyimSMPLu4bcgiowYQ1lVS_6CgcAjPDxtX4Qe6ae1Kpt'  // Replace with your real token
       });
       
       console.log('✅ Fallback tunnel active!');
