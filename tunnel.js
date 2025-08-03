@@ -8,7 +8,7 @@ async function startTunnel() {
       addr: 3001,                    // Backend server port
       proto: 'http',
       region: 'us',
-      authtoken: 'YOUR_EXISTING_TOKEN_HERE'  // Keep your existing token
+      authtoken: '30jGfwyimSMPLu4bcgiowYQ1lVS_6CgcAjPDxtX4Qe6ae1Kpt'  // Keep your existing token
     });
     
     console.log('✅ Ngrok tunnel active!');
