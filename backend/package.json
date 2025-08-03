@@ -14,7 +14,7 @@
   "dependencies": {
     "body-parser": "^1.20.3",
     "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
+    "dotenv": "^16.6.1",
     "express": "^4.21.2",
     "grep": "^0.1.0",
     "lsof": "^0.0.4",
