@@ -5,38 +5,83 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview"
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "backend": "cd backend && node server.js",
+    "tunnel:start": "node tunnel-manager-cf.js start",
+    "tunnel:stop": "node tunnel-manager-cf.js stop",
+    "tunnel:status": "node tunnel-manager-cf.js status",
+    "dev:production": "npm run tunnel:start & npm run backend & npm run dev",
+    "test:webhook": "curl https://instagram-backend.888intelligenceautomation.in/health",
+    "test:meta": "curl -X GET \"https://instagram-backend.888intelligenceautomation.in/webhook/instagram?hub.mode=subscribe&hub.verify_token=instagram_automation_cf_token_2024&hub.challenge=hello\"",
+    "clean": "rm -rf node_modules package-lock.json && npm install",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
-    "@babel/core": "^7.28.0",
-    "@tanstack/react-query": "^5.84.0",
-    "@types/react": "^18.2.0",
+    "@radix-ui/react-focus-scope": "^1.1.7",
+    "@tanstack/react-query": "^5.83.0",
     "axios": "^1.10.0",
-    "debug": "^4.4.1",
-    "dev": "^0.1.3",
-    "eslint": "^8.57.1",
-    "express": "^5.1.0",
-    "localtunnel": "^2.0.2",
+    "dotenv": "^16.6.1",
+    "eventsource": "^4.0.0",
+    "framer-motion": "^12.23.12",
     "lucide-react": "^0.525.0",
-    "ngrok": "^4.3.3",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-router-dom": "^7.7.1",
-    "recharts": "^2.7.2",
-    "save": "^2.9.0",
-    "zustand": "^5.0.7"
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-hot-toast": "^2.5.2",
+    "react-router-dom": "^7.6.3",
+    "recharts": "^3.1.0",
+    "socket.io-client": "^4.8.1",
+    "vite-plugin-pwa": "^1.0.1",
+    "workbox-window": "^7.3.0",
+    "zustand": "^5.0.6"
   },
   "devDependencies": {
+    "@babel/core": "^7.24.0",
+    "@eslint/js": "^9.30.1",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.3.0",
     "@types/node": "^20.0.0",
-    "@types/react-router-dom": "^5.3.3",
-    "@vitejs/plugin-react": "^4.0.0",
-    "autoprefixer": "^10.4.14",
-    "node-fetch": "^3.3.2",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^4.6.0",
+    "autoprefixer": "^10.4.21",
+    "cloudflared": "^1.3.0",
+    "cross-env": "^7.0.3",
+    "cypress": "^14.5.2",
+    "debug": "^4.3.4",
+    "eslint": "^8.56.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.20",
+    "globals": "^16.3.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.1.2",
     "nodemon": "^3.1.10",
-    "postcss": "^8.4.24",
-    "tailwindcss": "^3.3.0",
-    "typescript": "^5.0.0",
-    "vite": "^5.0.0"
+    "postcss": "^8.5.6",
+    "prettier": "^3.6.2",
+    "tailwindcss": "^3.4.17",
+    "typescript": "~5.8.3",
+    "typescript-eslint": "^8.35.1",
+    "vite": "^7.0.4",
+    "vitest": "^3.2.4"
+  },
+  "overrides": {
+    "eslint": "^8.56.0",
+    "@babel/core": "^7.24.0",
+    "debug": "^4.3.4"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,css,md}": [
+      "prettier --write"
+    ]
   }
 }
