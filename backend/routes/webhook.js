@@ -135,16 +135,6 @@ router.post('/n8n-response', (req, res) => {
   const data = req.body;
   console.log('📨 N8N Response received:', JSON.stringify(data, null, 2));
   
-  // Expected structure from your Customer Service workflow:
-  // {
-  //   message_id: "msg_123",
-  //   response_text: "Thanks for your comment!",
-  //   category: "sizing",
-  //   customer_username: "testcustomer", 
-  //   auto_responded: true,
-  //   response_time_minutes: 1
-  // }
-  
   // Broadcast to frontend via real-time cache
   broadcastToFrontend('new_response', data);
   
@@ -160,15 +150,6 @@ router.post('/n8n-ugc', (req, res) => {
   const data = req.body;
   console.log('🌟 N8N UGC Alert received:', JSON.stringify(data, null, 2));
   
-  // Expected structure from UGC workflow:
-  // {
-  //   username: "@creator",
-  //   post_url: "https://instagram.com/p/...",
-  //   quality_score: 85,
-  //   engagement: 150,
-  //   hashtag: "#yourbrand"
-  // }
-  
   broadcastToFrontend('ugc_alert', data);
   
   res.json({ 
@@ -183,14 +164,6 @@ router.post('/n8n-sales', (req, res) => {
   const data = req.body;
   console.log('💰 N8N Sales Attribution received:', JSON.stringify(data, null, 2));
   
-  // Expected structure from Sales Attribution workflow:
-  // {
-  //   order_value: 125.50,
-  //   attribution_method: "utm_tracking",
-  //   customer_journey: "Instagram → Website → Purchase",
-  //   days_to_purchase: 3
-  // }
-  
   broadcastToFrontend('sales_attribution', data);
   
   res.json({ 
@@ -204,14 +177,6 @@ router.post('/n8n-sales', (req, res) => {
 router.post('/n8n-content', (req, res) => {
   const data = req.body;
   console.log('📝 N8N Content Published:', JSON.stringify(data, null, 2));
-  
-  // Expected structure from Content Scheduler workflow:
-  // {
-  //   post_id: "abc123",
-  //   product_title: "Summer Dress Collection",
-  //   post_time: "2025-01-10T14:00:00Z",
-  //   engagement_prediction: 0.75
-  // }
   
   broadcastToFrontend('content_published', data);
   
@@ -333,8 +298,29 @@ router.get('/n8n-status', (req, res) => {
     },
     backend_ready: true,
     cloudflare_tunnel: 'https://instagram-backend.888intelligenceautomation.in',
+    environment_variables: {
+      webhook_verify_token: process.env.WEBHOOK_VERIFY_TOKEN ? '✅ Set' : '❌ Not set',
+      meta_app_secret: process.env.META_APP_SECRET ? '✅ Set' : '❌ Not set'
+    },
     timestamp: new Date().toISOString()
   });
 });
 
-module.exports = rout
+// Test endpoint to verify routes are working
+router.get('/test', (req, res) => {
+  res.json({
+    message: '✅ Webhook routes are working!',
+    available_endpoints: [
+      'GET /webhook/instagram (Meta verification)',
+      'POST /webhook/instagram (Meta events)',
+      'GET /webhook/n8n-status (N8N integration status)',
+      'POST /webhook/n8n-response (N8N responses)',
+      'POST /webhook/trigger-content (Manual content trigger)',
+      'POST /webhook/trigger-hub (Manual hub trigger)',
+      'GET /webhook/realtime-updates (Frontend updates)'
+    ],
+    timestamp: new Date().toISOString()
+  });
+});
+
+module.exports = router;

@@ -1,194 +1,102 @@
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-require('dotenv').config();
+require('dotenv').config({ path: '../.env' });
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Middleware
+// Enhanced CORS for Cloudflare Tunnel
 app.use(cors({
   origin: [
     'http://localhost:5173',
+    'http://localhost:3000', 
+    'https://888intelligenceautomation.in',
     'https://instagram-backend.888intelligenceautomation.in',
-    process.env.FRONTEND_URL
+    'https://filme-roommates-cattle-purchasing.trycloudflare.com'
   ],
-  credentials: true
+  credentials: true,
+  optionsSuccessStatus: 200
 }));
 
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
+// Enhanced middleware for Cloudflare
+app.use(bodyParser.json({ limit: '10mb' }));
+app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 
-// Trust proxy for Cloudflare
-app.set('trust proxy', true);
+// Cloudflare specific headers
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  
+  // Log Cloudflare headers for debugging
+  if (req.headers['cf-ray']) {
+    console.log('📡 Cloudflare Ray ID:', req.headers['cf-ray']);
+  }
+  
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+  } else {
+    next();
+  }
+});
 
-// Health check endpoint
+// ===== IMPORT AND MOUNT WEBHOOK ROUTES =====
+const webhookRoutes = require('./routes/webhook');
+app.use('/webhook', webhookRoutes);
+
+// Enhanced health check for Cloudflare
 app.get('/health', (req, res) => {
   res.json({
-    status: 'ok',
-    message: 'Instagram Automation Backend is running',
-    timestamp: new Date().toISOString(),
-    port: PORT,
-    environment: process.env.NODE_ENV || 'development'
+    status: 'OK',
+    uptime: process.uptime(),
+    tunnel: {
+      provider: 'cloudflare',
+      domain: 'instagram-backend.888intelligenceautomation.in',
+      host: req.get('host'),
+      protocol: req.protocol,
+      secure: req.secure || req.get('x-forwarded-proto') === 'https',
+      cfRay: req.headers['cf-ray'] || 'not-available'
+    },
+    meta_ready: true,
+    n8n_integration: 'active',
+    timestamp: new Date().toISOString()
   });
 });
 
 // Root endpoint
 app.get('/', (req, res) => {
   res.json({
-    message: 'Instagram Automation Dashboard API',
-    version: '1.0.0',
-    endpoints: {
-      health: '/health',
-      webhook: '/webhook/*',
-      api: '/api/*'
-    }
-  });
-});
-
-// Meta Instagram Webhook Routes
-app.get('/webhook/instagram', (req, res) => {
-  const VERIFY_TOKEN = process.env.WEBHOOK_VERIFY_TOKEN || 'instagram_automation_cf_token_2024';
-  
-  const mode = req.query['hub.mode'];
-  const token = req.query['hub.verify_token'];
-  const challenge = req.query['hub.challenge'];
-  
-  console.log('Webhook verification request:', { mode, token, challenge });
-  
-  if (mode && token) {
-    if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-      console.log('✅ Webhook verified successfully');
-      res.status(200).send(challenge);
-    } else {
-      console.log('❌ Webhook verification failed - token mismatch');
-      res.sendStatus(403);
-    }
-  } else {
-    console.log('❌ Webhook verification failed - missing parameters');
-    res.sendStatus(400);
-  }
-});
-
-// Handle Instagram webhook events
-app.post('/webhook/instagram', (req, res) => {
-  console.log('📨 Instagram webhook event received:', req.body);
-  
-  // Process Instagram webhook data here
-  const body = req.body;
-  
-  if (body.object === 'instagram') {
-    body.entry?.forEach(entry => {
-      console.log('Processing entry:', entry);
-      
-      // Handle different event types
-      if (entry.changes) {
-        entry.changes.forEach(change => {
-          console.log('Change detected:', change.field, change.value);
-        });
-      }
-    });
-    
-    res.status(200).send('EVENT_RECEIVED');
-  } else {
-    res.sendStatus(404);
-  }
-});
-
-// API Routes
-app.get('/api/status', (req, res) => {
-  res.json({
-    server: 'running',
-    uptime: process.uptime(),
-    memory: process.memoryUsage(),
-    tunnel: 'https://instagram-backend.888intelligenceautomation.in'
-  });
-});
-
-// Test endpoint for tunnel connectivity
-app.get('/test/tunnel', (req, res) => {
-  res.json({
-    message: '🎉 Cloudflare tunnel is working!',
+    message: '🚀 Instagram Automation Backend (Cloudflare Tunnel)',
     timestamp: new Date().toISOString(),
-    headers: req.headers,
-    ip: req.ip,
-    cloudflare: {
-      connected: true,
-      url: 'https://instagram-backend.888intelligenceautomation.in'
+    tunnel: {
+      provider: 'cloudflare',
+      domain: 'instagram-backend.888intelligenceautomation.in',
+      active: req.get('host')?.includes('888intelligenceautomation.in')
+    },
+    endpoints: {
+      webhook_verify: 'GET /webhook/instagram',
+      webhook_events: 'POST /webhook/instagram',
+      n8n_status: 'GET /webhook/n8n-status',
+      health: 'GET /health'
     }
   });
 });
 
-// Automation status endpoint
-app.post('/webhook/automation-status', (req, res) => {
-  console.log('📊 Automation status update:', req.body);
-  res.json({ status: 'received', data: req.body });
-});
-
-// Content published endpoint
-app.post('/webhook/content-published', (req, res) => {
-  console.log('📸 Content published:', req.body);
-  res.json({ status: 'processed', data: req.body });
-});
-
-// Engagement update endpoint
-app.post('/webhook/engagement-update', (req, res) => {
-  console.log('❤️ Engagement update:', req.body);
-  res.json({ status: 'processed', data: req.body });
-});
-
-// Analytics data endpoint
-app.get('/webhook/analytics-data', (req, res) => {
+// Tunnel status endpoint
+app.get('/tunnel/status', (req, res) => {
   res.json({
-    analytics: {
-      followers: 1234,
-      posts: 56,
-      engagement_rate: 4.2,
-      last_updated: new Date().toISOString()
-    }
+    provider: 'cloudflare',
+    domain: 'instagram-backend.888intelligenceautomation.in',
+    active: true,
+    endpoint: 'https://instagram-backend.888intelligenceautomation.in',
+    webhook_url: 'https://instagram-backend.888intelligenceautomation.in/webhook/instagram'
   });
 });
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error('❌ Server error:', err);
-  res.status(500).json({
-    error: 'Internal server error',
-    message: err.message,
-    timestamp: new Date().toISOString()
-  });
-});
-
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({
-    error: 'Not found',
-    path: req.originalUrl,
-    message: 'The requested endpoint does not exist'
-  });
-});
-
-// Start server
 app.listen(PORT, () => {
-  console.log(`🚀 Instagram Automation Backend running on port ${PORT}`);
-  console.log(`📊 Health check: http://localhost:${PORT}/health`);
-  console.log(`🌐 Cloudflare tunnel: https://instagram-backend.888intelligenceautomation.in`);
-  console.log(`🔗 Local development: http://localhost:${PORT}`);
-  
-  // Log environment info
-  console.log('\n📋 Environment Info:');
-  console.log(`   NODE_ENV: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`   WEBHOOK_VERIFY_TOKEN: ${process.env.WEBHOOK_VERIFY_TOKEN ? '✅ Set' : '❌ Missing'}`);
-  console.log(`   PORT: ${PORT}`);
-});
-
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('🛑 SIGTERM received, shutting down gracefully');
-  process.exit(0);
-});
-
-process.on('SIGINT', () => {
-  console.log('🛑 SIGINT received, shutting down gracefully');
-  process.exit(0);
+  console.log(`🌟 Server running on port ${PORT}`);
+  console.log(`📡 Cloudflare tunnel ready: https://instagram-backend.888intelligenceautomation.in`);
+  console.log(`🔗 Webhook endpoint: https://instagram-backend.888intelligenceautomation.in/webhook/instagram`);
+  console.log(`🎯 N8N Status: https://instagram-backend.888intelligenceautomation.in/webhook/n8n-status`);
 });
