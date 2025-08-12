@@ -1,4 +1,4 @@
-// tunnel-manager-cf.js - ES MODULE VERSION FOR CLOUDFLARE
+// tunnel-manager-cf.js - FIXED VERSION FOR PROPER SUCCESS DETECTION
 import { spawn } from 'child_process';
 import { writeFileSync, existsSync, readFileSync } from 'fs';
 import axios from 'axios';
@@ -18,7 +18,7 @@ class CloudflareTunnelManager {
   }
 
   async startTunnel() {
-    console.log('🌐 Starting Cloudflare Tunnel Manager (ES Module)...');
+    console.log('🌐 Starting Cloudflare Tunnel Manager (FIXED VERSION)...');
     console.log('==========================================');
     console.log(`   Tunnel Name: ${this.tunnelName}`);
     console.log(`   Local Port: ${this.localPort}`);
@@ -98,43 +98,45 @@ class CloudflareTunnelManager {
       });
 
       let startupComplete = false;
-      let outputBuffer = '';
+      let connectionCount = 0;
+      let configUpdated = false;
 
-      this.tunnelProcess.stdout.on('data', (data) => {
+      // FIXED: Listen to BOTH stdout AND stderr for success indicators
+      const handleOutput = (data, source) => {
         const text = data.toString();
-        outputBuffer += text;
         
-        // Log important messages
+        // Log all output with proper labeling
         if (text.includes('ERR') || text.includes('ERROR')) {
-          console.error(`🔴 Error: ${text.trim()}`);
+          console.error(`🔴 ${source} Error: ${text.trim()}`);
         } else if (text.includes('INF')) {
-          console.log(`📡 Info: ${text.trim()}`);
+          console.log(`📡 ${source} Info: ${text.trim()}`);
         }
         
-        // Check for successful connection indicators
-        if (text.includes('registered') || 
-            text.includes('connection established') ||
-            text.includes('Registered tunnel connection') ||
-            text.includes('Updated to new configuration') ||
-            text.includes(this.tunnelName)) {
-          
+        // FIXED: Better success detection logic
+        if (text.includes('Registered tunnel connection')) {
+          connectionCount++;
+          console.log(`✅ Connection ${connectionCount} established`);
+        }
+        
+        if (text.includes('Updated to new configuration')) {
+          configUpdated = true;
+          console.log('✅ Tunnel configuration updated');
+        }
+        
+        // FIXED: Multiple success conditions - trigger success when we have connections AND config
+        if ((connectionCount >= 2 && configUpdated) || text.includes(this.tunnelName)) {
           if (!startupComplete) {
             startupComplete = true;
             this.isActive = true;
-            console.log('✅ Tunnel registration successful');
+            console.log('✅ Tunnel registration and configuration complete');
             resolve();
           }
         }
-      });
+      };
 
-      this.tunnelProcess.stderr.on('data', (data) => {
-        const text = data.toString();
-        console.error(`❌ Tunnel Error: ${text.trim()}`);
-        
-        if (text.includes('failed to authenticate')) {
-          reject(new Error('Invalid tunnel token - check your CLOUDFLARE_TUNNEL_TOKEN'));
-        }
-      });
+      // Listen to BOTH stdout and stderr
+      this.tunnelProcess.stdout.on('data', (data) => handleOutput(data, 'STDOUT'));
+      this.tunnelProcess.stderr.on('data', (data) => handleOutput(data, 'STDERR'));
 
       this.tunnelProcess.on('close', (code) => {
         console.log(`⚠️ Tunnel process closed with code ${code}`);
@@ -150,25 +152,26 @@ class CloudflareTunnelManager {
         reject(error);
       });
 
-      // Timeout after 45 seconds
+      // FIXED: Reduced timeout to 30 seconds (more reasonable)
       setTimeout(() => {
         if (!startupComplete) {
-          reject(new Error('Tunnel startup timeout - check your configuration'));
+          console.log(`⚠️ Tunnel status: ${connectionCount} connections, config updated: ${configUpdated}`);
+          reject(new Error('Tunnel startup timeout - check your Cloudflare dashboard configuration'));
         }
-      }, 45000);
+      }, 30000);
     });
   }
 
   async verifyTunnelConnection() {
     console.log('🔍 Verifying tunnel connection...');
     
-    const maxRetries = 15;
+    const maxRetries = 10;
     let retries = 0;
     
     while (retries < maxRetries) {
       try {
         const response = await axios.get(`${this.tunnelUrl}/health`, {
-          timeout: 10000,
+          timeout: 8000,
           headers: {
             'User-Agent': 'Instagram-Automation-Verifier/1.0'
           }
@@ -178,21 +181,21 @@ class CloudflareTunnelManager {
         console.log(`   Response Status: ${response.status}`);
         console.log(`   Backend Health: ${response.data.status}`);
         console.log(`   Tunnel URL: ${this.tunnelUrl}`);
-        console.log(`   N8N Integration: ${response.data.n8n_integration || 'active'}`);
+        console.log(`   Cloudflare Ray: ${response.headers['cf-ray'] || 'N/A'}`);
         
         return true;
         
       } catch (error) {
         retries++;
-        console.log(`⏳ Verification attempt ${retries}/${maxRetries} failed, retrying...`);
+        console.log(`⏳ Verification attempt ${retries}/${maxRetries} failed, retrying in 2s...`);
         
         if (retries < maxRetries) {
-          await new Promise(resolve => setTimeout(resolve, 3000));
+          await new Promise(resolve => setTimeout(resolve, 2000));
         }
       }
     }
     
-    throw new Error('Tunnel verification failed after multiple attempts');
+    throw new Error('Tunnel verification failed - check Cloudflare dashboard configuration');
   }
 
   async updateProjectConfiguration() {
@@ -318,12 +321,12 @@ BACKEND_BASE_URL=${this.tunnelUrl}
     console.log('   2. Find tunnel: instagram-automation-backend');
     console.log('   3. Verify Public Hostname:');
     console.log('      - Hostname: instagram-backend.888intelligenceautomation.in');
-    console.log('      - Service: http://localhost:3001 (NOT the domain URL)');
-    console.log('\n🔧 Quick fixes:');
-    console.log('   1. Restart backend: cd backend && node server.js');
-    console.log('   2. Check tunnel token in .env file');
-    console.log('   3. Verify port 3001 is available: lsof -i :3001');
-    console.log('   4. Check Cloudflare dashboard for tunnel status');
+    console.log('      - Service: http://localhost:3001 (HTTP, NOT HTTPS!)');
+    console.log('\n🔧 Common fixes:');
+    console.log('   1. Change service URL from https://localhost:3001 to http://localhost:3001');
+    console.log('   2. Restart backend: cd backend && node server.js');
+    console.log('   3. Check tunnel token in .env file');
+    console.log('   4. Verify port 3001 is available: lsof -i :3001');
   }
 
   async testFullIntegration() {

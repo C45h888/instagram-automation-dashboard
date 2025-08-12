@@ -1,0 +1,20 @@
+{
+  "tunnelName": "instagram-automation-backend",
+  "tunnelUrl": "https://instagram-backend.888intelligenceautomation.in",
+  "webhookEndpoint": "https://instagram-backend.888intelligenceautomation.in/webhook/instagram",
+  "metaWebhookUrl": "https://instagram-backend.888intelligenceautomation.in/webhook/instagram",
+  "n8nStatusUrl": "https://instagram-backend.888intelligenceautomation.in/webhook/n8n-status",
+  "healthCheck": "https://instagram-backend.888intelligenceautomation.in/health",
+  "backendPort": "3001",
+  "status": "active",
+  "created": "2025-08-11T13:01:52.828Z",
+  "provider": "cloudflare",
+  "domain": "888intelligenceautomation.in",
+  "n8nWebhooks": {
+    "dm": "https://kamesh8888888.app.n8n.cloud/webhook-test/instagram-dm-webhook",
+    "comment": "https://kamesh8888888.app.n8n.cloud/webhook-test/instagram-comment-webhook",
+    "order": "https://kamesh8888888.app.n8n.cloud/webhook-test/shopify-order-webhook",
+    "hub": "https://kamesh8888888.app.n8n.cloud/webhook-test/instagram-webhook",
+    "content": "https://kamesh8888888.app.n8n.cloud/webhook-test/content-scheduler"
+  }
+}
