@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, Calendar, MessageCircle, BarChart3, Users, Settings, Search, User } from 'lucide-react';
+import { Home, Calendar, MessageCircle, BarChart3, Users, Settings } from 'lucide-react';
 
 const navigationItems = [
   { name: 'Dashboard', href: '/', icon: Home },

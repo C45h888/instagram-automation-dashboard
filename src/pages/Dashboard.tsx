@@ -1,5 +1,4 @@
 import React from 'react';
-import { useAuthStore } from '../stores/authStore';
 import { useDashboardData } from '../hooks/useDashboardData';
 import DashboardHeader from '../components/dashboard/DashboardHeader';
 import DashboardHeaderSkeleton from '../components/dashboard/DashboardHeaderSkeleton';

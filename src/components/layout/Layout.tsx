@@ -4,8 +4,7 @@ import { Search, User } from 'lucide-react';
 import AnimatedNavigation from './AnimatedNavigation';
 
 const Layout: React.FC = () => {
-  const location = useLocation();
-
+  
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
       {/* Top Navigation Bar */}

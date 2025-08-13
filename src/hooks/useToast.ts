@@ -1,55 +1,51 @@
-import { useToastContext, Toast } from '../contexts/ToastContext';
+import { useState, useCallback } from 'react';
 
 interface ToastOptions {
   title?: string;
   duration?: number;
-  dismissible?: boolean;
   action?: {
     label: string;
     onClick: () => void;
   };
 }
 
+interface Toast {
+  id: string;
+  message: string;
+  type: 'success' | 'error' | 'info' | 'warning';
+  options?: ToastOptions;
+}
+
 export const useToast = () => {
-  const { addToast, removeToast, clearToasts } = useToastContext();
+  const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const toast = {
-    success: (message: string, options?: ToastOptions) => {
-      return addToast({
-        type: 'success',
-        message,
-        ...options,
-      });
-    },
+  const addToast = useCallback((message: string, type: Toast['type'], options?: ToastOptions) => {
+    const id = Math.random().toString(36).substr(2, 9);
+    const newToast = { id, message, type, options };
+    
+    setToasts(prev => [...prev, newToast]);
+    
+    // Auto remove after duration
+    setTimeout(() => {
+      setToasts(prev => prev.filter(toast => toast.id !== id));
+    }, options?.duration || 3000);
+  }, []);
 
-    error: (message: string, options?: ToastOptions) => {
-      return addToast({
-        type: 'error',
-        message,
-        duration: 7000, // Longer duration for errors
-        ...options,
-      });
-    },
+  const success = useCallback((message: string, options?: ToastOptions) => {
+    addToast(message, 'success', options);
+  }, [addToast]);
 
-    warning: (message: string, options?: ToastOptions) => {
-      return addToast({
-        type: 'warning',
-        message,
-        ...options,
-      });
-    },
+  const error = useCallback((message: string, options?: ToastOptions) => {
+    addToast(message, 'error', options);
+  }, [addToast]);
 
-    info: (message: string, options?: ToastOptions) => {
-      return addToast({
-        type: 'info',
-        message,
-        ...options,
-      });
-    },
+  const info = useCallback((message: string, options?: ToastOptions) => {
+    addToast(message, 'info', options);
+  }, [addToast]);
 
-    dismiss: removeToast,
-    clear: clearToasts,
-  };
+  const warning = useCallback((message: string, options?: ToastOptions) => {
+    addToast(message, 'warning', options);
+  }, [addToast]);
 
-  return toast;
+  return { success, error, info, warning, toasts };
 };

@@ -182,7 +182,8 @@ class RealtimeService {
       return { success: true, message: `Test ${type} event sent` };
     } catch (error) {
       console.error(`❌ Failed to trigger test ${type} event:`, error);
-      return { success: false, error: error.message };
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+
     }
   }
 
@@ -193,7 +194,7 @@ class RealtimeService {
       console.log('✅ Backend connection successful:', response.data);
       return { success: true, data: response.data };
     } catch (error) {
-      console.error('❌ Backend connection failed:', error);
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
       return { success: false, error: error.message };
     }
   }

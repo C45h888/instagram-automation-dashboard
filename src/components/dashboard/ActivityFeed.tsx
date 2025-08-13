@@ -5,6 +5,7 @@ import { useToast } from '../../hooks/useToast';
 import { useModal } from '../../hooks/useModal';
 
 interface ActivityFeedProps {
+  activities: ActivityItem[];
   isLoading?: boolean;
 }
 
@@ -91,7 +92,7 @@ const ActivityFeed: React.FC<ActivityFeedProps> = ({ activities, isLoading = fal
     <div className="glass-morphism-card p-6 rounded-2xl">
       <h2 className="text-xl font-bold text-white mb-6">Recent Activity</h2>
       <div className="space-y-4 max-h-96 overflow-y-auto scrollbar-hide">
-        {activities.map((activity, index) => (
+        {activities.map((activity) => (
           <div 
             key={activity.id} 
             className="flex items-start space-x-4 p-4 rounded-lg bg-white/5 hover:bg-white/10 transition-all duration-200 hover:scale-[1.02] cursor-pointer group"

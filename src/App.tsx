@@ -57,7 +57,7 @@ const RealtimeTestComponent: React.FC = () => {
       setTestResults(prev => [...prev, `✅ Backend connected: ${JSON.stringify(data)}`]);
     } catch (error) {
       setConnectionStatus('error');
-      setTestResults(prev => [...prev, `❌ Backend connection failed: ${error.message}`]);
+      setTestResults(prev => [...prev, `❌ Backend connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`]);
     }
   };
 
@@ -105,7 +105,7 @@ const RealtimeTestComponent: React.FC = () => {
       // Check for new events
       checkForEvents();
     } catch (error) {
-      setTestResults(prev => [...prev, `❌ ${type} webhook failed: ${error.message}`]);
+      setTestResults(prev => [...prev, `❌ ${type} webhook failed: ${error instanceof Error ? error.message : 'Unknown error'}`]);
     }
   };
 
@@ -117,7 +117,7 @@ const RealtimeTestComponent: React.FC = () => {
       setEvents(data.events || []);
       setTestResults(prev => [...prev, `📨 Found ${data.events?.length || 0} events`]);
     } catch (error) {
-      setTestResults(prev => [...prev, `❌ Failed to check events: ${error.message}`]);
+      setTestResults(prev => [...prev, `❌ Failed to check events: ${error instanceof Error ? error.message : 'Unknown error'}`]);
     }
   };
 
