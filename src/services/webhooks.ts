@@ -1,6 +1,5 @@
 // src/services/webhooks.ts - FIXED VERSION FOR VITE + TYPESCRIPT
-import axios, { AxiosResponse } from 'axios';
-
+import axios, { type AxiosResponse } from 'axios';
 // Vite environment variables (properly typed)
 const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'https://instagram-backend.888intelligenceautomation.in';
 const WEBHOOK_VERIFY_TOKEN = (import.meta as any).env?.VITE_WEBHOOK_VERIFY_TOKEN || 'instagram_automation_cf_token_2024';

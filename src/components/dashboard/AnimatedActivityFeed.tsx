@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import { CheckCircle, AlertCircle, MessageSquare, Camera, Calendar, TrendingUp, Clock } from 'lucide-react';
 import AnimatedCard from '../ui/AnimatedCard';
 import type { ActivityItem } from '../../data/mockData';
@@ -32,7 +32,8 @@ const getStatusColor = (status: string) => {
   }
 };
 
-const itemVariants = {
+// Separate variants without transitions
+const itemVariants: Variants = {
   hidden: { 
     opacity: 0, 
     x: -20, 
@@ -41,31 +42,38 @@ const itemVariants = {
   visible: { 
     opacity: 1, 
     x: 0, 
-    scale: 1,
-    transition: {
-      duration: 0.3,
-      ease: 'easeOut'
-    }
+    scale: 1
   },
   exit: { 
     opacity: 0, 
     x: 20, 
-    scale: 0.95,
-    transition: {
-      duration: 0.2
-    }
+    scale: 0.95
   }
 };
 
-const containerVariants = {
-  hidden: { opacity: 0 },
+const containerVariants: Variants = {
+  hidden: { 
+    opacity: 0 
+  },
   visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.1,
-      delayChildren: 0.2
-    }
+    opacity: 1
   }
+};
+
+// Separate transition definitions
+const itemTransition = {
+  duration: 0.3,
+  ease: [0.25, 0.1, 0.25, 1] as const
+};
+
+const containerTransition = {
+  staggerChildren: 0.1,
+  delayChildren: 0.2
+};
+
+const hoverTransition = {
+  duration: 0.2,
+  ease: [0.25, 0.1, 0.25, 1] as const
 };
 
 const AnimatedActivityFeed: React.FC<AnimatedActivityFeedProps> = ({ 
@@ -84,7 +92,11 @@ const AnimatedActivityFeed: React.FC<AnimatedActivityFeedProps> = ({
               className="flex items-start space-x-4 p-4 rounded-lg bg-white/5"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: index * 0.1 }}
+              transition={{ 
+                duration: 0.3, 
+                delay: index * 0.1,
+                ease: [0.25, 0.1, 0.25, 1]
+              }}
             >
               <div className="w-8 h-8 bg-white/10 rounded-lg animate-pulse"></div>
               <div className="flex-1">
@@ -105,7 +117,7 @@ const AnimatedActivityFeed: React.FC<AnimatedActivityFeedProps> = ({
         className="text-xl font-bold text-white mb-6"
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
+        transition={itemTransition}
       >
         Recent Activity
       </motion.h2>
@@ -115,12 +127,14 @@ const AnimatedActivityFeed: React.FC<AnimatedActivityFeedProps> = ({
         variants={containerVariants}
         initial="hidden"
         animate="visible"
+        transition={containerTransition}
       >
         <AnimatePresence mode="popLayout">
           {activities.map((activity, index) => (
             <motion.div
               key={activity.id}
               variants={itemVariants}
+              transition={itemTransition}
               layout
               className="flex items-start space-x-4 p-4 rounded-lg bg-white/5 hover:bg-white/10 transition-all duration-200 cursor-pointer group"
               onClick={() => onActivityClick?.(activity)}
@@ -136,7 +150,7 @@ const AnimatedActivityFeed: React.FC<AnimatedActivityFeedProps> = ({
                   scale: 1.1,
                   rotate: 5
                 }}
-                transition={{ duration: 0.2 }}
+                transition={hoverTransition}
               >
                 {getActivityIcon(activity.type)}
               </motion.div>
@@ -146,7 +160,11 @@ const AnimatedActivityFeed: React.FC<AnimatedActivityFeedProps> = ({
                   className="text-white font-medium group-hover:text-purple-300 transition-colors"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  transition={{ delay: index * 0.05 }}
+                  transition={{ 
+                    delay: index * 0.05,
+                    duration: 0.3,
+                    ease: [0.25, 0.1, 0.25, 1]
+                  }}
                 >
                   {activity.title}
                 </motion.h3>
@@ -155,7 +173,11 @@ const AnimatedActivityFeed: React.FC<AnimatedActivityFeedProps> = ({
                   className="text-gray-400 text-sm"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  transition={{ delay: index * 0.05 + 0.1 }}
+                  transition={{ 
+                    delay: index * 0.05 + 0.1,
+                    duration: 0.3,
+                    ease: [0.25, 0.1, 0.25, 1]
+                  }}
                 >
                   {activity.description}
                 </motion.p>
@@ -164,7 +186,11 @@ const AnimatedActivityFeed: React.FC<AnimatedActivityFeedProps> = ({
                   className="flex items-center text-gray-500 text-xs"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  transition={{ delay: index * 0.05 + 0.2 }}
+                  transition={{ 
+                    delay: index * 0.05 + 0.2,
+                    duration: 0.3,
+                    ease: [0.25, 0.1, 0.25, 1]
+                  }}
                 >
                   <Clock className="w-3 h-3 mr-1" />
                   <span>{activity.timestamp}</span>
@@ -175,7 +201,11 @@ const AnimatedActivityFeed: React.FC<AnimatedActivityFeedProps> = ({
                 className="opacity-0 group-hover:opacity-100 transition-opacity"
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
-                transition={{ delay: index * 0.05 + 0.3 }}
+                transition={{ 
+                  delay: index * 0.05 + 0.3,
+                  duration: 0.3,
+                  ease: [0.25, 0.1, 0.25, 1]
+                }}
               >
                 <div className="w-2 h-2 bg-purple-400 rounded-full"></div>
               </motion.div>

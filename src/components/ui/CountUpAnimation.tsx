@@ -32,8 +32,7 @@ const CountUpAnimation: React.FC<CountUpAnimationProps> = ({
     bounce: 0
   });
   
-  const [displayValue, setDisplayValue] = useState(start);
-
+  const [displayValue] = useState(start);
   useEffect(() => {
     const unsubscribe = springValue.on('change', (latest: number) => {
       if (ref.current) {

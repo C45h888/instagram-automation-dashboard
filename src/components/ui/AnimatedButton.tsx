@@ -27,31 +27,39 @@ const sizeVariants = {
   icon: 'p-2',
 };
 
-const hoverVariants = {
-  scale: {
-    scale: 1.05,
-    transition: { duration: 0.2, ease: 'easeOut' }
-  },
-  magnetic: {
-    scale: 1.02,
-    y: -2,
-    transition: { duration: 0.2, ease: 'easeOut' }
-  },
-  glow: {
-    boxShadow: '0 0 20px rgba(139, 92, 246, 0.5)',
-    transition: { duration: 0.2 }
-  },
-  lift: {
-    y: -3,
-    boxShadow: '0 10px 25px rgba(0, 0, 0, 0.2)',
-    transition: { duration: 0.2, ease: 'easeOut' }
+// Separate hover animations (no complex transitions)
+const getHoverAnimation = (effect: string) => {
+  switch (effect) {
+    case 'scale':
+      return { scale: 1.05 };
+    case 'magnetic':
+      return { scale: 1.02, y: -2 };
+    case 'glow':
+      return { boxShadow: '0 0 20px rgba(139, 92, 246, 0.5)' };
+    case 'lift':
+      return { y: -3, boxShadow: '0 10px 25px rgba(0, 0, 0, 0.2)' };
+    default:
+      return { scale: 1.05 };
   }
 };
 
-const clickVariants = {
-  ripple: { scale: 0.95 },
-  scale: { scale: 0.98 },
-  bounce: { scale: 1.1 }
+const getClickAnimation = (effect: string) => {
+  switch (effect) {
+    case 'ripple':
+      return { scale: 0.95 };
+    case 'scale':
+      return { scale: 0.98 };
+    case 'bounce':
+      return { scale: 1.1 };
+    default:
+      return { scale: 0.98 };
+  }
+};
+
+// Simple transition
+const hoverTransition = {
+  duration: 0.2,
+  ease: [0.25, 0.1, 0.25, 1] as const
 };
 
 const AnimatedButton: React.FC<AnimatedButtonProps> = ({
@@ -64,7 +72,22 @@ const AnimatedButton: React.FC<AnimatedButtonProps> = ({
   children,
   className = '',
   disabled,
-  ...props
+  onClick,
+  // ✅ SEPARATION: Extract conflicting HTML drag events
+  onDrag,
+  onDragStart,
+  onDragEnd,
+  onDragEnter,
+  onDragExit,
+  onDragLeave,
+  onDragOver,
+  onDrop,
+  // ✅ SEPARATION: Extract other potentially conflicting events
+  onAnimationStart,
+  onAnimationEnd,
+  onTransitionEnd,
+  // Safe props that don't conflict with Framer Motion
+  ...safeProps
 }) => {
   const [isClicked, setIsClicked] = useState(false);
 
@@ -74,8 +97,8 @@ const AnimatedButton: React.FC<AnimatedButtonProps> = ({
     setIsClicked(true);
     setTimeout(() => setIsClicked(false), 150);
     
-    if (props.onClick) {
-      props.onClick(e);
+    if (onClick) {
+      onClick(e);
     }
   };
 
@@ -86,16 +109,19 @@ const AnimatedButton: React.FC<AnimatedButtonProps> = ({
         ${buttonVariants[variant]} ${sizeVariants[size]} ${className}
         ${disabled || loading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
       `}
-      whileHover={disabled || loading ? {} : hoverVariants[hoverEffect]}
-      whileTap={disabled || loading ? {} : clickVariants[clickEffect]}
-      animate={isClicked ? clickVariants[clickEffect] : {}}
+      whileHover={disabled || loading ? undefined : getHoverAnimation(hoverEffect)}
+      whileTap={disabled || loading ? undefined : getClickAnimation(clickEffect)}
+      animate={isClicked ? getClickAnimation(clickEffect) : undefined}
+      transition={hoverTransition}
       disabled={disabled || loading}
       onClick={handleClick}
-      {...props}
+      // ✅ CLEAN SPREAD: Only safe props reach motion.button
+      {...safeProps}
     >
       <motion.div
         className="flex items-center justify-center space-x-2"
         animate={loading ? { opacity: 0.7 } : { opacity: 1 }}
+        transition={{ duration: 0.2 }}
       >
         {loading && (
           <motion.div

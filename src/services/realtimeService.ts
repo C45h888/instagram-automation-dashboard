@@ -195,8 +195,7 @@ class RealtimeService {
       return { success: true, data: response.data };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
-      return { success: false, error: error.message };
-    }
+    } 
   }
 }
 

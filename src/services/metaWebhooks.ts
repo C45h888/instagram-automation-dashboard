@@ -1,5 +1,5 @@
 // src/services/metaWebhooks.ts - Meta API Webhook Integration
-import axios, { type AxiosResponse } from 'axios';
+import axios  from 'axios';
 
 // Environment configuration
 const WEBHOOK_BASE_URL = (import.meta as any).env?.VITE_WEBHOOK_URL || 'https://instagram-backend.888intelligenceautomation.in';

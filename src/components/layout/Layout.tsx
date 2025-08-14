@@ -1,5 +1,5 @@
 import React from 'react';
-import { Outlet, Link, useLocation } from 'react-router-dom';
+import { Outlet, Link } from 'react-router-dom';
 import { Search, User } from 'lucide-react';
 import AnimatedNavigation from './AnimatedNavigation';
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import { useLocation } from 'react-router-dom';
 
 interface PageTransitionProps {
@@ -8,7 +8,8 @@ interface PageTransitionProps {
   duration?: number;
 }
 
-const pageVariants = {
+// Separate variants without transitions
+const pageVariants: Record<string, Variants> = {
   slide: {
     initial: { opacity: 0, x: 300 },
     in: { opacity: 1, x: 0 },
@@ -31,15 +32,16 @@ const pageVariants = {
   }
 };
 
-const pageTransitions = {
+// Separate transition definitions
+const pageTransitions: Record<string, any> = {
   slide: {
     type: 'tween',
-    ease: 'anticipate',
+    ease: [0.68, -0.55, 0.265, 1.55],
     duration: 0.5
   },
   fade: {
     type: 'tween',
-    ease: 'easeInOut',
+    ease: [0.4, 0, 0.2, 1],
     duration: 0.3
   },
   scale: {
@@ -49,7 +51,7 @@ const pageTransitions = {
   },
   slideUp: {
     type: 'tween',
-    ease: 'easeOut',
+    ease: [0.25, 0.1, 0.25, 1],
     duration: 0.4
   }
 };
@@ -61,6 +63,7 @@ const PageTransition: React.FC<PageTransitionProps> = ({
 }) => {
   const location = useLocation();
   
+  // Create transition with optional duration override
   const transition = duration 
     ? { ...pageTransitions[type], duration }
     : pageTransitions[type];
