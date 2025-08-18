@@ -1,1 +1,0 @@
-// TypeScript type definitions for the Instagram Automation Dashboard 

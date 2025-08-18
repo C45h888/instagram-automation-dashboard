@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Calendar, BarChart3, Settings } from 'lucide-react';
+import { Plus, Calendar, BarChart3, Settings, MessageCircle, Target, Users, Zap } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../../hooks/useToast';
@@ -27,7 +27,7 @@ const QuickActions: React.FC = () => {
         
         if (confirmed) {
           await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API call
-          navigate('/content');
+          navigate('/content/create');
           toast.success('Opening content creator...', {
             title: 'Navigation'
           });
@@ -71,6 +71,70 @@ const QuickActions: React.FC = () => {
       description: 'Track performance'
     },
     {
+      label: 'Messages',
+      icon: <MessageCircle className="w-5 h-5" />,
+      onClick: () => {
+        setLoadingStates(prev => ({ ...prev, messages: true }));
+        setTimeout(() => {
+          setLoadingStates(prev => ({ ...prev, messages: false }));
+          navigate('/engagement');
+          toast.info('Opening engagement hub...', {
+            title: 'Messages'
+          });
+        }, 500);
+      },
+      gradient: 'from-pink-500 to-rose-600',
+      description: 'DMs & Comments'
+    },
+    {
+      label: 'Campaigns',
+      icon: <Target className="w-5 h-5" />,
+      onClick: () => {
+        setLoadingStates(prev => ({ ...prev, campaigns: true }));
+        setTimeout(() => {
+          setLoadingStates(prev => ({ ...prev, campaigns: false }));
+          navigate('/campaigns');
+          toast.info('Loading campaigns...', {
+            title: 'Campaigns'
+          });
+        }, 500);
+      },
+      gradient: 'from-yellow-500 to-orange-600',
+      description: 'Marketing campaigns'
+    },
+    {
+      label: 'Audience',
+      icon: <Users className="w-5 h-5" />,
+      onClick: () => {
+        setLoadingStates(prev => ({ ...prev, audience: true }));
+        setTimeout(() => {
+          setLoadingStates(prev => ({ ...prev, audience: false }));
+          navigate('/audience');
+          toast.info('Loading audience insights...', {
+            title: 'Audience'
+          });
+        }, 500);
+      },
+      gradient: 'from-indigo-500 to-purple-600',
+      description: 'Follower insights'
+    },
+    {
+      label: 'Automations',
+      icon: <Zap className="w-5 h-5" />,
+      onClick: () => {
+        setLoadingStates(prev => ({ ...prev, automations: true }));
+        setTimeout(() => {
+          setLoadingStates(prev => ({ ...prev, automations: false }));
+          navigate('/automations');
+          toast.info('Loading automation workflows...', {
+            title: 'Automations'
+          });
+        }, 500);
+      },
+      gradient: 'from-cyan-500 to-blue-600',
+      description: 'N8N workflows'
+    },
+    {
       label: 'Settings',
       icon: <Settings className="w-5 h-5" />,
       onClick: () => {
@@ -90,7 +154,7 @@ const QuickActions: React.FC = () => {
 
   return (
     <motion.div 
-      className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8"
+      className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-8 gap-4 mb-8"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, staggerChildren: 0.1 }}
@@ -100,13 +164,13 @@ const QuickActions: React.FC = () => {
           key={index}
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: index * 0.1 }}
+          transition={{ duration: 0.3, delay: index * 0.05 }}
         >
           <LoadingButton
             loading={loadingStates[action.label.toLowerCase().replace(' ', '')]}
             onClick={action.onClick}
             variant="primary"
-            className={`group p-6 rounded-xl bg-gradient-to-r ${action.gradient} text-white font-medium shadow-lg w-full h-full`}
+            className={`group p-4 lg:p-6 rounded-xl bg-gradient-to-r ${action.gradient} text-white font-medium shadow-lg w-full h-full hover:shadow-xl transition-shadow`}
           >
             <div className="flex flex-col items-center text-center space-y-2">
               <motion.div 
@@ -117,8 +181,8 @@ const QuickActions: React.FC = () => {
                 {action.icon}
               </motion.div>
               <div>
-                <div className="font-semibold">{action.label}</div>
-                <div className="text-xs opacity-80">{action.description}</div>
+                <div className="font-semibold text-sm lg:text-base">{action.label}</div>
+                <div className="text-xs opacity-80 hidden lg:block">{action.description}</div>
               </div>
             </div>
           </LoadingButton>
