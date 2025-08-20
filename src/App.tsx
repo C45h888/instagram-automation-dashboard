@@ -1,9 +1,9 @@
-// src/App.tsx - Optimized Complete Routing Structure
+// src/App.tsx - Complete Functionality Version
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-// Import Layout Component (exists in your repo)
+// Import Layout Component - Using existing layout
 import Layout from './components/layout/Layout';
 
 // Import existing pages from your repository
@@ -12,18 +12,9 @@ import Analytics from './pages/Analytics';
 import ContentManagement from './pages/ContentManagement';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
-
-// Import existing engagement page (you have EngagementMonitor.tsx)
 import EngagementMonitor from './pages/EngagementMonitor';
 
-// Lazy load heavy components for better performance
-const LazyDashboard = React.lazy(() => import('./pages/Dashboard'));
-const LazyAnalytics = React.lazy(() => import('./pages/Analytics'));
-const LazyContentManagement = React.lazy(() => import('./pages/ContentManagement'));
-const LazySettings = React.lazy(() => import('./pages/Settings'));
-
-// Enhanced placeholder pages with better UI
-// These will be replaced with full implementations later
+// Complete placeholder components with full functionality from Version 1
 const Engagement: React.FC = () => (
   <div className="space-y-8 animate-fade-in">
     <div className="glass-morphism-card p-6 rounded-2xl">
@@ -238,14 +229,14 @@ const Audience: React.FC = () => (
   </div>
 );
 
-// Query Client with optimized settings
+// Query Client with optimized settings (updated for latest React Query)
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
       refetchOnWindowFocus: false,
       staleTime: 5 * 60 * 1000, // 5 minutes
-      cacheTime: 10 * 60 * 1000, // 10 minutes
+      gcTime: 10 * 60 * 1000,   // 10 minutes (replaces deprecated cacheTime)
     },
   },
 });
@@ -283,8 +274,9 @@ function App() {
               <Route path="content" element={<ContentManagement />} />
               <Route path="content/create" element={<CreatePost />} />
               
-              {/* Engagement - Using existing EngagementMonitor or new Engagement */}
+              {/* Engagement - Dual option: use Engagement placeholder OR existing EngagementMonitor */}
               <Route path="engagement" element={<Engagement />} />
+              <Route path="engagement-monitor" element={<EngagementMonitor />} />
               <Route path="messages" element={<Navigate to="/engagement" replace />} />
               
               {/* Automations */}
@@ -299,7 +291,7 @@ function App() {
               {/* Audience */}
               <Route path="audience" element={<Audience />} />
               
-              {/* UGC Route (if needed) */}
+              {/* UGC Route */}
               <Route path="ugc" element={<Audience />} />
             </Route>
             

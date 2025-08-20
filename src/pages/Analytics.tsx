@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { 
-  TrendingUp, TrendingDown, Users, Heart, MessageCircle, 
-  Eye, Share2, Bookmark, Calendar, Filter, Download,
-  ChevronUp, ChevronDown, MoreVertical, ArrowUpRight
+  Users, Heart, MessageCircle, Eye, Filter, Download,
+  ChevronUp, ChevronDown, MoreVertical
 } from 'lucide-react';
 
 // Type definitions
@@ -160,7 +159,6 @@ const Analytics: React.FC = () => {
 
   const SimpleLineChart: React.FC<{ data: ChartData }> = ({ data }) => {
     const maxValue = Math.max(...data.datasets.flatMap(d => d.data));
-    const chartHeight = 300;
     
     return (
       <div className="relative h-[300px] w-full">

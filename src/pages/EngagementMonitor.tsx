@@ -1,14 +1,14 @@
-// src/pages/Engagement.tsx - Full Featured Engagement Hub
-import React, { useState, useEffect } from 'react';
+// src/pages/Engagement.tsx - Full Featured Engagement Hub (Fixed)
+import React, { useState } from 'react';
 import { 
-  MessageCircle, Heart, Send, TrendingUp, AlertCircle, 
-  Clock, Filter, Search, RefreshCw, ChevronRight, User,
-  ThumbsUp, ThumbsDown, Zap, Shield, Bot, Eye, Reply
+  MessageCircle, Heart, TrendingUp, AlertCircle, 
+  Clock, Search, RefreshCw, ChevronRight,
+  ThumbsUp, Zap, Shield, Bot, Reply
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '../hooks/useToast';
 
-// Type definitions
+// Type definitions - Fixed interface declarations
 interface Comment {
   id: string;
   username: string;
@@ -56,25 +56,39 @@ interface EngagementMetric {
   color: string;
 }
 
+interface ResponseTemplate {
+  id: string;
+  name: string;
+  text: string;
+}
+
+// Fixed type definitions for state
+type TabType = 'comments' | 'dms' | 'automations' | 'templates';
+type SentimentType = 'all' | 'positive' | 'neutral' | 'negative';
+type CategoryType = 'all' | 'inquiry' | 'support' | 'feedback' | 'collab';
+
 const Engagement: React.FC = () => {
   const toast = useToast();
-  const [activeTab, setActiveTab] = useState<'comments' | 'dms' | 'automations' | 'templates'>('comments');
-  const [selectedSentiment, setSelectedSentiment] = useState<'all' | 'positive' | 'neutral' | 'negative'>('all');
-  const [selectedCategory, setSelectedCategory] = useState<'all' | 'inquiry' | 'support' | 'feedback' | 'collab'>('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  
+  // Fixed useState declarations with proper typing
+  const [activeTab, setActiveTab] = useState<TabType>('comments');
+  const [selectedSentiment, setSelectedSentiment] = useState<SentimentType>('all');
+  const [selectedCategory, setSelectedCategory] = useState<CategoryType>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [selectedComment, setSelectedComment] = useState<Comment | null>(null);
   const [selectedDM, setSelectedDM] = useState<DM | null>(null);
-  const [replyText, setReplyText] = useState('');
-  const [showAISuggestions, setShowAISuggestions] = useState(false);
+  const [replyText, setReplyText] = useState<string>('');
+  const [showAISuggestions, setShowAISuggestions] = useState<boolean>(false);
 
+  // Mock data - replace with real API calls
   // Mock data - replace with real API calls
   const comments: Comment[] = [
     {
       id: '1',
       username: 'sarah_johnson',
       avatar: '👩',
-      message: 'Love this product! When will it be back in stock? I've been waiting for weeks!',
+      message: "Love this product! When will it be back in stock? I've been waiting for weeks!",
       timestamp: '2 minutes ago',
       postId: 'post_1',
       postTitle: 'Summer Collection Launch',
@@ -132,7 +146,7 @@ const Engagement: React.FC = () => {
       id: '1',
       username: 'influencer_jane',
       avatar: '💫',
-      lastMessage: 'Hey! I'd love to collaborate on your next campaign. I have 50K engaged followers...',
+      lastMessage: "Hey! I'd love to collaborate on your next campaign. I have 50K engaged followers...",
       timestamp: '5 minutes ago',
       unread: true,
       category: 'collab',
@@ -144,7 +158,7 @@ const Engagement: React.FC = () => {
       id: '2',
       username: 'customer_support_1',
       avatar: '💬',
-      lastMessage: 'Hi, I need help with my order #12345. It hasn't arrived yet.',
+      lastMessage: "Hi, I need help with my order #12345. It hasn't arrived yet.",
       timestamp: '30 minutes ago',
       unread: true,
       category: 'support',
@@ -155,7 +169,7 @@ const Engagement: React.FC = () => {
       id: '3',
       username: 'potential_buyer',
       avatar: '🛍️',
-      lastMessage: 'Do you have size charts available? I'm interested in the blue dress.',
+      lastMessage: "Do you have size charts available? I'm interested in the blue dress.",
       timestamp: '1 hour ago',
       unread: true,
       category: 'inquiry',
@@ -220,7 +234,7 @@ const Engagement: React.FC = () => {
     }
   ];
 
-  const responseTemplates = [
+  const responseTemplates: ResponseTemplate[] = [
     { id: '1', name: 'Thank You', text: 'Thank you so much for your support! We truly appreciate it! 💕' },
     { id: '2', name: 'Shipping Info', text: 'We ship worldwide! Standard shipping takes 5-7 business days. Express options available at checkout.' },
     { id: '3', name: 'Size Guide', text: 'You can find our detailed size guide at [link]. Need help choosing? DM us your measurements!' },
@@ -228,7 +242,8 @@ const Engagement: React.FC = () => {
     { id: '5', name: 'Collaboration', text: 'Thanks for your interest! Please email our partnerships team at collab@brand.com with your media kit.' }
   ];
 
-  const handleRefresh = async () => {
+  // Fixed async function with proper error handling
+  const handleRefresh = async (): Promise<void> => {
     setIsRefreshing(true);
     try {
       // Simulate API call
@@ -241,7 +256,7 @@ const Engagement: React.FC = () => {
     }
   };
 
-  const handleReply = (comment: Comment) => {
+  const handleReply = (comment: Comment): void => {
     setSelectedComment(comment);
     setShowAISuggestions(true);
     
@@ -255,7 +270,7 @@ const Engagement: React.FC = () => {
     }
   };
 
-  const sendReply = async () => {
+  const sendReply = async (): Promise<void> => {
     try {
       console.log('Sending reply:', replyText, 'to comment:', selectedComment?.id);
       toast.success('Reply sent successfully', { title: 'Success' });
@@ -267,24 +282,25 @@ const Engagement: React.FC = () => {
     }
   };
 
-  const toggleAutomation = (ruleId: string) => {
+  const toggleAutomation = (ruleId: string): void => {
     console.log('Toggling automation:', ruleId);
     toast.info('Automation rule updated', { title: 'Settings' });
   };
 
-  const applyTemplate = (template: string) => {
+  const applyTemplate = (template: string): void => {
     setReplyText(template);
     toast.info('Template applied', { title: 'Template' });
   };
 
-  const filteredComments = comments.filter(comment => {
+  // Fixed filter functions with proper typing
+  const filteredComments = comments.filter((comment: Comment) => {
     const matchesSentiment = selectedSentiment === 'all' || comment.sentiment === selectedSentiment;
     const matchesSearch = comment.message.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           comment.username.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesSentiment && matchesSearch;
   });
 
-  const filteredDMs = dms.filter(dm => {
+  const filteredDMs = dms.filter((dm: DM) => {
     const matchesCategory = selectedCategory === 'all' || dm.category === selectedCategory;
     const matchesSearch = dm.lastMessage.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           dm.username.toLowerCase().includes(searchQuery.toLowerCase());
@@ -339,14 +355,14 @@ const Engagement: React.FC = () => {
       {/* Tabs */}
       <div className="flex gap-4 border-b border-gray-700 pb-4 overflow-x-auto">
         {[
-          { id: 'comments', label: 'Comments', count: comments.filter(c => !c.replied).length },
-          { id: 'dms', label: 'Direct Messages', count: dms.filter(d => d.unread).length },
-          { id: 'automations', label: 'Automations', count: automationRules.filter(r => r.enabled).length },
-          { id: 'templates', label: 'Templates', count: responseTemplates.length }
+          { id: 'comments' as TabType, label: 'Comments', count: comments.filter(c => !c.replied).length },
+          { id: 'dms' as TabType, label: 'Direct Messages', count: dms.filter(d => d.unread).length },
+          { id: 'automations' as TabType, label: 'Automations', count: automationRules.filter(r => r.enabled).length },
+          { id: 'templates' as TabType, label: 'Templates', count: responseTemplates.length }
         ].map(tab => (
           <button
             key={tab.id}
-            onClick={() => setActiveTab(tab.id as any)}
+            onClick={() => setActiveTab(tab.id)}
             className={`px-6 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${
               activeTab === tab.id
                 ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
@@ -601,6 +617,21 @@ const Engagement: React.FC = () => {
             </div>
           </motion.div>
         )}
+        // Add this inside the DMs tab content, around line 577
+{selectedDM && (
+  <div className="mt-4 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+    <h4 className="text-blue-400 font-medium mb-2">DM Details</h4>
+    <p className="text-white">Conversation with @{selectedDM.username}</p>
+    <p className="text-gray-300 text-sm">{selectedDM.lastMessage}</p>
+    <button 
+      onClick={() => setSelectedDM(null)}
+      className="mt-2 px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded transition-all"
+    >
+      Close Details
+    </button>
+  </div>
+)}
+
 
         {activeTab === 'automations' && (
           <motion.div
