@@ -1,20 +1,21 @@
-// src/App.tsx - Complete Functionality Version
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-// Import Layout Component - Using existing layout
+// Import Layout Component
 import Layout from './components/layout/Layout';
+import RequireAuth from './components/layout/RequireAuth';
 
-// Import existing pages from your repository
+// Import existing pages - Fixed import paths
 import Dashboard from './pages/Dashboard';
 import Analytics from './pages/Analytics';
 import ContentManagement from './pages/ContentManagement';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
+import AdminLogin from './pages/AdminLogin.tsx'; // Fixed path - no quotes around pages
 import EngagementMonitor from './pages/EngagementMonitor';
 
-// Complete placeholder components with full functionality from Version 1
+// Placeholder components (same as before)
 const Engagement: React.FC = () => (
   <div className="space-y-8 animate-fade-in">
     <div className="glass-morphism-card p-6 rounded-2xl">
@@ -229,14 +230,14 @@ const Audience: React.FC = () => (
   </div>
 );
 
-// Query Client with optimized settings (updated for latest React Query)
+// Query Client with optimized settings (compatible with React Query v5)
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
       refetchOnWindowFocus: false,
       staleTime: 5 * 60 * 1000, // 5 minutes
-      gcTime: 10 * 60 * 1000,   // 10 minutes (replaces deprecated cacheTime)
+      gcTime: 10 * 60 * 1000,   // 10 minutes
     },
   },
 });
@@ -251,30 +252,38 @@ const PageLoader: React.FC = () => (
   </div>
 );
 
-// Main App Component
+// Main App Component with Protected Routes
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <Router>
         <React.Suspense fallback={<PageLoader />}>
           <Routes>
-            {/* Authentication Route */}
+            {/* Public Authentication Routes */}
             <Route path="/login" element={<Login />} />
+            <Route path="/admin/login" element={<AdminLogin />} />
             
-            {/* Routes with Layout wrapper */}
-            <Route path="/" element={<Layout />}>
+            {/* Protected Routes - Everything requires authentication */}
+            <Route 
+              path="/" 
+              element={
+                <RequireAuth>
+                  <Layout />
+                </RequireAuth>
+              }
+            >
               {/* Main Dashboard */}
               <Route index element={<Dashboard />} />
               <Route path="dashboard" element={<Navigate to="/" replace />} />
               
-              {/* Analytics - Using your existing page */}
+              {/* Analytics */}
               <Route path="analytics" element={<Analytics />} />
               
-              {/* Content Management - Using your existing page */}
+              {/* Content Management */}
               <Route path="content" element={<ContentManagement />} />
               <Route path="content/create" element={<CreatePost />} />
               
-              {/* Engagement - Dual option: use Engagement placeholder OR existing EngagementMonitor */}
+              {/* Engagement */}
               <Route path="engagement" element={<Engagement />} />
               <Route path="engagement-monitor" element={<EngagementMonitor />} />
               <Route path="messages" element={<Navigate to="/engagement" replace />} />
@@ -282,7 +291,7 @@ function App() {
               {/* Automations */}
               <Route path="automations" element={<Automations />} />
               
-              {/* Settings - Using your existing page */}
+              {/* Settings */}
               <Route path="settings" element={<Settings />} />
               
               {/* Campaign Management */}
@@ -295,8 +304,8 @@ function App() {
               <Route path="ugc" element={<Audience />} />
             </Route>
             
-            {/* Catch all - redirect to dashboard */}
-            <Route path="*" element={<Navigate to="/" replace />} />
+            {/* Catch all - redirect to login if not authenticated */}
+            <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>
         </React.Suspense>
       </Router>
