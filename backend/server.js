@@ -5,6 +5,8 @@ require('dotenv').config({ path: '../.env' });
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const legalRoutes = require('./routes/legal');
+app.use('/legal', legalRoutes);
 
 // Enhanced CORS for Cloudflare Tunnel
 app.use(cors({

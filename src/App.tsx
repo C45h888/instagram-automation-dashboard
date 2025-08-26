@@ -1,8 +1,9 @@
+// src/App.tsx - Updated with Legal Pages
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-// Import Layout Component
+// Import Layout Components
 import Layout from './components/layout/Layout';
 import RequireAuth from './components/layout/RequireAuth';
 
@@ -12,8 +13,14 @@ import Analytics from './pages/Analytics';
 import ContentManagement from './pages/ContentManagement';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
-import AdminLogin from './pages/AdminLogin.tsx'; // Fixed path - no quotes around pages
+import AdminLogin from './pages/AdminLogin';
 import EngagementMonitor from './pages/EngagementMonitor';
+
+// Import Legal Pages (NEW)
+import PrivacyPolicy from './pages/privacypolicy';
+import TermsOfService from './pages/TermsOfService';
+import DataDeletion from './pages/DataDeletion';
+import PrivacyDashboard from './pages/PrivacyDashboard';
 
 // Placeholder components (same as before)
 const Engagement: React.FC = () => (
@@ -259,6 +266,11 @@ function App() {
       <Router>
         <React.Suspense fallback={<PageLoader />}>
           <Routes>
+            {/* Public Legal Pages - NO AUTH REQUIRED (Meta Crawler Accessible) */}
+            <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+            <Route path="/terms-of-service" element={<TermsOfService />} />
+            <Route path="/data-deletion" element={<DataDeletion />} />
+            
             {/* Public Authentication Routes */}
             <Route path="/login" element={<Login />} />
             <Route path="/admin/login" element={<AdminLogin />} />
@@ -275,6 +287,9 @@ function App() {
               {/* Main Dashboard */}
               <Route index element={<Dashboard />} />
               <Route path="dashboard" element={<Navigate to="/" replace />} />
+              
+              {/* Privacy Dashboard (Protected) */}
+              <Route path="dashboard/privacy-controls" element={<PrivacyDashboard />} />
               
               {/* Analytics */}
               <Route path="analytics" element={<Analytics />} />

@@ -1,6 +1,7 @@
 // src/components/layout/Layout.tsx
 import React, { useState } from 'react';
 import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import LegalFooter from '../layout/LegalFooter'; // Fixed import path
 import { 
   Home, Calendar, MessageCircle, BarChart3, Settings, 
   Users, Bot, Target, Search, Bell, Menu, X, LogOut,
@@ -300,38 +301,8 @@ const Layout: React.FC = () => {
         </div>
       </main>
 
-      {/* Optional Footer */}
-      <footer className="bg-gray-800/30 border-t border-gray-700 py-6 mt-auto">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <p className="text-gray-400 text-sm">
-              © 2024 InstaAutomation. Powered by N8N & AI
-            </p>
-            <div className="flex items-center gap-6">
-              <a 
-                href="https://docs.yourapp.com" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-gray-400 hover:text-white text-sm transition-colors"
-              >
-                Documentation
-              </a>
-              <a 
-                href="https://support.yourapp.com" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-gray-400 hover:text-white text-sm transition-colors"
-              >
-                Support
-              </a>
-              <span className="text-gray-400 text-sm flex items-center gap-2">
-                <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
-                API Status: Operational
-              </span>
-            </div>
-          </div>
-        </div>
-      </footer>
+      {/* Legal Footer Component Integration */}
+      <LegalFooter />
     </div>
   );
 };
