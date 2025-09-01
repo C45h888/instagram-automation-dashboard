@@ -1,30 +1,38 @@
-// backend/config/supabase.js - Supabase client with Cloudflare Tunnel
+// backend/config/supabase.js - Enhanced Supabase client with Cloudflare Tunnel + Phase 1 Features
 const { createClient } = require('@supabase/supabase-js');
+const crypto = require('crypto');
 const dotenv = require('dotenv');
 
 // Load environment variables
 dotenv.config({ path: '../.env' });
 
-// Use tunnel URL instead of direct Supabase URL
+// Configuration validation and setup
 const supabaseUrl = process.env.SUPABASE_TUNNEL_URL || process.env.SUPABASE_CLIENT_URL || process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+const encryptionKey = process.env.ENCRYPTION_KEY;
 
-// Validate configuration
+// Validate critical configuration
 if (!supabaseUrl) {
   console.error('❌ Missing SUPABASE_TUNNEL_URL or SUPABASE_URL');
   console.log('📋 Required environment variables:');
   console.log('   SUPABASE_TUNNEL_URL=https://db-secure.888intelligenceautomation.in');
   console.log('   SUPABASE_SERVICE_KEY=your_service_key');
+  console.log('   ENCRYPTION_KEY=32_byte_hex_string');
   process.exit(1);
 }
 
-// Log connection info (without exposing keys)
+if (!encryptionKey) {
+  console.warn('⚠️  ENCRYPTION_KEY not set - Instagram credential encryption disabled');
+}
+
+// Log connection info (without exposing sensitive keys)
 console.log('🔐 Supabase Configuration:');
 console.log(`   URL: ${supabaseUrl}`);
 console.log(`   Using Tunnel: ${supabaseUrl.includes('db-secure') ? 'Yes ✅' : 'No ❌'}`);
 console.log(`   Service Key: ${supabaseServiceKey ? '✅ Set' : '❌ Missing'}`);
 console.log(`   Anon Key: ${supabaseAnonKey ? '✅ Set' : '❌ Missing'}`);
+console.log(`   Encryption: ${encryptionKey ? '✅ Enabled' : '⚠️  Disabled'}`);
 
 // Create admin client with service role key (for backend operations)
 let supabaseAdmin = null;
@@ -33,41 +41,203 @@ if (supabaseServiceKey) {
     auth: {
       autoRefreshToken: false,
       persistSession: false
+    },
+    db: {
+      schema: 'public'
+    },
+    global: {
+      headers: {
+        'X-Client-Info': 'instagram-automation-backend',
+        'X-Client-Version': '1.0.0'
+      }
     }
   });
   console.log('✅ Supabase admin client initialized');
 }
 
-// Create anon client (for public operations)
+// Create regular client for user operations (alias for compatibility)
+let supabaseClient = null;
 let supabaseAnon = null;
 if (supabaseAnonKey) {
-  supabaseAnon = createClient(supabaseUrl, supabaseAnonKey, {
+  supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: true
+    },
+    db: {
+      schema: 'public'
+    },
+    global: {
+      headers: {
+        'X-Client-Info': 'instagram-automation-backend-anon',
+        'X-Client-Version': '1.0.0'
+      }
     }
   });
+  
+  // Create alias for backward compatibility
+  supabaseAnon = supabaseClient;
   console.log('✅ Supabase anon client initialized');
 }
 
-// Helper functions for common operations
-const supabaseHelpers = {
-  // Test database connection
-  async testConnection() {
-    try {
-      const { data, error } = await supabaseAdmin
-        .from('user_profiles')
-        .select('count', { count: 'exact', head: true });
-      
-      if (error) throw error;
-      
-      console.log('✅ Database connection successful');
-      return true;
-    } catch (error) {
-      console.error('❌ Database connection failed:', error.message);
+// =============================================================================
+// PHASE 1 ENCRYPTION UTILITIES FOR INSTAGRAM CREDENTIALS
+// =============================================================================
+
+const algorithm = 'aes-256-gcm';
+const key = encryptionKey ? Buffer.from(encryptionKey, 'hex') : null;
+
+const encrypt = (text) => {
+  if (!key) {
+    console.warn('⚠️  Encryption key not available - storing unencrypted');
+    return { encrypted: text, iv: null, authTag: null, isEncrypted: false };
+  }
+  
+  try {
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv(algorithm, key, iv);
+    
+    let encrypted = cipher.update(text, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+    
+    const authTag = cipher.getAuthTag();
+    
+    return {
+      encrypted,
+      iv: iv.toString('hex'),
+      authTag: authTag.toString('hex'),
+      isEncrypted: true
+    };
+  } catch (error) {
+    console.error('Encryption error:', error);
+    throw new Error('Failed to encrypt data');
+  }
+};
+
+const decrypt = (encryptedData) => {
+  // Handle unencrypted data (fallback)
+  if (!encryptedData.isEncrypted || !encryptedData.iv || !encryptedData.authTag) {
+    return encryptedData.encrypted;
+  }
+  
+  if (!key) {
+    throw new Error('Encryption key not available for decryption');
+  }
+  
+  try {
+    const decipher = crypto.createDecipheriv(
+      algorithm,
+      key,
+      Buffer.from(encryptedData.iv, 'hex')
+    );
+    
+    decipher.setAuthTag(Buffer.from(encryptedData.authTag, 'hex'));
+    
+    let decrypted = decipher.update(encryptedData.encrypted, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    
+    return decrypted;
+  } catch (error) {
+    console.error('Decryption error:', error);
+    throw new Error('Failed to decrypt data');
+  }
+};
+
+// =============================================================================
+// PHASE 1 CONNECTION TESTING
+// =============================================================================
+
+const testConnection = async () => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('user_profiles')
+      .select('count')
+      .limit(1);
+    
+    if (error) {
+      console.error('❌ Supabase connection error:', error);
       return false;
     }
+    
+    console.log('✅ Backend connected to Supabase successfully');
+    console.log('📊 Database: uromexjprcrjfmhkmgxa.supabase.co');
+    return true;
+  } catch (err) {
+    console.error('❌ Connection test failed:', err);
+    return false;
+  }
+};
+
+// =============================================================================
+// PHASE 1 API LOGGING FOR MONITORING
+// =============================================================================
+
+const logApiRequest = async (userId, endpoint, method, responseTime, statusCode, success) => {
+  try {
+    // Try to use RPC function first (if it exists in your schema)
+    const { error: rpcError } = await supabaseAdmin.rpc('log_api_request', {
+      p_user_id: userId,
+      p_business_account_id: null,
+      p_endpoint: endpoint,
+      p_method: method,
+      p_response_time_ms: responseTime,
+      p_status_code: statusCode,
+      p_success: success
+    }).single();
+    
+    // If RPC fails, fall back to direct insert
+    if (rpcError) {
+      const { error: insertError } = await supabaseAdmin
+        .from('api_usage')
+        .insert({
+          user_id: userId,
+          endpoint: endpoint,
+          method: method,
+          response_time_ms: responseTime,
+          status_code: statusCode,
+          success: success,
+          created_at: new Date().toISOString()
+        });
+      
+      if (insertError) throw insertError;
+    }
+  } catch (error) {
+    console.error('Failed to log API request:', error);
+  }
+};
+
+// =============================================================================
+// PHASE 1 AUDIT LOGGING HELPER
+// =============================================================================
+
+const logAudit = async (eventType, userId = null, eventData = {}, req = null) => {
+  try {
+    await supabaseAdmin.from('audit_log').insert({
+      user_id: userId,
+      event_type: eventType,
+      action: eventData.action || 'unknown',
+      resource_type: eventData.resource_type,
+      resource_id: eventData.resource_id,
+      details: eventData,
+      ip_address: req?.ip || req?.connection?.remoteAddress || 'unknown',
+      user_agent: req?.headers?.['user-agent'] || 'unknown',
+      success: eventData.success !== false,
+      created_at: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Audit log error:', error);
+  }
+};
+
+// =============================================================================
+// EXISTING HELPER FUNCTIONS (PRESERVED FOR BACKWARD COMPATIBILITY)
+// =============================================================================
+
+const supabaseHelpers = {
+  // Test database connection (wrapper for backward compatibility)
+  async testConnection() {
+    return await testConnection();
   },
 
   // Create or update user profile
@@ -84,6 +254,14 @@ const supabaseHelpers = {
         .single();
       
       if (error) throw error;
+      
+      // Log the action
+      await logAudit('user_profile_update', userId, {
+        action: 'upsert',
+        resource_type: 'user_profile',
+        resource_id: data.id
+      });
+      
       return { success: true, data };
     } catch (error) {
       console.error('Error upserting user profile:', error);
@@ -106,6 +284,15 @@ const supabaseHelpers = {
         .single();
       
       if (error) throw error;
+      
+      // Log the action
+      await logAudit('instagram_account_linked', userId, {
+        action: 'create',
+        resource_type: 'instagram_business_account',
+        resource_id: data.id,
+        details: { instagram_business_id: accountData.instagram_business_id }
+      });
+      
       return { success: true, data };
     } catch (error) {
       console.error('Error linking Instagram account:', error);
@@ -113,17 +300,20 @@ const supabaseHelpers = {
     }
   },
 
-  // Store encrypted Instagram credentials
+  // Store encrypted Instagram credentials (ENHANCED WITH ENCRYPTION)
   async storeInstagramCredentials(userId, businessAccountId, credentials) {
     try {
-      // Note: In production, encrypt tokens before storing
+      // Encrypt sensitive credentials
+      const encryptedAccessToken = encrypt(credentials.accessToken);
+      const encryptedRefreshToken = credentials.refreshToken ? encrypt(credentials.refreshToken) : null;
+      
       const { data, error } = await supabaseAdmin
         .from('instagram_credentials')
         .insert({
           user_id: userId,
           business_account_id: businessAccountId,
-          access_token_encrypted: credentials.accessToken, // Should be encrypted
-          refresh_token_encrypted: credentials.refreshToken,
+          access_token_encrypted: JSON.stringify(encryptedAccessToken),
+          refresh_token_encrypted: encryptedRefreshToken ? JSON.stringify(encryptedRefreshToken) : null,
           token_type: 'Bearer',
           scope: credentials.scope || [],
           expires_at: credentials.expiresAt,
@@ -133,9 +323,55 @@ const supabaseHelpers = {
         .single();
       
       if (error) throw error;
+      
+      // Log the action (without sensitive data)
+      await logAudit('instagram_credentials_stored', userId, {
+        action: 'create',
+        resource_type: 'instagram_credentials',
+        resource_id: data.id,
+        details: { business_account_id: businessAccountId, encrypted: encryptedAccessToken.isEncrypted }
+      });
+      
       return { success: true, data };
     } catch (error) {
       console.error('Error storing credentials:', error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  // Get decrypted Instagram credentials
+  async getInstagramCredentials(userId, businessAccountId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('instagram_credentials')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('business_account_id', businessAccountId)
+        .eq('is_active', true)
+        .single();
+      
+      if (error) throw error;
+      
+      // Decrypt credentials
+      const accessTokenData = JSON.parse(data.access_token_encrypted);
+      const decryptedAccessToken = decrypt(accessTokenData);
+      
+      let decryptedRefreshToken = null;
+      if (data.refresh_token_encrypted) {
+        const refreshTokenData = JSON.parse(data.refresh_token_encrypted);
+        decryptedRefreshToken = decrypt(refreshTokenData);
+      }
+      
+      return {
+        success: true,
+        data: {
+          ...data,
+          access_token: decryptedAccessToken,
+          refresh_token: decryptedRefreshToken
+        }
+      };
+    } catch (error) {
+      console.error('Error getting credentials:', error);
       return { success: false, error: error.message };
     }
   },
@@ -181,6 +417,15 @@ const supabaseHelpers = {
         .single();
       
       if (error) throw error;
+      
+      // Log the action
+      await logAudit('workflow_created', userId, {
+        action: 'create',
+        resource_type: 'automation_workflow',
+        resource_id: data.id,
+        details: { workflow_type: workflowData.automation_type }
+      });
+      
       return { success: true, data };
     } catch (error) {
       console.error('Error creating workflow:', error);
@@ -256,31 +501,14 @@ const supabaseHelpers = {
     }
   },
 
-  // Audit log entry
+  // Audit log entry (wrapper for backward compatibility)
   async createAuditLog(userId, eventData) {
-    try {
-      const { data, error } = await supabaseAdmin
-        .from('audit_log')
-        .insert({
-          user_id: userId,
-          ...eventData,
-          created_at: new Date().toISOString()
-        })
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return { success: true, data };
-    } catch (error) {
-      console.error('Error creating audit log:', error);
-      return { success: false, error: error.message };
-    }
+    return await logAudit(eventData.event_type, userId, eventData);
   },
 
-  // Delete user data (GDPR compliance)
+  // Delete user data (GDPR compliance) - ENHANCED WITH AUDIT LOGGING
   async deleteUserData(userId) {
     try {
-      // Start a transaction-like operation
       const results = [];
       
       // Delete in reverse dependency order
@@ -311,24 +539,45 @@ const supabaseHelpers = {
       }
       
       // Log the deletion
-      await this.createAuditLog(userId, {
-        event_type: 'user_data_deletion',
+      await logAudit('user_data_deletion', userId, {
         action: 'delete_all',
-        details: { tables_affected: tables },
+        resource_type: 'user_data',
+        details: { tables_affected: tables, results },
         success: true
       });
       
       return { success: true, results };
     } catch (error) {
       console.error('Error deleting user data:', error);
+      
+      // Log the failed deletion attempt
+      await logAudit('user_data_deletion', userId, {
+        action: 'delete_all',
+        resource_type: 'user_data',
+        details: { error: error.message },
+        success: false
+      });
+      
       return { success: false, error: error.message };
     }
   }
 };
 
-// Export clients and helpers
+// =============================================================================
+// EXPORTS - PHASE 1 COMPATIBILITY + BACKWARD COMPATIBILITY
+// =============================================================================
+
 module.exports = {
+  // Phase 1 exports (from implementation plan)
   supabaseAdmin,
+  supabaseClient,
+  encrypt,
+  decrypt,
+  testConnection,
+  logApiRequest,
+  logAudit,
+  
+  // Backward compatibility exports
   supabaseAnon,
   supabaseHelpers
 };

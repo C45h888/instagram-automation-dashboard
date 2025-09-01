@@ -21,6 +21,8 @@ import PrivacyPolicy from './pages/privacypolicy';
 import TermsOfService from './pages/TermsOfService';
 import DataDeletion from './pages/DataDeletion';
 import PrivacyDashboard from './pages/PrivacyDashboard';
+import TestConnection from './pages/TestConnection';
+
 
 // Placeholder components (same as before)
 const Engagement: React.FC = () => (
@@ -321,6 +323,7 @@ function App() {
             
             {/* Catch all - redirect to login if not authenticated */}
             <Route path="*" element={<Navigate to="/login" replace />} />
+            <Route path="/test-connection" element={<TestConnection />} />
           </Routes>
         </React.Suspense>
       </Router>
