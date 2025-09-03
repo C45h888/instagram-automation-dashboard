@@ -8,7 +8,7 @@ interface RequireAuthProps {
 }
 
 const RequireAuth: React.FC<RequireAuthProps> = ({ children, requireAdmin = false }) => {
-  const { isAuthenticated, isAdmin, user, token } = useAuthStore();
+  const { isAuthenticated, isAdmin, token } = useAuthStore();
   const location = useLocation();
 
   // Check if auth state is still loading from persistence

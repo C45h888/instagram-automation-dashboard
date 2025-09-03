@@ -24,14 +24,18 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@supabase/supabase-js": "^2.56.0",
+    "@supabase/supabase-js": "^2.56.1",
+    "bcryptjs": "^3.0.2",
     "body-parser": "^1.20.3",
     "cors": "^2.8.5",
+    "crypto": "^1.0.1",
     "dotenv": "^16.4.5",
     "express": "^4.21.2",
     "grep": "^0.1.0",
+    "jsonwebtoken": "^9.0.2",
     "lsof": "^0.0.4",
-    "netstat": "^0.0.2"
+    "netstat": "^0.0.2",
+    "rate-limiter-flexible": "^7.2.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.4"

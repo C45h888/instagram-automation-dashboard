@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { testSupabaseConnection, supabase } from 'lib/supabase.ts';
-import { useAuthStore } from 'stores/authStore';
+import { testSupabaseConnection } from '../lib/supabase';
+import { useAuthStore } from '../stores/authStore';
 
 export const TestConnection: React.FC = () => {
   const [connectionStatus, setConnectionStatus] = useState<any>({});
@@ -35,7 +35,6 @@ export const TestConnection: React.FC = () => {
       addResult('Testing backend API...');
       const backendUrl = import.meta.env.VITE_API_URL || 'https://instagram-backend.888intelligenceautomation.in';
       const backendResponse = await fetch(`${backendUrl}/health`);
-      const backendData = await backendResponse.json();
       addResult(
         backendResponse.ok 
           ? 'Backend API is healthy' 

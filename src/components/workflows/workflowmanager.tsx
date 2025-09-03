@@ -1,142 +1,131 @@
-import React, { useState, useMemo, useCallback } from 'react';
-import { DatabaseService } from '@/services/databaseService';
-import { useRealtimeWorkflows, useRealtimeExecutions } from '@/hooks/useRealtimeData';
-import { useAuthStore } from '@/stores/authStore';
-import { 
-  Play, Pause, Trash2, Settings, Clock, CheckCircle, 
-  XCircle, Activity, TrendingUp, Zap, MessageSquare,
-  Camera, DollarSign
-} from 'lucide-react';
-import toast from 'react-hot-toast';
+import React, { useState } from 'react';
+import { DatabaseService } from '../../services/databaseservices';
+import { useRealtimeWorkflows, useRealtimeExecutions } from '../../hooks/realtimedata';
+import { useAuthStore } from '../../stores/authStore';
+import { Play, Pause, Trash2, Clock, CheckCircle, XCircle } from 'lucide-react';
 
-// Workflow templates with proper typing
-const WORKFLOW_TEMPLATES = [
-  {
-    type: 'engagement_monitor' as const,
-    name: 'Engagement Monitor',
-    description: 'Track and respond to comments and DMs',
-    icon: MessageSquare,
-    color: 'from-blue-500 to-blue-600',
-    config: {
-      auto_reply: true,
-      sentiment_analysis: true,
-      keywords: [],
-      response_time: 30
-    }
-  },
-  {
-    type: 'analytics_pipeline' as const,
-    name: 'Analytics Pipeline',
-    description: 'Automated daily/weekly analytics reports',
-    icon: TrendingUp,
-    color: 'from-green-500 to-green-600',
-    config: {
-      frequency: 'daily',
-      send_time: '09:00',
-      email_recipients: [],
-      include_competitors: false
-    }
-  },
-  {
-    type: 'sales_attribution' as const,
-    name: 'Sales Attribution',
-    description: 'Track Instagram-driven sales',
-    icon: DollarSign,
-    color: 'from-purple-500 to-purple-600',
-    config: {
-      tracking_params: ['utm_source', 'utm_campaign'],
-      conversion_window: 7,
-      shopify_integration: false
-    }
-  },
-  {
-    type: 'ugc_collection' as const,
-    name: 'UGC Collection',
-    description: 'Collect user-generated content',
-    icon: Camera,
-    color: 'from-pink-500 to-pink-600',
-    config: {
-      hashtags: [],
-      mentions: true,
-      quality_threshold: 0.7
-    }
-  },
-  {
-    type: 'customer_service' as const,
-    name: 'Customer Service',
-    description: 'AI-powered customer support',
-    icon: Activity,
-    color: 'from-yellow-500 to-yellow-600',
-    config: {
-      ai_enabled: true,
-      business_hours: '9-5',
-      escalation_rules: []
-    }
-  }
-];
+// Type definitions
+interface Workflow {
+  id: string;
+  name: string;
+  description?: string;
+  automation_type: string;
+  status: string;
+  is_active: boolean;
+  total_executions?: number;
+  successful_executions?: number;
+  last_execution_at?: string;
+  configuration?: any;
+}
+
+interface Execution {
+  id: string;
+  status: string;
+  started_at: string;
+  execution_time_ms?: number;
+  trigger_source?: string;
+}
 
 export const WorkflowManager: React.FC = () => {
-  const { workflows, loading, refetch } = useRealtimeWorkflows();
+  const { workflows, loading } = useRealtimeWorkflows();
   const { user } = useAuthStore();
   const [creating, setCreating] = useState(false);
   const [selectedWorkflow, setSelectedWorkflow] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
   
-  // Memoized filtered workflows
-  const filteredWorkflows = useMemo(() => {
-    if (!searchTerm) return workflows;
-    
-    const term = searchTerm.toLowerCase();
-    return workflows.filter(w => 
-      w.name.toLowerCase().includes(term) ||
-      w.automation_type.toLowerCase().includes(term)
-    );
-  }, [workflows, searchTerm]);
-  
-  const createWorkflow = useCallback(async (template: typeof WORKFLOW_TEMPLATES[0]) => {
-    if (!user) {
-      toast.error('Please login to create workflows');
-      return;
+  const workflowTemplates = [
+    {
+      type: 'engagement_monitor' as const,
+      name: 'Engagement Monitor',
+      description: 'Track and analyze engagement metrics',
+      icon: '📊',
+      config: {
+        monitor_comments: true,
+        monitor_likes: true,
+        monitor_shares: true,
+        alert_threshold: 100
+      }
+    },
+    {
+      type: 'analytics_pipeline' as const,
+      name: 'Analytics Pipeline',
+      description: 'Process and store Instagram analytics',
+      icon: '📈',
+      config: {
+        sync_interval: 3600,
+        include_stories: true,
+        include_reels: true
+      }
+    },
+    {
+      type: 'sales_attribution' as const,
+      name: 'Sales Attribution',
+      description: 'Track Instagram-driven sales',
+      icon: '💰',
+      config: {
+        tracking_params: ['utm_source', 'utm_campaign'],
+        conversion_window: 7
+      }
+    },
+    {
+      type: 'ugc_collection' as const,
+      name: 'UGC Collection',
+      description: 'Collect user-generated content',
+      icon: '📸',
+      config: {
+        hashtags: ['#yourbrand'],
+        auto_request_rights: false
+      }
+    },
+    {
+      type: 'customer_service' as const,
+      name: 'Customer Service',
+      description: 'Automated customer support',
+      icon: '💬',
+      config: {
+        response_time: 30,
+        ai_enabled: false,
+        escalation_rules: []
+      }
     }
+  ];
+  
+  const createWorkflow = async (template: typeof workflowTemplates[0]) => {
+    if (!user) return;
     
     setCreating(true);
+    
     try {
       const result = await DatabaseService.createWorkflow({
         user_id: user.id,
         name: template.name,
+        description: template.description,
         automation_type: template.type,
-        configuration: template.config
+        status: 'inactive',
+        is_active: false,
+        configuration: template.config,
+        n8n_workflow_id: `n8n_${template.type}_${Date.now()}`,
+        n8n_webhook_url: `${import.meta.env.VITE_N8N_BASE_URL}/webhook/${template.type}`
       });
       
       if (result.success) {
-        await refetch();
+        console.log(`✅ Workflow "${template.name}" created!`);
       }
+    } catch (error) {
+      console.error('Workflow creation error:', error);
     } finally {
       setCreating(false);
     }
-  }, [user, refetch]);
+  };
   
-  const toggleWorkflow = useCallback(async (workflowId: string, currentStatus: string) => {
-    if (!user) return;
-    
+  const toggleWorkflow = async (workflowId: string, currentStatus: string) => {
     const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
-    const result = await DatabaseService.updateWorkflowStatus(workflowId, newStatus, user.id);
-    
-    if (result.success) {
-      await refetch();
-    }
-  }, [user, refetch]);
+    await DatabaseService.updateWorkflowStatus(workflowId, newStatus as any);
+  };
   
-  const deleteWorkflow = useCallback(async (workflowId: string) => {
+  const deleteWorkflow = async (workflowId: string) => {
     if (!user || !confirm('Are you sure you want to delete this workflow?')) return;
-    
-    const result = await DatabaseService.deleteWorkflow(workflowId, user.id);
-    
-    if (result.success) {
-      setSelectedWorkflow(null);
-      await refetch();
-    }
-  }, [user, refetch]);
+    await DatabaseService.deleteWorkflow(workflowId, user.id);
+  };
   
   if (loading) {
     return (
@@ -147,69 +136,47 @@ export const WorkflowManager: React.FC = () => {
   }
   
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="glass-morphism-card p-6 rounded-2xl">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
-            <h2 className="text-2xl font-bold text-white">Automation Workflows</h2>
-            <p className="text-gray-400 mt-1">Create and manage your Instagram automations</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <input
-              type="text"
-              placeholder="Search workflows..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-            <span className="text-gray-400">
-              {workflows.length} workflows
-            </span>
-          </div>
-        </div>
+    <div className="p-6">
+      <div className="mb-8">
+        <h2 className="text-2xl font-bold text-white mb-2">Automation Workflows</h2>
+        <p className="text-gray-400">Create and manage your Instagram automation workflows</p>
       </div>
       
-      {/* Templates Grid */}
-      <div>
+      {/* Workflow Templates */}
+      <div className="mb-8">
         <h3 className="text-lg font-semibold text-white mb-4">Create New Workflow</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-          {WORKFLOW_TEMPLATES.map(template => {
-            const Icon = template.icon;
-            return (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {workflowTemplates.map(template => (
+            <div
+              key={template.type}
+              className="bg-gray-800/50 backdrop-blur-lg rounded-xl p-6 border border-gray-700 hover:border-indigo-500 transition-all cursor-pointer"
+              onClick={() => !creating && createWorkflow(template)}
+            >
+              <div className="text-3xl mb-3">{template.icon}</div>
+              <h4 className="text-lg font-semibold text-white mb-2">{template.name}</h4>
+              <p className="text-gray-400 text-sm mb-4">{template.description}</p>
               <button
-                key={template.type}
-                onClick={() => !creating && createWorkflow(template)}
                 disabled={creating}
-                className="glass-morphism-card p-4 rounded-xl border border-gray-700 hover:border-indigo-500 transition-all group disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
               >
-                <div className={`w-12 h-12 rounded-lg bg-gradient-to-r ${template.color} flex items-center justify-center mb-3 group-hover:scale-110 transition-transform`}>
-                  <Icon className="w-6 h-6 text-white" />
-                </div>
-                <h4 className="text-sm font-semibold text-white mb-1">{template.name}</h4>
-                <p className="text-xs text-gray-400 line-clamp-2">{template.description}</p>
+                {creating ? 'Creating...' : 'Create Workflow'}
               </button>
-            );
-          })}
+            </div>
+          ))}
         </div>
       </div>
       
       {/* Active Workflows */}
       <div>
-        <h3 className="text-lg font-semibold text-white mb-4">
-          Active Workflows ({filteredWorkflows.length})
-        </h3>
+        <h3 className="text-lg font-semibold text-white mb-4">Active Workflows ({workflows.length})</h3>
         
-        {filteredWorkflows.length === 0 ? (
-          <div className="glass-morphism-card p-8 rounded-2xl text-center">
-            <Zap className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-            <p className="text-gray-400">
-              {searchTerm ? 'No workflows found matching your search' : 'No workflows created yet'}
-            </p>
+        {workflows.length === 0 ? (
+          <div className="bg-gray-800/50 backdrop-blur-lg rounded-xl p-8 border border-gray-700 text-center">
+            <p className="text-gray-400">No workflows created yet. Create your first workflow above!</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {filteredWorkflows.map(workflow => (
+          <div className="space-y-4">
+            {workflows.map((workflow: Workflow) => (
               <WorkflowCard
                 key={workflow.id}
                 workflow={workflow}
@@ -223,157 +190,181 @@ export const WorkflowManager: React.FC = () => {
         )}
       </div>
       
-      {/* Workflow Executions Panel */}
+      {/* Workflow Executions */}
       {selectedWorkflow && (
-        <WorkflowExecutions 
-          workflowId={selectedWorkflow}
-          onClose={() => setSelectedWorkflow(null)}
-        />
+        <WorkflowExecutions workflowId={selectedWorkflow} />
       )}
     </div>
   );
 };
 
-// Optimized Workflow Card
+// Workflow Card Component
 const WorkflowCard: React.FC<{
-  workflow: any;
+  workflow: Workflow;
   onToggle: () => void;
   onDelete: () => void;
   onSelect: () => void;
   isSelected: boolean;
-}> = React.memo(({ workflow, onToggle, onDelete, onSelect, isSelected }) => {
+}> = ({ workflow, onToggle, onDelete, onSelect, isSelected }) => {
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'active': return 'text-green-400 bg-green-400/20 border-green-400/30';
-      case 'inactive': return 'text-gray-400 bg-gray-400/20 border-gray-400/30';
-      case 'error': return 'text-red-400 bg-red-400/20 border-red-400/30';
-      default: return 'text-yellow-400 bg-yellow-400/20 border-yellow-400/30';
+      case 'active': return 'text-green-400 bg-green-400/20';
+      case 'inactive': return 'text-gray-400 bg-gray-400/20';
+      case 'error': return 'text-red-400 bg-red-400/20';
+      default: return 'text-gray-400 bg-gray-400/20';
     }
   };
   
-  const template = WORKFLOW_TEMPLATES.find(t => t.type === workflow.automation_type);
-  const Icon = template?.icon || Activity;
+  const getWorkflowIcon = (type: string) => {
+    const icons: any = {
+      engagement_monitor: '📊',
+      analytics_pipeline: '📈',
+      sales_attribution: '💰',
+      ugc_collection: '📸',
+      customer_service: '💬'
+    };
+    return icons[type] || '⚙️';
+  };
   
   return (
-    <div className={`glass-morphism-card p-5 rounded-xl border transition-all ${
-      isSelected ? 'border-indigo-500 ring-2 ring-indigo-500/20' : 'border-gray-700'
-    }`}>
-      <div className="flex items-start justify-between">
-        <div className="flex items-start space-x-3">
-          <div className={`w-10 h-10 rounded-lg bg-gradient-to-r ${template?.color || 'from-gray-500 to-gray-600'} flex items-center justify-center`}>
-            <Icon className="w-5 h-5 text-white" />
-          </div>
-          <div className="flex-1">
-            <h4 className="text-white font-semibold">{workflow.name}</h4>
-            <p className="text-gray-400 text-sm mt-1">
-              Type: {workflow.automation_type.replace('_', ' ')}
-            </p>
-            <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-              <span>Executions: {workflow.total_executions || 0}</span>
-              <span>Success: {workflow.successful_executions || 0}</span>
-            </div>
+    <div
+      className={`bg-gray-800/50 backdrop-blur-lg rounded-xl p-6 border transition-all ${
+        isSelected ? 'border-indigo-500' : 'border-gray-700'
+      }`}
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-4">
+          <div className="text-2xl">{getWorkflowIcon(workflow.automation_type)}</div>
+          <div>
+            <h4 className="text-lg font-semibold text-white">{workflow.name}</h4>
+            <p className="text-gray-400 text-sm">Type: {workflow.automation_type}</p>
           </div>
         </div>
         
-        <div className="flex items-center space-x-2">
-          <span className={`px-2 py-1 rounded-full text-xs border ${getStatusColor(workflow.status)}`}>
-            {workflow.status}
+        <div className="flex items-center space-x-3">
+          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(workflow.status)}`}>
+            {workflow.status.toUpperCase()}
           </span>
           
           <button
             onClick={onToggle}
-            className="p-1.5 text-gray-400 hover:text-white transition-colors"
+            className="p-2 text-gray-400 hover:text-white transition-colors"
             title={workflow.status === 'active' ? 'Pause' : 'Activate'}
           >
-            {workflow.status === 'active' ? <Pause size={16} /> : <Play size={16} />}
+            {workflow.status === 'active' ? <Pause size={18} /> : <Play size={18} />}
           </button>
           
           <button
             onClick={onSelect}
-            className="p-1.5 text-gray-400 hover:text-white transition-colors"
+            className="p-2 text-gray-400 hover:text-white transition-colors"
             title="View Executions"
           >
-            <Clock size={16} />
+            <Clock size={18} />
           </button>
           
           <button
             onClick={onDelete}
-            className="p-1.5 text-gray-400 hover:text-red-400 transition-colors"
+            className="p-2 text-gray-400 hover:text-red-400 transition-colors"
             title="Delete"
           >
-            <Trash2 size={16} />
+            <Trash2 size={18} />
           </button>
+        </div>
+      </div>
+      
+      {/* Workflow Stats */}
+      <div className="mt-4 grid grid-cols-3 gap-4">
+        <div className="text-center">
+          <p className="text-gray-400 text-xs">Total Runs</p>
+          <p className="text-white font-semibold">{workflow.total_executions || 0}</p>
+        </div>
+        <div className="text-center">
+          <p className="text-gray-400 text-xs">Success Rate</p>
+          <p className="text-white font-semibold">
+            {workflow.total_executions && workflow.successful_executions
+              ? Math.round((workflow.successful_executions / workflow.total_executions) * 100) 
+              : 0}%
+          </p>
+        </div>
+        <div className="text-center">
+          <p className="text-gray-400 text-xs">Last Run</p>
+          <p className="text-white font-semibold">
+            {workflow.last_execution_at 
+              ? new Date(workflow.last_execution_at).toLocaleDateString() 
+              : 'Never'}
+          </p>
         </div>
       </div>
     </div>
   );
-});
+};
 
-// Optimized Executions Component
-const WorkflowExecutions: React.FC<{ 
-  workflowId: string;
-  onClose: () => void;
-}> = React.memo(({ workflowId, onClose }) => {
-  const { executions, loading, hasMore, loadMore } = useRealtimeExecutions(workflowId);
+// Workflow Executions Component
+const WorkflowExecutions: React.FC<{ workflowId: string }> = ({ workflowId }) => {
+  const { executions, loading } = useRealtimeExecutions(workflowId);
+  
+  if (loading) {
+    return <div className="text-gray-400 text-center py-4">Loading executions...</div>;
+  }
   
   return (
-    <div className="glass-morphism-card p-6 rounded-2xl">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-white">Recent Executions</h3>
-        <button
-          onClick={onClose}
-          className="text-gray-400 hover:text-white transition-colors"
-        >
-          ✕
-        </button>
-      </div>
+    <div className="mt-8">
+      <h3 className="text-lg font-semibold text-white mb-4">Recent Executions</h3>
       
-      {loading && executions.length === 0 ? (
-        <div className="text-gray-400 text-center py-4">Loading executions...</div>
-      ) : executions.length === 0 ? (
-        <div className="text-gray-400 text-center py-4">No executions yet</div>
+      {executions.length === 0 ? (
+        <div className="bg-gray-800/50 backdrop-blur-lg rounded-xl p-6 border border-gray-700 text-center">
+          <p className="text-gray-400">No executions yet</p>
+        </div>
       ) : (
-        <>
-          <div className="space-y-2 max-h-96 overflow-y-auto">
-            {executions.map(execution => (
-              <div key={execution.id} className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
-                <div className="flex items-center space-x-3">
-                  {execution.status === 'success' ? (
-                    <CheckCircle className="text-green-400" size={16} />
-                  ) : execution.status === 'error' ? (
-                    <XCircle className="text-red-400" size={16} />
-                  ) : (
-                    <Clock className="text-yellow-400 animate-spin" size={16} />
-                  )}
-                  <div>
-                    <p className="text-sm text-white">
-                      {new Date(execution.started_at).toLocaleString()}
-                    </p>
-                    {execution.execution_time_ms && (
-                      <p className="text-xs text-gray-400">
-                        Duration: {execution.execution_time_ms}ms
-                      </p>
+        <div className="bg-gray-800/50 backdrop-blur-lg rounded-xl border border-gray-700 overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-gray-900/50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                  Status
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                  Started
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                  Duration
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                  Trigger
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-700">
+              {executions.map((execution: Execution) => (
+                <tr key={execution.id}>
+                  <td className="px-4 py-3">
+                    {execution.status === 'success' ? (
+                      <CheckCircle className="text-green-400" size={16} />
+                    ) : execution.status === 'error' ? (
+                      <XCircle className="text-red-400" size={16} />
+                    ) : (
+                      <Clock className="text-yellow-400 animate-spin" size={16} />
                     )}
-                  </div>
-                </div>
-                <span className="text-xs text-gray-400">
-                  {execution.trigger_source || 'Manual'}
-                </span>
-              </div>
-            ))}
-          </div>
-          
-          {hasMore && (
-            <button
-              onClick={loadMore}
-              disabled={loading}
-              className="w-full mt-4 py-2 text-indigo-400 hover:text-indigo-300 transition-colors text-sm"
-            >
-              {loading ? 'Loading...' : 'Load More'}
-            </button>
-          )}
-        </>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-400">
+                    {new Date(execution.started_at).toLocaleString()}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-400">
+                    {execution.execution_time_ms
+                      ? `${execution.execution_time_ms}ms`
+                      : 'Running...'}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-400">
+                    {execution.trigger_source || 'Manual'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
-});
+};
+
+export default WorkflowManager;

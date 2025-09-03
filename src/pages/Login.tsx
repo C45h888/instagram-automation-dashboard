@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
-import { Instagram, Lock, User, ChevronRight } from 'lucide-react';
+import { Instagram, Lock, ChevronRight } from 'lucide-react';
 
 const Login: React.FC = () => {
   const { login } = useAuthStore();

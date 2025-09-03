@@ -26,7 +26,7 @@ interface DeletionOption {
 }
 
 const PrivacyDashboard: React.FC = () => {
-  const { user, logout } = useAuthStore();
+  const { user } = useAuthStore();
   const navigate = useNavigate();
   
   const [activeTab, setActiveTab] = useState<'overview' | 'deletion' | 'export' | 'settings'>('overview');

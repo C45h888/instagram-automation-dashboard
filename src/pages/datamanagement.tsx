@@ -1,8 +1,8 @@
+
 import React, { useState, useCallback, useMemo } from 'react';
-import { DatabaseService } from '@/services/databaseService';
-import { useAuthStore } from '@/stores/authStore';
-import { Download, Trash2, Shield, Database, AlertTriangle, Check } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { DatabaseService } from '../services/databaseservices';
+import { useAuthStore } from '../stores/authStore';
+import { Download, Shield, AlertTriangle, Check } from 'lucide-react';
 
 const DATA_TYPES = [
   { key: 'deleteAccounts', label: 'Instagram Accounts', icon: '📱' },
@@ -27,21 +27,21 @@ export const DataManagement: React.FC = () => {
   
   const handleExportData = useCallback(async () => {
     if (!user) {
-      toast.error('Please login to export data');
+      console.error('Please login to export data');
       return;
     }
     
     try {
-      // Export implementation would go here
-      toast.success('Data export started');
+      await DatabaseService.exportUserData(user.id);
+      console.log('Data export started');
     } catch (error) {
-      toast.error('Export failed');
+      console.error('Export failed:', error);
     }
   }, [user]);
   
   const handleDeleteData = useCallback(async () => {
     if (!user || confirmText !== 'DELETE MY DATA') {
-      toast.error('Please type "DELETE MY DATA" to confirm');
+      console.error('Please type "DELETE MY DATA" to confirm');
       return;
     }
     
@@ -54,7 +54,6 @@ export const DataManagement: React.FC = () => {
         setConfirmText('');
         
         if (deleteOptions.deleteProfile) {
-          // Sign out if profile was deleted
           useAuthStore.getState().signOut();
         }
       }
@@ -227,3 +226,5 @@ export const DataManagement: React.FC = () => {
     </div>
   );
 };
+
+export default DataManagement;
