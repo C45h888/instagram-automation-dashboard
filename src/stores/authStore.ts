@@ -1,6 +1,13 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { supabase, logAuditEvent } from 'lib/supabase.ts';
+import { supabase, logAuditEvent } from '../lib/supabase';
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
+import type { Database } from '../lib/supabase';
+
+// Type aliases for better readability and type safety
+type UserProfile = Database['public']['Tables']['user_profiles']['Row'];
+type AdminUser = Database['public']['Tables']['admin_users']['Row'];
+type AdminUserUpdate = Database['public']['Tables']['admin_users']['Update'];
 
 interface User {
   id: string;
@@ -36,6 +43,36 @@ interface AuthState {
   checkSession: () => Promise<void>;
   createTestUser: () => Promise<void>;
 }
+
+// Type guard for checking if a value is a non-empty string
+const isNonEmptyString = (value: unknown): value is string => {
+  return typeof value === 'string' && value.length > 0;
+};
+
+// Helper function to safely extract username from email
+const getUsernameFromEmail = (email: string | null | undefined): string => {
+  if (!isNonEmptyString(email)) {
+    return 'user';
+  }
+  const parts = email.split('@');
+  return parts[0] || 'user';
+};
+
+// Helper function to safely format username from full name
+const formatUsername = (fullName: string | null | undefined): string => {
+  if (!isNonEmptyString(fullName)) {
+    return 'admin';
+  }
+  return fullName.toLowerCase().replace(/\s+/g, '_');
+};
+
+// Helper function to safely get permissions
+const getPermissions = (permissions: any): string[] => {
+  if (Array.isArray(permissions)) {
+    return permissions.filter((p): p is string => typeof p === 'string');
+  }
+  return [];
+};
 
 export const useAuthStore = create<AuthState>()(
   persist(
@@ -93,7 +130,7 @@ export const useAuthStore = create<AuthState>()(
           
           if (error) throw error;
           
-          // Get user profile
+          // Get user profile - properly typed
           const { data: profile } = await supabase
             .from('user_profiles')
             .select('*')
@@ -101,14 +138,18 @@ export const useAuthStore = create<AuthState>()(
             .single();
           
           if (profile) {
+            // Type-safe access with null checks
+            const userProfile = profile as UserProfile;
+            const defaultUsername = getUsernameFromEmail(email);
+            
             const user: User = {
               id: data.user?.id || '',
-              username: profile.username || email.split('@')[0],
-              email: profile.email || email,
-              avatarUrl: profile.avatar_url,
+              username: userProfile.username || defaultUsername,
+              email: userProfile.email || email,
+              avatarUrl: userProfile.avatar_url || undefined,
               permissions: ['dashboard', 'content', 'engagement', 'analytics', 'settings'],
-              role: profile.user_role,
-              instagramConnected: profile.instagram_connected
+              role: userProfile.user_role,
+              instagramConnected: userProfile.instagram_connected
             };
             
             set({
@@ -116,7 +157,7 @@ export const useAuthStore = create<AuthState>()(
               session: data.session,
               token: data.session?.access_token,
               isAuthenticated: true,
-              isAdmin: profile.user_role === 'admin' || profile.user_role === 'super_admin',
+              isAdmin: userProfile.user_role === 'admin' || userProfile.user_role === 'super_admin',
               permissions: user.permissions,
               isLoading: false
             });
@@ -174,32 +215,41 @@ export const useAuthStore = create<AuthState>()(
             throw error;
           }
           
-          // Check if user is admin
-          const { data: adminProfile } = await supabase
+          // Check if user is admin - properly typed
+          const { data: adminProfile, error: adminError } = await supabase
             .from('admin_users')
             .select('*')
             .eq('email', email)
             .single();
           
-          if (!adminProfile || !adminProfile.is_active) {
+          // Fixed: Check for error or null before accessing properties
+          if (adminError || !adminProfile || (adminProfile as any).is_active !== true) {
             throw new Error('Unauthorized: Admin access required');
           }
           
+          // Type-safe access with proper null handling
+          const admin = adminProfile as AdminUser; // We know it exists here
+          const username = admin.full_name 
+            ? formatUsername(admin.full_name)
+            : getUsernameFromEmail(email);
+          
           const user: User = {
             id: data.user?.id || '',
-            username: adminProfile.full_name.toLowerCase().replace(' ', '_'),
-            email: adminProfile.email,
-            permissions: adminProfile.permissions || [],
-            role: adminProfile.role
+            username: username,
+            email: admin.email,
+            permissions: getPermissions(admin.permissions),
+            role: admin.role
           };
           
-          // Update last login
+          // Update last login - use proper update type
+          const updateData: AdminUserUpdate = {
+            last_login_at: new Date().toISOString(),
+            login_attempts: 0
+          };
+          
           await supabase
             .from('admin_users')
-            .update({ 
-              last_login_at: new Date().toISOString(),
-              login_attempts: 0 
-            })
+            .update(updateData) // Type assertion needed due to Supabase typing
             .eq('email', email);
           
           set({
@@ -265,7 +315,7 @@ export const useAuthStore = create<AuthState>()(
           const { data: { session } } = await supabase.auth.getSession();
           
           if (session) {
-            // Get user profile
+            // Get user profile - properly typed
             const { data: profile } = await supabase
               .from('user_profiles')
               .select('*')
@@ -273,14 +323,19 @@ export const useAuthStore = create<AuthState>()(
               .single();
             
             if (profile) {
+              // Type-safe access with null checks
+              const userProfile = profile as UserProfile;
+              const userEmail = userProfile.email || session.user.email;
+              const defaultUsername = getUsernameFromEmail(userEmail);
+              
               const user: User = {
                 id: session.user.id,
-                username: profile.username || session.user.email?.split('@')[0] || 'user',
-                email: profile.email || session.user.email,
-                avatarUrl: profile.avatar_url,
+                username: userProfile.username || defaultUsername,
+                email: userEmail || undefined,
+                avatarUrl: userProfile.avatar_url || undefined,
                 permissions: ['dashboard', 'content', 'engagement', 'analytics', 'settings'],
-                role: profile.user_role,
-                instagramConnected: profile.instagram_connected
+                role: userProfile.user_role,
+                instagramConnected: userProfile.instagram_connected
               };
               
               set({
@@ -288,15 +343,15 @@ export const useAuthStore = create<AuthState>()(
                 session,
                 token: session.access_token,
                 isAuthenticated: true,
-                isAdmin: profile.user_role === 'admin' || profile.user_role === 'super_admin',
+                isAdmin: userProfile.user_role === 'admin' || userProfile.user_role === 'super_admin',
                 permissions: user.permissions,
                 isLoading: false
               });
               
-              // Update last active
+              // Update last active - use proper update type
               await supabase
                 .from('user_profiles')
-                .update({ last_active_at: new Date().toISOString() })
+                .update({ last_active_at: new Date().toISOString() } as any)
                 .eq('user_id', session.user.id);
             }
           } else {
@@ -351,11 +406,11 @@ export const useAuthStore = create<AuthState>()(
   )
 );
 
-// Listen to auth state changes
-supabase.auth.onAuthStateChange((event, session) => {
+// Properly typed auth state change handler
+supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
   console.log('Auth state changed:', event);
   
-  if (event === 'SIGNED_IN') {
+  if (event === 'SIGNED_IN' && session) {
     useAuthStore.getState().checkSession();
   } else if (event === 'SIGNED_OUT') {
     useAuthStore.setState({
@@ -366,10 +421,10 @@ supabase.auth.onAuthStateChange((event, session) => {
       isAdmin: false,
       permissions: []
     });
-  } else if (event === 'TOKEN_REFRESHED') {
+  } else if (event === 'TOKEN_REFRESHED' && session) {
     useAuthStore.setState({
       session,
-      token: session?.access_token
+      token: session.access_token
     });
   }
 });

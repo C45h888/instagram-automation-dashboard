@@ -1,39 +1,73 @@
-import { supabase } from '@/lib/supabase';
-import type { Database } from '@/lib/supabase';
-import toast from 'react-hot-toast';
+import { supabase } from '../lib/supabase';
+import type { Database } from '../lib/supabase';
 
+
+// Type definitions from your schema
 type Tables = Database['public']['Tables'];
-type WorkflowType = Tables['automation_workflows']['Row']['automation_type'];
-type WorkflowStatus = Tables['automation_workflows']['Row']['status'];
+type UserProfile = Tables['user_profiles']['Row'];
+type UserProfileUpdate = Tables['user_profiles']['Update'];
+type AuditLogInsert = Tables['audit_log']['Insert'];
+type WorkflowRow = Tables['automation_workflows']['Row'];
+type WorkflowType = 'engagement_monitor' | 'analytics_pipeline' | 'sales_attribution' | 'ugc_collection' | 'customer_service';
+type WorkflowStatus = 'active' | 'inactive' | 'error' | 'pending';
 
-// Performance optimized batch operations
-const BATCH_SIZE = 50;
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+export interface WorkflowInsert {
+  user_id: string;
+  business_account_id?: string;
+  name: string;
+  description?: string;
+  automation_type: WorkflowType;
+  n8n_workflow_id?: string;
+  n8n_webhook_url?: string;
+  webhook_token?: string;
+  configuration?: any;
+  trigger_conditions?: any;
+  status?: WorkflowStatus;
+  is_active?: boolean;
+}
 
-// Simple in-memory cache for frequently accessed data
-const cache = new Map<string, { data: any; timestamp: number }>();
+export interface ExecutionInsert {
+  workflow_id: string;
+  user_id: string;
+  execution_id?: string;
+  trigger_source?: string;
+  status: string;
+  started_at?: string;
+  completed_at?: string;
+  execution_time_ms?: number;
+  input_data?: any;
+  output_data?: any;
+  error_data?: any;
+}
+
+export interface AnalyticsInsert {
+  business_account_id: string;
+  user_id: string;
+  date: string;
+  followers_count?: number;
+  following_count?: number;
+  media_count?: number;
+  total_likes?: number;
+  total_comments?: number;
+  total_shares?: number;
+  total_reach?: number;
+  total_impressions?: number;
+  engagement_rate?: number;
+}
+
+// Helper function to clean update objects
+const cleanUpdateObject = <T extends Record<string, any>>(obj: T): Partial<T> => {
+  const cleaned = { ...obj };
+  // Remove auto-generated fields
+  delete (cleaned as any).id;
+  delete (cleaned as any).created_at;
+  delete (cleaned as any).updated_at;
+  return cleaned;
+};
 
 export class DatabaseService {
-  // ============= CACHE MANAGEMENT =============
-  private static getCached<T>(key: string): T | null {
-    const cached = cache.get(key);
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-      return cached.data as T;
-    }
-    cache.delete(key);
-    return null;
-  }
-
-  private static setCache(key: string, data: any): void {
-    cache.set(key, { data, timestamp: Date.now() });
-  }
-
-  // ============= USER PROFILE OPERATIONS =============
+  // User Profile Operations
   static async getUserProfile(userId: string) {
-    const cacheKey = `profile_${userId}`;
-    const cached = this.getCached(cacheKey);
-    if (cached) return { success: true, data: cached };
-
     try {
       const { data, error } = await supabase
         .from('user_profiles')
@@ -41,161 +75,147 @@ export class DatabaseService {
         .eq('user_id', userId)
         .single();
       
-      if (error) throw error;
-      
-      this.setCache(cacheKey, data);
+      if (error && error.code !== 'PGRST116') throw error;
       return { success: true, data };
     } catch (error: any) {
       console.error('Get user profile error:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: error.message, data: null };
     }
   }
-
-  static async updateUserProfile(
-    userId: string, 
-    updates: Partial<Tables['user_profiles']['Update']>
-  ) {
+  
+  static async updateUserProfile(userId: string, updates: Partial<UserProfileUpdate>) {
     try {
+      // Clean the updates object to remove auto-generated fields
+      const cleanedUpdates = cleanUpdateObject(updates);
+      
       const { data, error } = await supabase
         .from('user_profiles')
-        .update({ ...updates, updated_at: new Date().toISOString() })
+        .update(cleanedUpdates)
         .eq('user_id', userId)
         .select()
         .single();
       
       if (error) throw error;
       
-      // Invalidate cache
-      cache.delete(`profile_${userId}`);
+      await this.logAuditEvent(userId, 'profile_updated', 'update', { updates: cleanedUpdates });
       
-      await this.logAudit('profile_updated', userId, { updates });
-      toast.success('Profile updated successfully');
       return { success: true, data };
     } catch (error: any) {
       console.error('Update profile error:', error);
-      toast.error('Failed to update profile');
-      return { success: false, error: error.message };
+      return { success: false, error: error.message, data: null };
     }
   }
-
-  // ============= WORKFLOW OPERATIONS (OPTIMIZED) =============
+  
+  // Instagram Business Account Operations
+  static async getBusinessAccounts(userId: string) {
+    try {
+      const { data, error } = await supabase
+        .from('instagram_business_accounts')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('is_connected', true)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      return { success: true, data: data || [] };
+    } catch (error: any) {
+      console.error('Get business accounts error:', error);
+      return { success: false, error: error.message, data: [] };
+    }
+  }
+  
+  // Workflow Operations
   static async getWorkflows(userId: string) {
-    const cacheKey = `workflows_${userId}`;
-    const cached = this.getCached(cacheKey);
-    if (cached) return { success: true, data: cached };
-
     try {
       const { data, error } = await supabase
         .from('automation_workflows')
-        .select(`
-          *,
-          workflow_executions (
-            id,
-            status,
-            started_at,
-            completed_at,
-            execution_time_ms
-          )
-        `)
+        .select('*')
         .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(BATCH_SIZE);
+        .order('created_at', { ascending: false });
       
       if (error) throw error;
-      
-      this.setCache(cacheKey, data);
-      return { success: true, data };
+      return { success: true, data: data || [] };
     } catch (error: any) {
       console.error('Get workflows error:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: error.message, data: [] };
     }
   }
-
-  static async createWorkflow(workflowData: {
-    user_id: string;
-    name: string;
-    automation_type: WorkflowType;
-    configuration?: any;
-    business_account_id?: string;
-  }) {
+  
+  static async createWorkflow(workflowData: WorkflowInsert) {
     try {
+      // Ensure the workflow data doesn't include auto-generated fields
+      const insertData = {
+        user_id: workflowData.user_id,
+        business_account_id: workflowData.business_account_id || null,
+        name: workflowData.name,
+        description: workflowData.description || null,
+        automation_type: workflowData.automation_type,
+        n8n_workflow_id: workflowData.n8n_workflow_id || null,
+        n8n_webhook_url: workflowData.n8n_webhook_url || null,
+        webhook_token: workflowData.webhook_token || null,
+        configuration: workflowData.configuration || {},
+        trigger_conditions: workflowData.trigger_conditions || {},
+        status: workflowData.status || 'inactive',
+        is_active: workflowData.is_active || false
+      };
+      
       const { data, error } = await supabase
         .from('automation_workflows')
-        .insert({
-          ...workflowData,
-          status: 'pending',
-          is_active: false,
-          n8n_workflow_id: `n8n_${workflowData.automation_type}_${Date.now()}`,
-          webhook_token: crypto.randomUUID()
-        })
+        .insert(insertData)
         .select()
         .single();
       
       if (error) throw error;
       
-      // Invalidate cache
-      cache.delete(`workflows_${workflowData.user_id}`);
+      const workflow = data as WorkflowRow;
       
-      await this.logAudit('workflow_created', workflowData.user_id, {
-        workflow_id: data.id,
-        name: workflowData.name
-      });
+      await this.logAuditEvent(
+        workflowData.user_id,
+        'workflow_created',
+        'create',
+        { 
+          workflow_id: workflow.id,
+          name: workflowData.name,
+          type: workflowData.automation_type 
+        }
+      );
       
-      // Trigger N8N webhook asynchronously
-      this.triggerN8NWorkflow(data).catch(console.error);
+      if (workflowData.n8n_webhook_url) {
+        await this.triggerN8NWorkflow(workflow);
+      }
       
-      toast.success(`Workflow "${workflowData.name}" created`);
-      return { success: true, data };
+      return { success: true, data: workflow };
     } catch (error: any) {
       console.error('Create workflow error:', error);
-      toast.error('Failed to create workflow');
-      return { success: false, error: error.message };
+      return { success: false, error: error.message, data: null };
     }
   }
-
-  static async updateWorkflowStatus(
-    workflowId: string, 
-    status: WorkflowStatus,
-    userId: string
-  ) {
+  
+  static async updateWorkflowStatus(workflowId: string, status: WorkflowStatus) {
     try {
+      // Only update fields that should be modified
+      const updateData = {
+        status,
+        is_active: status === 'active'
+      };
+      
       const { data, error } = await supabase
         .from('automation_workflows')
-        .update({ 
-          status,
-          is_active: status === 'active',
-          updated_at: new Date().toISOString()
-        })
+        .update(updateData)
         .eq('id', workflowId)
-        .eq('user_id', userId) // Extra security check
         .select()
         .single();
       
       if (error) throw error;
-      
-      cache.delete(`workflows_${userId}`);
-      
-      const message = status === 'active' ? 'Workflow activated' : 
-                     status === 'inactive' ? 'Workflow paused' : 
-                     'Workflow status updated';
-      toast.success(message);
       return { success: true, data };
     } catch (error: any) {
       console.error('Update workflow status error:', error);
-      toast.error('Failed to update workflow status');
-      return { success: false, error: error.message };
+      return { success: false, error: error.message, data: null };
     }
   }
-
+  
   static async deleteWorkflow(workflowId: string, userId: string) {
     try {
-      // First, delete all executions (cascade)
-      await supabase
-        .from('workflow_executions')
-        .delete()
-        .eq('workflow_id', workflowId);
-      
-      // Then delete the workflow
       const { error } = await supabase
         .from('automation_workflows')
         .delete()
@@ -204,72 +224,43 @@ export class DatabaseService {
       
       if (error) throw error;
       
-      cache.delete(`workflows_${userId}`);
+      await this.logAuditEvent(userId, 'workflow_deleted', 'delete', { workflow_id: workflowId });
       
-      await this.logAudit('workflow_deleted', userId, { workflow_id: workflowId });
-      toast.success('Workflow deleted');
       return { success: true };
     } catch (error: any) {
       console.error('Delete workflow error:', error);
-      toast.error('Failed to delete workflow');
       return { success: false, error: error.message };
     }
   }
-
-  // ============= ANALYTICS OPERATIONS (OPTIMIZED) =============
-  static async getDailyAnalytics(businessAccountId: string, days: number = 30) {
-    const cacheKey = `analytics_${businessAccountId}_${days}`;
-    const cached = this.getCached(cacheKey);
-    if (cached) return { success: true, data: cached };
-
+  
+  // Analytics Operations
+  static async getDailyAnalytics(userId: string, businessAccountId?: string, days: number = 30) {
     try {
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
       
-      const { data, error } = await supabase
+      let query = supabase
         .from('daily_analytics')
         .select('*')
-        .eq('business_account_id', businessAccountId)
+        .eq('user_id', userId)
         .gte('date', startDate.toISOString().split('T')[0])
         .order('date', { ascending: false });
       
-      if (error) throw error;
+      if (businessAccountId) {
+        query = query.eq('business_account_id', businessAccountId);
+      }
       
-      this.setCache(cacheKey, data);
-      return { success: true, data };
+      const { data, error } = await query;
+      
+      if (error) throw error;
+      return { success: true, data: data || [] };
     } catch (error: any) {
       console.error('Get analytics error:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: error.message, data: [] };
     }
   }
-
-  static async getAnalyticsSummary(businessAccountId: string) {
-    const result = await this.getDailyAnalytics(businessAccountId, 30);
-    
-    if (!result.success || !result.data || result.data.length === 0) {
-      return { success: true, summary: null };
-    }
-    
-    const data = result.data;
-    
-    // Optimized calculation
-    const summary = {
-      currentFollowers: data[0].followers_count,
-      followerGrowth: data[0].followers_count - (data[data.length - 1]?.followers_count || 0),
-      avgEngagement: data.reduce((acc, d) => acc + (d.engagement_rate || 0), 0) / data.length,
-      totalImpressions: data.reduce((acc, d) => acc + (d.impressions_count || 0), 0),
-      totalReach: data.reduce((acc, d) => acc + (d.reach_count || 0), 0),
-      periodDays: data.length,
-      growthRate: data.length > 1 
-        ? ((data[0].followers_count - data[data.length - 1].followers_count) / 
-           data[data.length - 1].followers_count * 100)
-        : 0
-    };
-    
-    return { success: true, summary };
-  }
-
-  // ============= DATA DELETION (GDPR COMPLIANT) =============
+  
+  // Data Deletion (GDPR)
   static async deleteUserData(userId: string, options: {
     deleteProfile?: boolean;
     deleteAccounts?: boolean;
@@ -277,55 +268,45 @@ export class DatabaseService {
     deleteAnalytics?: boolean;
     deleteAuditLogs?: boolean;
   } = {}) {
-    const results: Record<string, boolean> = {};
-    
     try {
-      // Use transaction-like approach with error handling
-      const operations = [];
-      
-      if (options.deleteAccounts) {
-        operations.push(
-          supabase
-            .from('instagram_business_accounts')
-            .delete()
-            .eq('user_id', userId)
-            .then(() => { results.accounts = true; })
-            .catch(() => { results.accounts = false; })
-        );
-      }
+      const results: Record<string, boolean> = {};
       
       if (options.deleteWorkflows) {
-        // Delete executions first
-        operations.push(
-          supabase
-            .from('workflow_executions')
-            .delete()
-            .eq('user_id', userId)
-            .then(() => 
-              supabase
-                .from('automation_workflows')
-                .delete()
-                .eq('user_id', userId)
-            )
-            .then(() => { results.workflows = true; })
-            .catch(() => { results.workflows = false; })
-        );
+        const { error } = await supabase
+          .from('automation_workflows')
+          .delete()
+          .eq('user_id', userId);
+        
+        results.workflows = !error;
       }
       
       if (options.deleteAnalytics) {
-        operations.push(
-          supabase
-            .from('daily_analytics')
-            .delete()
-            .eq('user_id', userId)
-            .then(() => { results.analytics = true; })
-            .catch(() => { results.analytics = false; })
-        );
+        const { error } = await supabase
+          .from('daily_analytics')
+          .delete()
+          .eq('user_id', userId);
+        
+        results.analytics = !error;
       }
       
-      await Promise.all(operations);
+      if (options.deleteAccounts) {
+        const { error } = await supabase
+          .from('instagram_business_accounts')
+          .delete()
+          .eq('user_id', userId);
+        
+        results.accounts = !error;
+      }
       
-      // Delete profile last
+      if (options.deleteAuditLogs) {
+        const { error } = await supabase
+          .from('audit_log')
+          .delete()
+          .eq('user_id', userId);
+        
+        results.auditLogs = !error;
+      }
+      
       if (options.deleteProfile) {
         const { error } = await supabase
           .from('user_profiles')
@@ -335,83 +316,120 @@ export class DatabaseService {
         results.profile = !error;
       }
       
-      await this.logAudit('data_deletion_completed', userId, { options, results });
+      await this.logAuditEvent(userId, 'data_deletion_requested', 'delete', { options, results });
       
-      toast.success('Data deletion completed');
       return { success: true, results };
     } catch (error: any) {
       console.error('Delete user data error:', error);
-      toast.error('Failed to delete user data');
-      return { success: false, error: error.message, results };
+      return { success: false, error: error.message, results: {} };
     }
   }
-
-  // ============= HELPER METHODS =============
-  private static async logAudit(
+  
+  static async exportUserData(userId: string) {
+    try {
+      const [profile, accounts, workflows, analytics, auditLogs] = await Promise.all([
+        this.getUserProfile(userId),
+        this.getBusinessAccounts(userId),
+        this.getWorkflows(userId),
+        this.getDailyAnalytics(userId),
+        this.getAuditLogs(userId)
+      ]);
+      
+      const exportData = {
+        exportDate: new Date().toISOString(),
+        userId,
+        profile: profile.data,
+        instagramAccounts: accounts.data,
+        workflows: workflows.data,
+        analytics: analytics.data,
+        auditLogs: auditLogs.data
+      };
+      
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `user-data-export-${userId}-${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      
+      return { success: true };
+    } catch (error: any) {
+      console.error('Export user data error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+  
+  // Helper Methods
+  private static async logAuditEvent(
+    userId: string,
     eventType: string,
-    userId: string | null,
-    details: any = {}
+    action: string,
+    details?: any,
+    resourceType?: string | null,
+    resourceId?: string | null
   ) {
     try {
-      await supabase.from('audit_log').insert({
+      // Create properly typed audit entry matching the schema
+      const auditEntry: AuditLogInsert = {
         user_id: userId,
         event_type: eventType,
-        action: details.action || eventType.split('_')[0],
-        details,
+        action: action,
+        resource_type: resourceType || null,
+        resource_id: resourceId || null,
+        details: details || {},
         ip_address: 'web-client',
-        user_agent: navigator.userAgent,
-        success: true
-      });
+        user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
+        success: true,
+        error_message: null
+      };
+      
+      const { error } = await supabase
+        .from('audit_log')
+        .insert([auditEntry]);
+      
+      if (error) console.error('Audit log error:', error);
     } catch (error) {
       console.error('Audit log error:', error);
     }
   }
-
-  private static async triggerN8NWorkflow(workflow: any) {
-    const apiUrl = import.meta.env.VITE_API_URL || 'https://instagram-backend.888intelligenceautomation.in';
-    
+  
+  static async getAuditLogs(userId: string, limit: number = 100) {
     try {
+      const { data, error } = await supabase
+        .from('audit_log')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      
+      if (error) throw error;
+      return { success: true, data: data || [] };
+    } catch (error: any) {
+      console.error('Get audit logs error:', error);
+      return { success: false, error: error.message, data: [] };
+    }
+  }
+  
+  private static async triggerN8NWorkflow(workflow: WorkflowRow) {
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://instagram-backend.888intelligenceautomation.in';
       const response = await fetch(`${apiUrl}/webhook/trigger-workflow`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           workflow_type: workflow.automation_type,
           workflow_id: workflow.id,
-          n8n_workflow_id: workflow.n8n_workflow_id,
-          webhook_token: workflow.webhook_token
+          user_id: workflow.user_id,
+          data: workflow
         })
       });
       
       if (!response.ok) {
-        console.error('N8N trigger failed:', await response.text());
+        console.error('N8N trigger failed');
       }
     } catch (error) {
       console.error('N8N trigger error:', error);
-    }
-  }
-
-  // Batch operations for performance
-  static async batchGetWorkflows(userIds: string[]) {
-    try {
-      const { data, error } = await supabase
-        .from('automation_workflows')
-        .select('*')
-        .in('user_id', userIds)
-        .limit(500);
-      
-      if (error) throw error;
-      
-      // Group by user_id
-      const grouped = data.reduce((acc, workflow) => {
-        if (!acc[workflow.user_id]) acc[workflow.user_id] = [];
-        acc[workflow.user_id].push(workflow);
-        return acc;
-      }, {} as Record<string, any[]>);
-      
-      return { success: true, data: grouped };
-    } catch (error: any) {
-      console.error('Batch get workflows error:', error);
-      return { success: false, error: error.message };
     }
   }
 }
