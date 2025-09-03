@@ -1,168 +1,25 @@
+// =====================================
+// STEP 1: Re-export all types from the GENERATED file for the rest of the app
+// =====================================
+export * from './database.types';
+
+// =====================================
+// STEP 2: Import necessary dependencies
+// =====================================
 import { createClient } from '@supabase/supabase-js';
 
-// Database Type Definitions
-export interface Database {
-  public: {
-    Tables: {
-      user_profiles: {
-        Row: {
-          id: string;
-          user_id: string;
-          username: string | null;
-          full_name: string | null;
-          email: string | null;
-          avatar_url: string | null;
-          business_name: string | null;
-          business_website: string | null;
-          industry: string | null;
-          company_size: string | null;
-          user_role: 'user' | 'admin' | 'super_admin';
-          status: 'active' | 'inactive' | 'suspended' | 'pending';
-          subscription_plan: 'free' | 'basic' | 'pro' | 'enterprise';
-          instagram_connected: boolean;
-          instagram_username: string | null;
-          instagram_user_id: string | null;
-          timezone: string;
-          notification_preferences: any;
-          ui_preferences: any;
-          onboarding_completed: boolean;
-          terms_accepted_at: string | null;
-          privacy_accepted_at: string | null;
-          last_active_at: string;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: Omit<Database['public']['Tables']['user_profiles']['Row'], 'id' | 'created_at' | 'updated_at'>;
-        Update: Partial<Database['public']['Tables']['user_profiles']['Insert']>;
-      };
-      admin_users: {
-        Row: {
-          id: string;
-          user_id: string | null;
-          email: string;
-          full_name: string;
-          role: 'user' | 'admin' | 'super_admin';
-          permissions: any;
-          is_active: boolean;
-          last_login_at: string | null;
-          login_attempts: number;
-          locked_until: string | null;
-          created_by: string | null;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: Omit<Database['public']['Tables']['admin_users']['Row'], 'id' | 'created_at' | 'updated_at'>;
-        Update: Partial<Database['public']['Tables']['admin_users']['Insert']>;
-      };
-      instagram_business_accounts: {
-        Row: {
-          id: string;
-          user_id: string;
-          instagram_business_id: string;
-          instagram_user_id: string | null;
-          name: string;
-          username: string;
-          account_type: 'personal' | 'business' | 'creator';
-          biography: string | null;
-          website: string | null;
-          profile_picture_url: string | null;
-          followers_count: number;
-          following_count: number;
-          media_count: number;
-          is_connected: boolean;
-          connection_status: string;
-          last_sync_at: string;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: Omit<Database['public']['Tables']['instagram_business_accounts']['Row'], 'id' | 'created_at' | 'updated_at'>;
-        Update: Partial<Database['public']['Tables']['instagram_business_accounts']['Insert']>;
-      };
-      automation_workflows: {
-        Row: {
-          id: string;
-          user_id: string;
-          business_account_id: string | null;
-          name: string;
-          description: string | null;
-          automation_type: 'engagement_monitor' | 'analytics_pipeline' | 'sales_attribution' | 'ugc_collection' | 'customer_service';
-          n8n_workflow_id: string | null;
-          n8n_webhook_url: string | null;
-          webhook_token: string | null;
-          configuration: any;
-          trigger_conditions: any;
-          status: 'active' | 'inactive' | 'error' | 'pending';
-          is_active: boolean;
-          total_executions: number;
-          successful_executions: number;
-          failed_executions: number;
-          last_execution_at: string | null;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: Omit<Database['public']['Tables']['automation_workflows']['Row'], 'id' | 'created_at' | 'updated_at' | 'total_executions' | 'successful_executions' | 'failed_executions'>;
-        Update: Partial<Database['public']['Tables']['automation_workflows']['Insert']>;
-      };
-      workflow_executions: {
-        Row: {
-          id: string;
-          workflow_id: string;
-          user_id: string;
-          execution_id: string | null;
-          trigger_source: string | null;
-          status: string;
-          started_at: string;
-          completed_at: string | null;
-          execution_time_ms: number | null;
-          input_data: any;
-          output_data: any;
-          error_data: any;
-        };
-        Insert: Omit<Database['public']['Tables']['workflow_executions']['Row'], 'id'>;
-        Update: Partial<Database['public']['Tables']['workflow_executions']['Insert']>;
-      };
-      daily_analytics: {
-        Row: {
-          id: string;
-          business_account_id: string;
-          user_id: string;
-          date: string;
-          followers_count: number | null;
-          following_count: number | null;
-          media_count: number | null;
-          total_likes: number | null;
-          total_comments: number | null;
-          total_shares: number | null;
-          total_reach: number | null;
-          total_impressions: number | null;
-          engagement_rate: number | null;
-        };
-        Insert: Omit<Database['public']['Tables']['daily_analytics']['Row'], 'id'>;
-        Update: Partial<Database['public']['Tables']['daily_analytics']['Insert']>;
-      };
-      audit_log: {
-        Row: {
-          id: string;
-          user_id: string | null;
-          event_type: string;
-          resource_type: string | null;
-          resource_id: string | null;
-          action: string;
-          details: any;
-          ip_address: string | null;
-          user_agent: string | null;
-          success: boolean;
-          error_message: string | null;
-          created_at: string;
-        };
-        Insert: Omit<Database['public']['Tables']['audit_log']['Row'], 'id' | 'created_at'>;
-        Update: Partial<Database['public']['Tables']['audit_log']['Insert']>;
-      };
-    };
-  };
-}
+// Import the main Database type from the GENERATED file
+import type { Database } from './database.types';
 
-// Type Definitions
+// =====================================
+// STEP 3: ALL MANUAL DATABASE TYPES HAVE BEEN REMOVED
+// The Database interface and all table types are now imported from database.types.ts
+// =====================================
+
+// =====================================
+// UTILITY TYPE DEFINITIONS (These remain as they are not schema-specific)
+// =====================================
+
 export interface ConnectionTestResult {
   connected: boolean;
   tunnel_active?: boolean;
@@ -191,7 +48,15 @@ export interface SubscriptionOptions {
   onDisconnect?: () => void;
 }
 
-// Connection Configuration
+export interface RealtimeSubscription {
+  unsubscribe: () => void;
+}
+
+// =====================================
+// SUPABASE CLIENT CONFIGURATION
+// =====================================
+
+// Environment variable validation
 const supabaseUrl = 
   import.meta.env.VITE_SUPABASE_URL || 
   import.meta.env.VITE_SUPABASE_TUNNEL_URL || 
@@ -199,7 +64,7 @@ const supabaseUrl =
 
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-// Validate environment variables
+// Validate required environment variables
 if (!supabaseUrl || !supabaseAnonKey) {
   const missingVars = [];
   if (!supabaseUrl) missingVars.push('VITE_SUPABASE_URL');
@@ -209,7 +74,9 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error(`Missing required Supabase environment variables: ${missingVars.join(', ')}`);
 }
 
-// Supabase Client Initialization
+// =====================================
+// STEP 4: Create typed Supabase client using the imported Database type
+// =====================================
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
@@ -237,7 +104,10 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   }
 });
 
-// Connection Testing - FIXED: Removed unused 'count'
+// =====================================
+// CONNECTION TESTING
+// =====================================
+
 export const testSupabaseConnection = async (): Promise<ConnectionTestResult> => {
   const startTime = Date.now();
   
@@ -283,7 +153,10 @@ export const testSupabaseConnection = async (): Promise<ConnectionTestResult> =>
   }
 };
 
-// Audit Logging - FIXED: Type assertion for insert
+// =====================================
+// AUDIT LOGGING
+// =====================================
+
 export const logAuditEvent = async (
   eventType: string,
   action: string,
@@ -291,7 +164,7 @@ export const logAuditEvent = async (
   options: AuditEventOptions = {}
 ): Promise<void> => {
   try {
-    const auditEntry: Database['public']['Tables']['audit_log']['Insert'] = {
+    const auditEntry = {
       user_id: options.userId || null,
       event_type: eventType,
       action: action,
@@ -306,7 +179,7 @@ export const logAuditEvent = async (
     
     const { error } = await supabase
       .from('audit_log')
-      .insert([auditEntry]); // FIXED: Wrap in array
+      .insert([auditEntry]);
     
     if (error) {
       console.error('Audit log error:', error);
@@ -317,7 +190,10 @@ export const logAuditEvent = async (
   }
 };
 
-// Session Management
+// =====================================
+// SESSION MANAGEMENT
+// =====================================
+
 export const getCurrentUser = async () => {
   try {
     const { data: { user }, error } = await supabase.auth.getUser();
@@ -340,13 +216,32 @@ export const getCurrentSession = async () => {
   }
 };
 
-// Real-time Subscriptions - FIXED: Removed unused generic
-export const subscribeToTable = (
-  table: keyof Database['public']['Tables'],
+export const getUserProfile = async (userId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+    
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error getting user profile:', error);
+    return null;
+  }
+};
+
+// =====================================
+// REAL-TIME SUBSCRIPTIONS
+// =====================================
+
+export const subscribeToTable = <T extends keyof Database['public']['Tables']>(
+  table: T,
   callback: (payload: any) => void,
   filter?: string,
   options: SubscriptionOptions = {}
-) => {
+): RealtimeSubscription => {
   const channelName = `${table}-changes-${Date.now()}`;
   
   const channel = supabase
@@ -392,20 +287,37 @@ export const subscribeToTable = (
   };
 };
 
-// Utility Functions - FIXED: Proper type assertion
-export const checkUserRole = async (userId: string, requiredRole: 'user' | 'admin' | 'super_admin'): Promise<boolean> => {
+export const subscribeToUserWorkflows = (
+  userId: string,
+  callback: (payload: any) => void
+): RealtimeSubscription => {
+  return subscribeToTable(
+    'automation_workflows',
+    callback,
+    `user_id=eq.${userId}`
+  );
+};
+
+export const subscribeToWorkflowExecutions = (
+  workflowId: string,
+  callback: (payload: any) => void
+): RealtimeSubscription => {
+  return subscribeToTable(
+    'workflow_executions',
+    callback,
+    `workflow_id=eq.${workflowId}`
+  );
+};
+
+// =====================================
+// UTILITY FUNCTIONS
+// =====================================
+
+export const checkUserRole = async (userId: string, requiredRole: string): Promise<boolean> => {
   try {
-    const { data, error } = await supabase
-      .from('user_profiles')
-      .select('user_role')
-      .eq('user_id', userId)
-      .single();
+    const profile = await getUserProfile(userId);
     
-    if (error || !data) return false;
-    
-    const userData = data as { user_role: 'user' | 'admin' | 'super_admin' };
-    
-    if (!userData.user_role) return false;
+    if (!profile || !profile.user_role) return false;
     
     const roleHierarchy: Record<string, number> = { 
       user: 1, 
@@ -413,16 +325,81 @@ export const checkUserRole = async (userId: string, requiredRole: 'user' | 'admi
       super_admin: 3 
     };
     
-    return roleHierarchy[userData.user_role] >= roleHierarchy[requiredRole];
+    return roleHierarchy[profile.user_role] >= roleHierarchy[requiredRole];
   } catch (error) {
     console.error('Error checking user role:', error);
     return false;
   }
 };
 
+export const isUserAdmin = async (userId: string): Promise<boolean> => {
+  return checkUserRole(userId, 'admin');
+};
+
+export const isUserSuperAdmin = async (userId: string): Promise<boolean> => {
+  return checkUserRole(userId, 'super_admin');
+};
+
+// API request logging utility
+export const logApiRequest = async (
+  endpoint: string,
+  method: string,
+  responseTimeMs: number,
+  statusCode: number,
+  success: boolean,
+  errorMessage?: string
+): Promise<void> => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return;
+    
+    const apiUsageEntry = {
+      user_id: user.id,
+      endpoint,
+      method,
+      response_time_ms: responseTimeMs,
+      status_code: statusCode,
+      success,
+      error_message: errorMessage,
+      hour_bucket: new Date().toISOString().slice(0, 13) + ':00:00',
+      request_count: 1,
+      credits_consumed: 1
+    };
+    
+    await supabase
+      .from('api_usage')
+      .upsert([apiUsageEntry], {
+        onConflict: 'user_id,business_account_id,endpoint,method,hour_bucket',
+        ignoreDuplicates: false
+      });
+  } catch (error) {
+    console.error('Failed to log API request:', error);
+  }
+};
+
+// =====================================
+// TYPE GUARD UTILITIES (Using generated types)
+// =====================================
+
+export const isUserProfile = (data: any): data is Database['public']['Tables']['user_profiles']['Row'] => {
+  return data && typeof data.user_id === 'string' && 'user_role' in data;
+};
+
+export const isAdminUser = (data: any): data is Database['public']['Tables']['admin_users']['Row'] => {
+  return data && typeof data.email === 'string' && 'role' in data;
+};
+
+export const isWorkflow = (data: any): data is Database['public']['Tables']['automation_workflows']['Row'] => {
+  return data && typeof data.automation_type === 'string' && 'status' in data;
+};
+
+// =====================================
+// EXPORTS
+// =====================================
+
 export default supabase;
 
-// FIXED: Removed duplicate type exports
+// Alias export for compatibility
 export {
-  supabase as client
-};
+   supabase as client
+}
