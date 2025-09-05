@@ -1,52 +1,20 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../stores/authStore';
-import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 
-// Type definitions
-interface WorkflowData {
-  id: string;
-  user_id: string;
-  name: string;
-  description?: string;
-  automation_type: string;
-  status: string;
-  is_active: boolean;
-  total_executions?: number;
-  successful_executions?: number;
-  last_execution_at?: string;
-  created_at: string;
-  updated_at: string;
-}
+// ✅ FIXED: Import the main Database type and derive the specific types from it.
+import type { Database } from '../lib/supabase';
 
-interface ExecutionData {
-  id: string;
-  workflow_id: string;
-  user_id: string;
-  status: string;
-  started_at: string;
-  completed_at?: string;
-  execution_time_ms?: number;
-  trigger_source?: string;
-  input_data?: any;
-  output_data?: any;
-  error_data?: any;
-}
+type AutomationWorkflow = Database['public']['Tables']['automation_workflows']['Row'];
+type DailyAnalytics = Database['public']['Tables']['daily_analytics']['Row'];
+type WorkflowExecution = Database['public']['Tables']['workflow_executions']['Row'];
 
-interface AnalyticsData {
-  id: string;
-  business_account_id: string;
-  user_id: string;
-  date: string;
-  followers_count?: number;
-  engagement_rate?: number;
-  total_impressions?: number;
-  total_reach?: number;
-}
 
 // Optimized with debouncing and connection management
 export function useRealtimeWorkflows() {
-  const [workflows, setWorkflows] = useState<WorkflowData[]>([]);
+  // ✅ This code is now correct because AutomationWorkflow is properly defined above.
+  const [workflows, setWorkflows] = useState<AutomationWorkflow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuthStore();
@@ -78,7 +46,7 @@ export function useRealtimeWorkflows() {
         
         channelRef.current = supabase
           .channel(`workflows-${user.id}`)
-          .on(
+          .on<AutomationWorkflow>(
             'postgres_changes',
             {
               event: '*',
@@ -86,19 +54,19 @@ export function useRealtimeWorkflows() {
               table: 'automation_workflows',
               filter: `user_id=eq.${user.id}`
             },
-            (payload: RealtimePostgresChangesPayload<WorkflowData>) => {
+            (payload) => {
               if (!mounted) return;
               
               setWorkflows(prev => {
                 switch (payload.eventType) {
                   case 'INSERT':
-                    return [payload.new as WorkflowData, ...prev];
+                    return [payload.new, ...prev];
                   case 'UPDATE':
                     return prev.map(w => 
-                      w.id === payload.new?.id ? payload.new as WorkflowData : w
+                      w.id === payload.new.id ? payload.new : w
                     );
                   case 'DELETE':
-                    return prev.filter(w => w.id !== payload.old?.id);
+                    return prev.filter(w => w.id !== (payload.old as { id: string }).id);
                   default:
                     return prev;
                 }
@@ -150,15 +118,14 @@ export function useRealtimeWorkflows() {
 
 // Analytics hook with caching
 export function useRealtimeAnalytics(businessAccountId: string | null) {
-  const [analytics, setAnalytics] = useState<AnalyticsData[]>([]);
+  const [analytics, setAnalytics] = useState<DailyAnalytics[]>([]);
   const [summary, setSummary] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const channelRef = useRef<RealtimeChannel | null>(null);
   
-  const calculateSummary = useCallback((data: AnalyticsData[]) => {
+  const calculateSummary = useCallback((data: DailyAnalytics[]) => {
     if (!data || data.length === 0) return null;
     
-    // FIXED: Safe array access with optional chaining and bounds checking
     const firstItem = data[0];
     const lastItem = data[data.length - 1];
     
@@ -168,7 +135,7 @@ export function useRealtimeAnalytics(businessAccountId: string | null) {
       totalImpressions: data.reduce((acc, d) => acc + (d.total_impressions || 0), 0),
       totalReach: data.reduce((acc, d) => acc + (d.total_reach || 0), 0),
       growthRate: (() => {
-        if (data.length > 1 && firstItem?.followers_count && lastItem?.followers_count) {
+        if (data.length > 1 && firstItem?.followers_count && lastItem?.followers_count && lastItem.followers_count > 0) {
           return ((firstItem.followers_count - lastItem.followers_count) / 
                    lastItem.followers_count * 100);
         }
@@ -216,7 +183,7 @@ export function useRealtimeAnalytics(businessAccountId: string | null) {
     
     channelRef.current = supabase
       .channel(`analytics-${businessAccountId}`)
-      .on(
+      .on<DailyAnalytics>(
         'postgres_changes',
         {
           event: '*',
@@ -228,7 +195,7 @@ export function useRealtimeAnalytics(businessAccountId: string | null) {
           clearTimeout(debounceTimer);
           debounceTimer = setTimeout(() => {
             if (mounted) fetchAnalytics();
-          }, 1000);
+          }, 1000); // Debounce to prevent rapid refetches
         }
       )
       .subscribe();
@@ -247,7 +214,7 @@ export function useRealtimeAnalytics(businessAccountId: string | null) {
 
 // Workflow executions with pagination
 export function useRealtimeExecutions(workflowId: string | null, pageSize = 20) {
-  const [executions, setExecutions] = useState<ExecutionData[]>([]);
+  const [executions, setExecutions] = useState<WorkflowExecution[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(0);
@@ -292,6 +259,7 @@ export function useRealtimeExecutions(workflowId: string | null, pageSize = 20) 
     let mounted = true;
     
     const fetchInitial = async () => {
+      setLoading(true);
       try {
         const { data, error, count } = await supabase
           .from('workflow_executions')
@@ -318,7 +286,7 @@ export function useRealtimeExecutions(workflowId: string | null, pageSize = 20) 
     
     channelRef.current = supabase
       .channel(`executions-${workflowId}`)
-      .on(
+      .on<WorkflowExecution>(
         'postgres_changes',
         {
           event: 'INSERT',
@@ -326,9 +294,9 @@ export function useRealtimeExecutions(workflowId: string | null, pageSize = 20) 
           table: 'workflow_executions',
           filter: `workflow_id=eq.${workflowId}`
         },
-        (payload: RealtimePostgresChangesPayload<ExecutionData>) => {
+        (payload) => {
           if (mounted) {
-            setExecutions(prev => [payload.new as ExecutionData, ...prev]);
+            setExecutions(prev => [payload.new, ...prev]);
           }
         }
       )
@@ -344,3 +312,4 @@ export function useRealtimeExecutions(workflowId: string | null, pageSize = 20) 
   
   return { executions, loading, hasMore, loadMore };
 }
+

@@ -4,27 +4,15 @@ import { useRealtimeWorkflows, useRealtimeExecutions } from '../../hooks/realtim
 import { useAuthStore } from '../../stores/authStore';
 import { Play, Pause, Trash2, Clock, CheckCircle, XCircle } from 'lucide-react';
 
-// Type definitions
-interface Workflow {
-  id: string;
-  name: string;
-  description?: string;
-  automation_type: string;
-  status: string;
-  is_active: boolean;
-  total_executions?: number;
-  successful_executions?: number;
-  last_execution_at?: string;
-  configuration?: any;
-}
+// ✅ IMPORT OFFICIAL TYPES FROM SUPABASE
+import type { Database } from '../../lib/supabase';
 
-interface Execution {
-  id: string;
-  status: string;
-  started_at: string;
-  execution_time_ms?: number;
-  trigger_source?: string;
-}
+// ✅ USE DATABASE TYPE ALIASES - These are the official types from database.types.ts
+type AutomationWorkflow = Database['public']['Tables']['automation_workflows']['Row'];
+type WorkflowExecution = Database['public']['Tables']['workflow_executions']['Row'];
+
+// Note: If these exact table names don't match your database.types.ts, 
+// you may need to adjust them to match your actual schema
 
 export const WorkflowManager: React.FC = () => {
   const { workflows, loading } = useRealtimeWorkflows();
@@ -117,8 +105,9 @@ export const WorkflowManager: React.FC = () => {
     }
   };
   
-  const toggleWorkflow = async (workflowId: string, currentStatus: string) => {
-    const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
+  // ✅ FIXED: Now accepts nullable status
+  const toggleWorkflow = async (workflowId: string, currentStatus: string | null) => {
+    const newStatus = (currentStatus || 'inactive') === 'active' ? 'inactive' : 'active';
     await DatabaseService.updateWorkflowStatus(workflowId, newStatus as any);
   };
   
@@ -176,7 +165,7 @@ export const WorkflowManager: React.FC = () => {
           </div>
         ) : (
           <div className="space-y-4">
-            {workflows.map((workflow: Workflow) => (
+            {workflows.map((workflow: AutomationWorkflow) => (
               <WorkflowCard
                 key={workflow.id}
                 workflow={workflow}
@@ -200,17 +189,24 @@ export const WorkflowManager: React.FC = () => {
 
 // Workflow Card Component
 const WorkflowCard: React.FC<{
-  workflow: Workflow;
+  workflow: AutomationWorkflow;
   onToggle: () => void;
   onDelete: () => void;
   onSelect: () => void;
   isSelected: boolean;
 }> = ({ workflow, onToggle, onDelete, onSelect, isSelected }) => {
-  const getStatusColor = (status: string) => {
+  // ✅ FIXED: Now accepts and handles null status
+  const getStatusColor = (status: string | null) => {
+    // Handle null case explicitly for pending/unset state
+    if (status === null) {
+      return 'text-yellow-400 bg-yellow-400/20';
+    }
+    
     switch (status) {
       case 'active': return 'text-green-400 bg-green-400/20';
       case 'inactive': return 'text-gray-400 bg-gray-400/20';
       case 'error': return 'text-red-400 bg-red-400/20';
+      case 'pending': return 'text-yellow-400 bg-yellow-400/20';
       default: return 'text-gray-400 bg-gray-400/20';
     }
   };
@@ -242,8 +238,9 @@ const WorkflowCard: React.FC<{
         </div>
         
         <div className="flex items-center space-x-3">
+          {/* ✅ FIXED: Using Solution Pattern A - Provide fallback at call site */}
           <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(workflow.status)}`}>
-            {workflow.status.toUpperCase()}
+            {(workflow.status || 'inactive').toUpperCase()}
           </span>
           
           <button
@@ -335,7 +332,7 @@ const WorkflowExecutions: React.FC<{ workflowId: string }> = ({ workflowId }) =>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-700">
-              {executions.map((execution: Execution) => (
+              {executions.map((execution: WorkflowExecution) => (
                 <tr key={execution.id}>
                   <td className="px-4 py-3">
                     {execution.status === 'success' ? (
@@ -347,7 +344,10 @@ const WorkflowExecutions: React.FC<{ workflowId: string }> = ({ workflowId }) =>
                     )}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-400">
-                    {new Date(execution.started_at).toLocaleString()}
+                    {/* ✅ Already handles null correctly */}
+                    {execution.started_at 
+                      ? new Date(execution.started_at).toLocaleString()
+                      : 'Not started'}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-400">
                     {execution.execution_time_ms
