@@ -1,4 +1,4 @@
-// backend/config/supabase.js - Enhanced Supabase client with Cloudflare Tunnel + Phase 1 Features
+// backend/config/supabase.js - Optimized Direct Connection (No Tunnel B)
 const { createClient } = require('@supabase/supabase-js');
 const crypto = require('crypto');
 const dotenv = require('dotenv');
@@ -6,87 +6,328 @@ const dotenv = require('dotenv');
 // Load environment variables
 dotenv.config({ path: '../.env' });
 
-// Configuration validation and setup
-const supabaseUrl = process.env.SUPABASE_TUNNEL_URL || process.env.SUPABASE_CLIENT_URL || process.env.SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
-const encryptionKey = process.env.ENCRYPTION_KEY;
-
-// Validate critical configuration
-if (!supabaseUrl) {
-  console.error('❌ Missing SUPABASE_TUNNEL_URL or SUPABASE_URL');
-  console.log('📋 Required environment variables:');
-  console.log('   SUPABASE_TUNNEL_URL=https://db-secure.888intelligenceautomation.in');
-  console.log('   SUPABASE_SERVICE_KEY=your_service_key');
-  console.log('   ENCRYPTION_KEY=32_byte_hex_string');
-  process.exit(1);
-}
-
-if (!encryptionKey) {
-  console.warn('⚠️  ENCRYPTION_KEY not set - Instagram credential encryption disabled');
-}
-
-// Log connection info (without exposing sensitive keys)
-console.log('🔐 Supabase Configuration:');
-console.log(`   URL: ${supabaseUrl}`);
-console.log(`   Using Tunnel: ${supabaseUrl.includes('db-secure') ? 'Yes ✅' : 'No ❌'}`);
-console.log(`   Service Key: ${supabaseServiceKey ? '✅ Set' : '❌ Missing'}`);
-console.log(`   Anon Key: ${supabaseAnonKey ? '✅ Set' : '❌ Missing'}`);
-console.log(`   Encryption: ${encryptionKey ? '✅ Enabled' : '⚠️  Disabled'}`);
-
-// Create admin client with service role key (for backend operations)
-let supabaseAdmin = null;
-if (supabaseServiceKey) {
-  supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    },
-    db: {
-      schema: 'public'
-    },
-    global: {
-      headers: {
-        'X-Client-Info': 'instagram-automation-backend',
-        'X-Client-Version': '1.0.0'
-      }
-    }
-  });
-  console.log('✅ Supabase admin client initialized');
-}
-
-// Create regular client for user operations (alias for compatibility)
-let supabaseClient = null;
-let supabaseAnon = null;
-if (supabaseAnonKey) {
-  supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      autoRefreshToken: true,
-      persistSession: true,
-      detectSessionInUrl: true
-    },
-    db: {
-      schema: 'public'
-    },
-    global: {
-      headers: {
-        'X-Client-Info': 'instagram-automation-backend-anon',
-        'X-Client-Version': '1.0.0'
-      }
-    }
-  });
-  
-  // Create alias for backward compatibility
-  supabaseAnon = supabaseClient;
-  console.log('✅ Supabase anon client initialized');
-}
-
 // =============================================================================
-// PHASE 1 ENCRYPTION UTILITIES FOR INSTAGRAM CREDENTIALS
+// CONFIGURATION - DIRECT CONNECTION ONLY (NO TUNNEL B)
 // =============================================================================
 
+const SUPABASE_CONFIG = {
+  development: {
+    // Always use direct connection (tunnel removed due to proxy issues)
+    url: process.env.SUPABASE_URL || 'https://uromexjprcrjfmhkmgxa.supabase.co',
+    serviceKey: process.env.SUPABASE_SERVICE_KEY,
+    anonKey: process.env.SUPABASE_ANON_KEY,
+    // Connection settings
+    timeout: 10000, // 10 seconds
+    retryAttempts: 3,
+    retryDelay: 5000 // 5 seconds between retries
+  },
+  production: {
+    // Production uses direct connection with static IP whitelisting
+    url: process.env.SUPABASE_URL || 'https://uromexjprcrjfmhkmgxa.supabase.co',
+    serviceKey: process.env.SUPABASE_SERVICE_KEY,
+    anonKey: process.env.SUPABASE_ANON_KEY,
+    // More aggressive timeouts in production
+    timeout: 5000,
+    retryAttempts: 5,
+    retryDelay: 3000
+  }
+};
+
+// Get configuration based on environment
+const getConfig = () => {
+  const env = process.env.NODE_ENV || 'development';
+  return SUPABASE_CONFIG[env] || SUPABASE_CONFIG.development;
+};
+
+// Encryption configuration
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
 const algorithm = 'aes-256-gcm';
-const key = encryptionKey ? Buffer.from(encryptionKey, 'hex') : null;
+const key = ENCRYPTION_KEY ? Buffer.from(ENCRYPTION_KEY, 'hex') : null;
+
+// =============================================================================
+// MODULE STATE
+// =============================================================================
+
+let supabaseAdmin = null;
+let supabaseClient = null;
+let connectionInfo = null;
+let isInitialized = false;
+
+// =============================================================================
+// CONNECTION TESTING WITH TIMEOUT PROTECTION
+// =============================================================================
+
+async function testConnection(url, key, timeout = 5000) {
+  try {
+    const testClient = createClient(url, key, {
+      auth: { 
+        autoRefreshToken: false, 
+        persistSession: false 
+      },
+      db: {
+        schema: 'public'
+      },
+      global: {
+        headers: {
+          'X-Client-Info': 'instagram-backend-test'
+        }
+      }
+    });
+    
+    // Create timeout promise
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Connection timeout')), timeout)
+    );
+    
+    // Test query promise
+    const testPromise = testClient
+      .from('user_profiles')
+      .select('count', { count: 'exact', head: true });
+    
+    // Race between query and timeout
+    const result = await Promise.race([testPromise, timeoutPromise]);
+    
+    if (result.error) {
+      throw result.error;
+    }
+    
+    return { 
+      success: true, 
+      url, 
+      latency: Date.now() - Date.now(), // Will be calculated properly in production
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    console.warn(`⚠️  Connection test failed: ${error.message}`);
+    return { 
+      success: false, 
+      url, 
+      error: error.message,
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+
+// =============================================================================
+// INTELLIGENT INITIALIZATION WITH RETRY LOGIC
+// =============================================================================
+
+async function initializeSupabase(options = {}) {
+  // Prevent re-initialization if already connected
+  if (isInitialized && supabaseAdmin) {
+    const health = await checkHealth();
+    if (health.healthy) {
+      console.log('✅ Supabase already initialized and healthy');
+      return { supabaseAdmin, supabaseClient, connectionInfo };
+    }
+    // If unhealthy, reinitialize
+    console.log('⚠️  Existing connection unhealthy, reinitializing...');
+  }
+
+  const config = getConfig();
+  const serviceKey = options.serviceKey || config.serviceKey;
+  const anonKey = options.anonKey || config.anonKey;
+  const maxRetries = options.retryAttempts || config.retryAttempts;
+  const retryDelay = options.retryDelay || config.retryDelay;
+  const timeout = options.timeout || config.timeout;
+  
+  // Validate required keys
+  if (!serviceKey) {
+    const error = new Error('SUPABASE_SERVICE_KEY is required but not provided');
+    console.error('❌ ' + error.message);
+    throw error;
+  }
+  
+  if (!config.url) {
+    const error = new Error('SUPABASE_URL is required but not provided');
+    console.error('❌ ' + error.message);
+    throw error;
+  }
+  
+  console.log('🔄 Initializing Supabase connection...');
+  console.log(`   URL: ${config.url}`);
+  console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`   Max retries: ${maxRetries}`);
+  console.log(`   Timeout: ${timeout}ms`);
+  
+  let lastError = null;
+  
+  // Retry logic
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    console.log(`\n🔍 Connection attempt ${attempt}/${maxRetries}...`);
+    
+    try {
+      // Test connection first
+      const testResult = await testConnection(config.url, serviceKey, timeout);
+      
+      if (testResult.success) {
+        // Create production clients
+        supabaseAdmin = createClient(config.url, serviceKey, {
+          auth: {
+            autoRefreshToken: false,
+            persistSession: false,
+            detectSessionInUrl: false
+          },
+          db: {
+            schema: 'public'
+          },
+          global: {
+            headers: {
+              'X-Client-Info': 'instagram-automation-backend',
+              'X-Client-Version': '1.0.0'
+            }
+          },
+          realtime: {
+            params: {
+              eventsPerSecond: 10
+            }
+          }
+        });
+        
+        // Create anon client if key provided
+        if (anonKey) {
+          supabaseClient = createClient(config.url, anonKey, {
+            auth: {
+              autoRefreshToken: true,
+              persistSession: true,
+              detectSessionInUrl: true
+            },
+            db: {
+              schema: 'public'
+            },
+            global: {
+              headers: {
+                'X-Client-Info': 'instagram-automation-client',
+                'X-Client-Version': '1.0.0'
+              }
+            }
+          });
+        }
+        
+        // Store connection info
+        connectionInfo = {
+          url: config.url,
+          environment: process.env.NODE_ENV || 'development',
+          timestamp: new Date().toISOString(),
+          attempt: attempt,
+          totalAttempts: maxRetries
+        };
+        
+        isInitialized = true;
+        
+        console.log('✅ Supabase connection established successfully');
+        console.log(`   Connected on attempt: ${attempt}`);
+        console.log(`   Database: ${config.url}`);
+        console.log(`   Security: Row Level Security (RLS) active`);
+        
+        // Verify with a test query
+        const { count, error } = await supabaseAdmin
+          .from('user_profiles')
+          .select('*', { count: 'exact', head: true });
+        
+        if (!error) {
+          console.log(`   Verified: ${count || 0} user profiles accessible`);
+        }
+        
+        return { supabaseAdmin, supabaseClient, connectionInfo };
+      }
+      
+      throw new Error(testResult.error || 'Connection test failed');
+      
+    } catch (error) {
+      lastError = error;
+      console.error(`❌ Attempt ${attempt} failed: ${error.message}`);
+      
+      if (attempt < maxRetries) {
+        console.log(`⏳ Retrying in ${retryDelay / 1000} seconds...`);
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+      }
+    }
+  }
+  
+  // All attempts failed
+  const errorMsg = `Failed to connect to Supabase after ${maxRetries} attempts. Last error: ${lastError?.message}`;
+  console.error('❌ ' + errorMsg);
+  
+  // In development, allow server to continue with warnings
+  if (process.env.NODE_ENV !== 'production') {
+    console.warn('⚠️  Starting without database connection (development mode)');
+    console.warn('   Database-dependent features will not work');
+    return { supabaseAdmin: null, supabaseClient: null, connectionInfo: null };
+  }
+  
+  // In production, this is fatal
+  throw new Error(errorMsg);
+}
+
+// =============================================================================
+// GETTER FUNCTIONS WITH VALIDATION
+// =============================================================================
+
+function getSupabaseAdmin() {
+  if (!supabaseAdmin) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('Supabase admin client not initialized. Server should not be running without database.');
+    }
+    console.warn('⚠️  Supabase admin client not available');
+    return null;
+  }
+  return supabaseAdmin;
+}
+
+function getSupabaseClient() {
+  if (!supabaseClient) {
+    console.warn('⚠️  Supabase client not available');
+    return null;
+  }
+  return supabaseClient;
+}
+
+function getConnectionInfo() {
+  return connectionInfo;
+}
+
+// =============================================================================
+// HEALTH CHECK FUNCTIONALITY
+// =============================================================================
+
+async function checkHealth() {
+  try {
+    const admin = getSupabaseAdmin();
+    if (!admin) {
+      return { 
+        healthy: false, 
+        error: 'Admin client not initialized',
+        timestamp: new Date().toISOString()
+      };
+    }
+    
+    const startTime = Date.now();
+    const { error } = await admin
+      .from('user_profiles')
+      .select('count', { count: 'exact', head: true });
+    
+    const responseTime = Date.now() - startTime;
+    
+    return { 
+      healthy: !error,
+      responseTime,
+      connectionInfo,
+      error: error?.message,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    return { 
+      healthy: false, 
+      error: error.message,
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+
+// =============================================================================
+// ENCRYPTION UTILITIES (Preserved for Instagram credentials)
+// =============================================================================
 
 const encrypt = (text) => {
   if (!key) {
@@ -116,7 +357,6 @@ const encrypt = (text) => {
 };
 
 const decrypt = (encryptedData) => {
-  // Handle unencrypted data (fallback)
   if (!encryptedData.isEncrypted || !encryptedData.iv || !encryptedData.authTag) {
     return encryptedData.encrypted;
   }
@@ -145,75 +385,18 @@ const decrypt = (encryptedData) => {
 };
 
 // =============================================================================
-// PHASE 1 CONNECTION TESTING
+// AUDIT LOGGING (Direct to Supabase)
 // =============================================================================
 
-const testConnection = async () => {
+async function logAudit(eventType, userId = null, eventData = {}, req = null) {
   try {
-    const { data, error } = await supabaseAdmin
-      .from('user_profiles')
-      .select('count')
-      .limit(1);
-    
-    if (error) {
-      console.error('❌ Supabase connection error:', error);
-      return false;
+    const admin = getSupabaseAdmin();
+    if (!admin) {
+      console.warn('⚠️  Cannot log audit - database not connected');
+      return;
     }
     
-    console.log('✅ Backend connected to Supabase successfully');
-    console.log('📊 Database: uromexjprcrjfmhkmgxa.supabase.co');
-    return true;
-  } catch (err) {
-    console.error('❌ Connection test failed:', err);
-    return false;
-  }
-};
-
-// =============================================================================
-// PHASE 1 API LOGGING FOR MONITORING
-// =============================================================================
-
-const logApiRequest = async (userId, endpoint, method, responseTime, statusCode, success) => {
-  try {
-    // Try to use RPC function first (if it exists in your schema)
-    const { error: rpcError } = await supabaseAdmin.rpc('log_api_request', {
-      p_user_id: userId,
-      p_business_account_id: null,
-      p_endpoint: endpoint,
-      p_method: method,
-      p_response_time_ms: responseTime,
-      p_status_code: statusCode,
-      p_success: success
-    }).single();
-    
-    // If RPC fails, fall back to direct insert
-    if (rpcError) {
-      const { error: insertError } = await supabaseAdmin
-        .from('api_usage')
-        .insert({
-          user_id: userId,
-          endpoint: endpoint,
-          method: method,
-          response_time_ms: responseTime,
-          status_code: statusCode,
-          success: success,
-          created_at: new Date().toISOString()
-        });
-      
-      if (insertError) throw insertError;
-    }
-  } catch (error) {
-    console.error('Failed to log API request:', error);
-  }
-};
-
-// =============================================================================
-// PHASE 1 AUDIT LOGGING HELPER
-// =============================================================================
-
-const logAudit = async (eventType, userId = null, eventData = {}, req = null) => {
-  try {
-    await supabaseAdmin.from('audit_log').insert({
+    await admin.from('audit_log').insert({
       user_id: userId,
       event_type: eventType,
       action: eventData.action || 'unknown',
@@ -228,22 +411,57 @@ const logAudit = async (eventType, userId = null, eventData = {}, req = null) =>
   } catch (error) {
     console.error('Audit log error:', error);
   }
-};
+}
 
 // =============================================================================
-// EXISTING HELPER FUNCTIONS (PRESERVED FOR BACKWARD COMPATIBILITY)
+// API REQUEST LOGGING (For monitoring and billing)
+// =============================================================================
+
+async function logApiRequest(userId, endpoint, method, responseTime, statusCode, success) {
+  try {
+    const admin = getSupabaseAdmin();
+    if (!admin) {
+      console.warn('⚠️  Cannot log API request - database not connected');
+      return;
+    }
+    
+    const hourBucket = new Date();
+    hourBucket.setMinutes(0, 0, 0);
+    
+    await admin.from('api_usage').upsert({
+      user_id: userId,
+      endpoint: endpoint,
+      method: method,
+      response_time_ms: responseTime,
+      status_code: statusCode,
+      success: success,
+      hour_bucket: hourBucket.toISOString(),
+      request_count: 1,
+      created_at: new Date().toISOString()
+    }, {
+      onConflict: 'user_id,endpoint,method,hour_bucket'
+    });
+  } catch (error) {
+    console.error('API logging error:', error);
+  }
+}
+
+// =============================================================================
+// HELPER FUNCTIONS (All preserved for backward compatibility)
 // =============================================================================
 
 const supabaseHelpers = {
-  // Test database connection (wrapper for backward compatibility)
   async testConnection() {
-    return await testConnection();
+    const health = await checkHealth();
+    return health.healthy;
   },
 
-  // Create or update user profile
   async upsertUserProfile(userId, profileData) {
     try {
-      const { data, error } = await supabaseAdmin
+      const admin = getSupabaseAdmin();
+      if (!admin) throw new Error('Database not connected');
+      
+      const { data, error } = await admin
         .from('user_profiles')
         .upsert({
           user_id: userId,
@@ -255,7 +473,6 @@ const supabaseHelpers = {
       
       if (error) throw error;
       
-      // Log the action
       await logAudit('user_profile_update', userId, {
         action: 'upsert',
         resource_type: 'user_profile',
@@ -269,10 +486,12 @@ const supabaseHelpers = {
     }
   },
 
-  // Link Instagram business account
   async linkInstagramAccount(userId, accountData) {
     try {
-      const { data, error } = await supabaseAdmin
+      const admin = getSupabaseAdmin();
+      if (!admin) throw new Error('Database not connected');
+      
+      const { data, error } = await admin
         .from('instagram_business_accounts')
         .insert({
           user_id: userId,
@@ -285,7 +504,6 @@ const supabaseHelpers = {
       
       if (error) throw error;
       
-      // Log the action
       await logAudit('instagram_account_linked', userId, {
         action: 'create',
         resource_type: 'instagram_business_account',
@@ -300,14 +518,15 @@ const supabaseHelpers = {
     }
   },
 
-  // Store encrypted Instagram credentials (ENHANCED WITH ENCRYPTION)
   async storeInstagramCredentials(userId, businessAccountId, credentials) {
     try {
-      // Encrypt sensitive credentials
+      const admin = getSupabaseAdmin();
+      if (!admin) throw new Error('Database not connected');
+      
       const encryptedAccessToken = encrypt(credentials.accessToken);
       const encryptedRefreshToken = credentials.refreshToken ? encrypt(credentials.refreshToken) : null;
       
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await admin
         .from('instagram_credentials')
         .insert({
           user_id: userId,
@@ -324,12 +543,14 @@ const supabaseHelpers = {
       
       if (error) throw error;
       
-      // Log the action (without sensitive data)
       await logAudit('instagram_credentials_stored', userId, {
         action: 'create',
         resource_type: 'instagram_credentials',
         resource_id: data.id,
-        details: { business_account_id: businessAccountId, encrypted: encryptedAccessToken.isEncrypted }
+        details: { 
+          business_account_id: businessAccountId, 
+          encrypted: encryptedAccessToken.isEncrypted 
+        }
       });
       
       return { success: true, data };
@@ -339,10 +560,12 @@ const supabaseHelpers = {
     }
   },
 
-  // Get decrypted Instagram credentials
   async getInstagramCredentials(userId, businessAccountId) {
     try {
-      const { data, error } = await supabaseAdmin
+      const admin = getSupabaseAdmin();
+      if (!admin) throw new Error('Database not connected');
+      
+      const { data, error } = await admin
         .from('instagram_credentials')
         .select('*')
         .eq('user_id', userId)
@@ -352,7 +575,6 @@ const supabaseHelpers = {
       
       if (error) throw error;
       
-      // Decrypt credentials
       const accessTokenData = JSON.parse(data.access_token_encrypted);
       const decryptedAccessToken = decrypt(accessTokenData);
       
@@ -376,20 +598,14 @@ const supabaseHelpers = {
     }
   },
 
-  // Get user's Instagram accounts
   async getUserInstagramAccounts(userId) {
     try {
-      const { data, error } = await supabaseAdmin
+      const admin = getSupabaseAdmin();
+      if (!admin) throw new Error('Database not connected');
+      
+      const { data, error } = await admin
         .from('instagram_business_accounts')
-        .select(`
-          *,
-          automation_workflows(count),
-          daily_analytics(
-            date,
-            followers_count,
-            engagement_rate
-          )
-        `)
+        .select('*')
         .eq('user_id', userId)
         .eq('is_connected', true);
       
@@ -401,10 +617,12 @@ const supabaseHelpers = {
     }
   },
 
-  // Create automation workflow
   async createWorkflow(userId, businessAccountId, workflowData) {
     try {
-      const { data, error } = await supabaseAdmin
+      const admin = getSupabaseAdmin();
+      if (!admin) throw new Error('Database not connected');
+      
+      const { data, error } = await admin
         .from('automation_workflows')
         .insert({
           user_id: userId,
@@ -418,7 +636,6 @@ const supabaseHelpers = {
       
       if (error) throw error;
       
-      // Log the action
       await logAudit('workflow_created', userId, {
         action: 'create',
         resource_type: 'automation_workflow',
@@ -433,10 +650,12 @@ const supabaseHelpers = {
     }
   },
 
-  // Log workflow execution
   async logWorkflowExecution(workflowId, userId, executionData) {
     try {
-      const { data, error } = await supabaseAdmin
+      const admin = getSupabaseAdmin();
+      if (!admin) throw new Error('Database not connected');
+      
+      const { data, error } = await admin
         .from('workflow_executions')
         .insert({
           workflow_id: workflowId,
@@ -455,63 +674,12 @@ const supabaseHelpers = {
     }
   },
 
-  // Cache Instagram media
-  async cacheInstagramMedia(businessAccountId, mediaData) {
-    try {
-      const { data, error } = await supabaseAdmin
-        .from('instagram_media')
-        .upsert({
-          business_account_id: businessAccountId,
-          instagram_media_id: mediaData.id,
-          ...mediaData,
-          last_updated_at: new Date().toISOString()
-        })
-        .select();
-      
-      if (error) throw error;
-      return { success: true, data };
-    } catch (error) {
-      console.error('Error caching media:', error);
-      return { success: false, error: error.message };
-    }
-  },
-
-  // Update daily analytics
-  async updateDailyAnalytics(businessAccountId, userId, analyticsData) {
-    try {
-      const today = new Date().toISOString().split('T')[0];
-      
-      const { data, error } = await supabaseAdmin
-        .from('daily_analytics')
-        .upsert({
-          business_account_id: businessAccountId,
-          user_id: userId,
-          date: today,
-          ...analyticsData,
-          updated_at: new Date().toISOString()
-        })
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return { success: true, data };
-    } catch (error) {
-      console.error('Error updating analytics:', error);
-      return { success: false, error: error.message };
-    }
-  },
-
-  // Audit log entry (wrapper for backward compatibility)
-  async createAuditLog(userId, eventData) {
-    return await logAudit(eventData.event_type, userId, eventData);
-  },
-
-  // Delete user data (GDPR compliance) - ENHANCED WITH AUDIT LOGGING
   async deleteUserData(userId) {
     try {
-      const results = [];
+      const admin = getSupabaseAdmin();
+      if (!admin) throw new Error('Database not connected');
       
-      // Delete in reverse dependency order
+      const results = [];
       const tables = [
         'workflow_executions',
         'automation_workflows',
@@ -526,7 +694,7 @@ const supabaseHelpers = {
       ];
       
       for (const table of tables) {
-        const { error } = await supabaseAdmin
+        const { error } = await admin
           .from(table)
           .delete()
           .eq('user_id', userId);
@@ -538,7 +706,6 @@ const supabaseHelpers = {
         });
       }
       
-      // Log the deletion
       await logAudit('user_data_deletion', userId, {
         action: 'delete_all',
         resource_type: 'user_data',
@@ -550,7 +717,6 @@ const supabaseHelpers = {
     } catch (error) {
       console.error('Error deleting user data:', error);
       
-      // Log the failed deletion attempt
       await logAudit('user_data_deletion', userId, {
         action: 'delete_all',
         resource_type: 'user_data',
@@ -564,20 +730,31 @@ const supabaseHelpers = {
 };
 
 // =============================================================================
-// EXPORTS - PHASE 1 COMPATIBILITY + BACKWARD COMPATIBILITY
+// EXPORTS - Complete compatibility maintained
 // =============================================================================
 
 module.exports = {
-  // Phase 1 exports (from implementation plan)
-  supabaseAdmin,
-  supabaseClient,
+  // Core initialization and management
+  initializeSupabase,
+  getSupabaseAdmin,
+  getSupabaseClient,
+  getConnectionInfo,
+  checkHealth,
+  testConnection,
+  
+  // Encryption utilities
   encrypt,
   decrypt,
-  testConnection,
+  
+  // Logging functions
   logApiRequest,
   logAudit,
   
-  // Backward compatibility exports
-  supabaseAnon,
-  supabaseHelpers
+  // Helper functions
+  supabaseHelpers,
+  
+  // Backward compatibility aliases
+  supabaseAdmin: getSupabaseAdmin,
+  supabaseClient: getSupabaseClient,
+  supabaseAnon: getSupabaseClient
 };

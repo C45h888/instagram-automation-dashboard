@@ -1,202 +1,170 @@
-// backend/server.js - Enhanced Instagram Automation Backend with Supabase Testing Integration
+// backend/server.js - Optimized Server with Direct Supabase Connection
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 require('dotenv').config({ path: '../.env' });
 
+// Import optimized Supabase configuration
+const { 
+  initializeSupabase, 
+  checkHealth,
+  getSupabaseAdmin,
+  getConnectionInfo,
+  logApiRequest,
+  logAudit
+} = require('./config/supabase');
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Import Supabase configuration for startup testing
-const { testConnection } = require('./config/supabase');
-
 // =============================================================================
-// ENHANCED CORS CONFIGURATION FOR CLOUDFLARE TUNNEL
+// CORS CONFIGURATION - PRODUCTION READY
 // =============================================================================
 
-// Enhanced CORS for Cloudflare Tunnel (preserved from original)
-app.use(cors({
-  origin: [
-    'http://localhost:5173',
-    'http://localhost:3000', 
-    'https://888intelligenceautomation.in',
-    'https://instagram-backend.888intelligenceautomation.in',
-    'https://filme-roommates-cattle-purchasing.trycloudflare.com'
-  ],
+const corsOptions = {
+  origin: function (origin, callback) {
+    const allowedOrigins = [
+      'http://localhost:5173',
+      'http://localhost:3000',
+      'http://localhost:5174',
+      'https://888intelligenceautomation.in',
+      'https://www.888intelligenceautomation.in',
+      'https://instagram-backend.888intelligenceautomation.in'
+    ];
+    
+    // Allow requests with no origin (mobile apps, postman, etc)
+    if (!origin) return callback(null, true);
+    
+    // Check if origin is allowed
+    if (allowedOrigins.includes(origin) || origin.includes('888intelligenceautomation.in')) {
+      callback(null, true);
+    } else {
+      console.warn(`⚠️  CORS blocked origin: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   optionsSuccessStatus: 200,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: [
-    'Content-Type', 
-    'Authorization', 
-    'X-Requested-With', 
-    'X-Test-Suite',
-    'X-Request-ID'
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'X-Request-ID',
+    'X-Client-Info'
   ]
-}));
+};
+
+app.use(cors(corsOptions));
 
 // =============================================================================
-// ENHANCED MIDDLEWARE FOR CLOUDFLARE + MONITORING
+// MIDDLEWARE CONFIGURATION
 // =============================================================================
 
-// Enhanced middleware for Cloudflare (preserved + enhanced)
 app.use(bodyParser.json({ limit: '10mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 
-// Request ID middleware for better debugging
+// Request ID middleware
 app.use((req, res, next) => {
   req.requestId = require('crypto').randomUUID();
+  req.startTime = Date.now();
   res.header('X-Request-ID', req.requestId);
   next();
 });
 
-// Enhanced Cloudflare specific headers with monitoring
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS,PATCH');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Test-Suite, X-Request-ID');
-  
-  // Enhanced Cloudflare headers logging for debugging
-  const cloudflareInfo = {};
-  if (req.headers['cf-ray']) {
-    cloudflareInfo.ray = req.headers['cf-ray'];
-  }
-  if (req.headers['cf-ipcountry']) {
-    cloudflareInfo.country = req.headers['cf-ipcountry'];
-  }
-  if (req.headers['cf-connecting-ip']) {
-    cloudflareInfo.realIp = req.headers['cf-connecting-ip'];
-  }
-  
-  if (Object.keys(cloudflareInfo).length > 0) {
-    console.log(`📡 Cloudflare Info:`, cloudflareInfo);
-  }
-  
-  if (req.method === 'OPTIONS') {
-    res.sendStatus(200);
-  } else {
-    next();
-  }
-});
-
-// Request logging middleware for better monitoring
+// Request logging middleware
 app.use((req, res, next) => {
   const timestamp = new Date().toISOString();
   const method = req.method;
   const url = req.url;
-  const userAgent = req.headers['user-agent'];
   
-  console.log(`${timestamp} - ${method} ${url} - ${req.ip || 'unknown-ip'}`);
-  
-  // Log body for non-GET requests (excluding sensitive data)
-  if (method !== 'GET' && req.body && Object.keys(req.body).length > 0) {
-    const safeBody = { ...req.body };
-    // Remove sensitive fields from logs
-    ['password', 'token', 'access_token', 'refresh_token'].forEach(field => {
-      if (safeBody[field]) safeBody[field] = '[REDACTED]';
-    });
-    console.log(`📝 Request Body:`, JSON.stringify(safeBody, null, 2));
+  // Log request details (excluding sensitive paths)
+  if (!url.includes('/health')) {
+    console.log(`📥 ${timestamp} [${req.requestId}] ${method} ${url}`);
+    
+    // Log Cloudflare headers if present
+    if (req.headers['cf-ray']) {
+      console.log(`   CF-Ray: ${req.headers['cf-ray']}`);
+      console.log(`   CF-Country: ${req.headers['cf-ipcountry'] || 'unknown'}`);
+    }
   }
+  
+  // Track API usage (after response)
+  const originalSend = res.send;
+  res.send = function(data) {
+    res.send = originalSend;
+    
+    // Calculate response time
+    const responseTime = Date.now() - req.startTime;
+    
+    // Log API request to database (async, non-blocking)
+    if (!url.includes('/health') && !url.includes('/test')) {
+      logApiRequest(
+        req.user?.id || null,
+        url,
+        method,
+        responseTime,
+        res.statusCode,
+        res.statusCode < 400
+      ).catch(err => console.error('Failed to log API request:', err));
+    }
+    
+    return res.send(data);
+  };
   
   next();
 });
 
 // =============================================================================
-// ROUTE IMPORTS AND MOUNTING - ENHANCED WITH TEST ROUTES
+// HEALTH CHECK ENDPOINTS - CRITICAL FOR MONITORING
 // =============================================================================
 
-// Import existing routes (preserved)
-const webhookRoutes = require('./routes/webhook');
-const legalRoutes = require('./routes/legal');
-
-// Import new test routes (Phase 1 addition)
-const testRoutes = require('./routes/test');
-
-// Mount existing routes (preserved)
-app.use('/webhook', webhookRoutes);
-app.use('/legal', legalRoutes);
-
-// Mount new test routes (Phase 1 addition)
-app.use('/api/test', testRoutes);
-
-// =============================================================================
-// ENHANCED HEALTH CHECK ENDPOINTS
-// =============================================================================
-
-// Enhanced health check for Cloudflare (preserved + enhanced)
-app.get('/health', async (req, res) => {
-  const healthCheck = {
-    status: 'OK',
-    uptime: process.uptime(),
+// Basic health check (no database required)
+app.get('/health', (req, res) => {
+  const health = {
+    status: 'healthy',
+    service: 'instagram-automation-backend',
+    version: '2.0.0',
     timestamp: new Date().toISOString(),
-    requestId: req.requestId,
-    tunnel: {
-      provider: 'cloudflare',
-      domain: 'instagram-backend.888intelligenceautomation.in',
-      host: req.get('host'),
-      protocol: req.protocol,
-      secure: req.secure || req.get('x-forwarded-proto') === 'https',
-      cfRay: req.headers['cf-ray'] || 'not-available',
-      realIp: req.headers['cf-connecting-ip'] || req.ip
-    },
-    services: {
-      meta_ready: true,
-      n8n_integration: 'active',
-      supabase_configured: !!process.env.SUPABASE_SERVICE_KEY,
-      encryption_enabled: !!process.env.ENCRYPTION_KEY,
-      test_suite: 'available'
-    },
-    environment: {
-      node_env: process.env.NODE_ENV,
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || 'development',
+    server: {
       port: PORT,
-      pid: process.pid,
       platform: process.platform,
-      node_version: process.version
+      nodeVersion: process.version,
+      memory: {
+        used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+        total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
+        unit: 'MB'
+      }
     }
   };
   
-  // Test Supabase connection for health check
-  try {
-    const supabaseHealthy = await testConnection();
-    healthCheck.services.supabase_connection = supabaseHealthy ? 'healthy' : 'unhealthy';
-    healthCheck.database = {
-      connected: supabaseHealthy,
-      tunnel_url: process.env.SUPABASE_TUNNEL_URL || 'not-configured',
-      direct_url: 'uromexjprcrjfmhkmgxa.supabase.co'
-    };
-  } catch (error) {
-    healthCheck.services.supabase_connection = 'error';
-    healthCheck.database = {
-      connected: false,
-      error: error.message
-    };
-  }
-  
-  const statusCode = healthCheck.services.supabase_connection === 'healthy' ? 200 : 503;
-  res.status(statusCode).json(healthCheck);
+  res.status(200).json(health);
 });
 
-// Database-specific health check
+// Database health check endpoint
 app.get('/health/database', async (req, res) => {
   try {
-    const startTime = Date.now();
-    const connected = await testConnection();
-    const responseTime = Date.now() - startTime;
+    const dbHealth = await checkHealth();
+    const connectionInfo = getConnectionInfo();
     
-    res.json({
+    res.status(dbHealth.healthy ? 200 : 503).json({
       database: {
-        connected,
-        response_time_ms: responseTime,
-        tunnel_url: process.env.SUPABASE_TUNNEL_URL || process.env.SUPABASE_URL,
-        configured: !!process.env.SUPABASE_SERVICE_KEY
+        healthy: dbHealth.healthy,
+        responseTime: dbHealth.responseTime,
+        url: connectionInfo?.url,
+        environment: connectionInfo?.environment,
+        lastConnected: connectionInfo?.timestamp,
+        error: dbHealth.error
       },
       timestamp: new Date().toISOString(),
       requestId: req.requestId
     });
   } catch (error) {
-    res.status(500).json({
+    res.status(503).json({
       database: {
-        connected: false,
+        healthy: false,
         error: error.message
       },
       timestamp: new Date().toISOString(),
@@ -205,139 +173,130 @@ app.get('/health/database', async (req, res) => {
   }
 });
 
+// Complete system status endpoint
+app.get('/status', async (req, res) => {
+  const status = {
+    operational: true,
+    timestamp: new Date().toISOString(),
+    services: {
+      backend: 'operational',
+      database: 'checking...',
+      authentication: 'operational',
+      tunnels: {
+        api: 'operational', // Tunnel A is always operational if this responds
+        database: 'deprecated' // Tunnel B removed
+      }
+    },
+    configuration: {
+      supabase_configured: !!process.env.SUPABASE_SERVICE_KEY,
+      encryption_enabled: !!process.env.ENCRYPTION_KEY,
+      n8n_webhooks_configured: !!process.env.N8N_BASE_URL,
+      static_ip_configured: !!process.env.STATIC_IP // For future use
+    }
+  };
+  
+  // Check database status
+  try {
+    const dbHealth = await checkHealth();
+    status.services.database = dbHealth.healthy ? 'operational' : 'degraded';
+  } catch (error) {
+    status.services.database = 'unavailable';
+    status.operational = false;
+  }
+  
+  res.status(status.operational ? 200 : 503).json(status);
+});
+
 // =============================================================================
-// ENHANCED ROOT AND STATUS ENDPOINTS
+// ROUTE IMPORTS
 // =============================================================================
 
-// Enhanced root endpoint (preserved + enhanced)
+// Import routes with error handling
+try {
+  const webhookRoutes = require('./routes/webhook');
+  app.use('/webhook', webhookRoutes);
+  console.log('✅ Webhook routes loaded');
+} catch (error) {
+  console.error('❌ Failed to load webhook routes:', error.message);
+}
+
+try {
+  const legalRoutes = require('./routes/legal');
+  app.use('/legal', legalRoutes);
+  console.log('✅ Legal routes loaded');
+} catch (error) {
+  console.error('❌ Failed to load legal routes:', error.message);
+}
+
+try {
+  const testRoutes = require('./routes/test');
+  app.use('/api/test', testRoutes);
+  console.log('✅ Test routes loaded');
+} catch (error) {
+  console.warn('⚠️  Test routes not available:', error.message);
+}
+
+// =============================================================================
+// ROOT AND API DOCUMENTATION
+// =============================================================================
+
 app.get('/', (req, res) => {
   res.json({
-    message: '🚀 Instagram Automation Backend (Cloudflare Tunnel + Supabase)',
-    version: '1.0.0',
-    timestamp: new Date().toISOString(),
-    requestId: req.requestId,
-    tunnel: {
-      provider: 'cloudflare',
-      domain: 'instagram-backend.888intelligenceautomation.in',
-      active: req.get('host')?.includes('888intelligenceautomation.in'),
-      database_tunnel: 'db-secure.888intelligenceautomation.in'
-    },
-    endpoints: {
-      // Existing endpoints (preserved)
-      webhook_verify: 'GET /webhook/instagram',
-      webhook_events: 'POST /webhook/instagram',
-      n8n_status: 'GET /webhook/n8n-status',
-      health: 'GET /health',
-      legal_privacy: 'GET /legal/privacy',
-      legal_terms: 'GET /legal/terms',
-      
-      // New test endpoints (Phase 1 addition)
-      test_suite: 'GET /api/test',
-      test_supabase: 'GET /api/test/supabase',
-      test_insert: 'POST /api/test/insert-test',
-      test_rls: 'GET /api/test/test-rls',
-      test_integration: 'GET /api/test/integration',
-      create_test_user: 'POST /api/test/create-test-user'
-    },
-    phase_1_features: {
-      supabase_integration: true,
-      tunnel_architecture: true,
-      encryption_support: !!process.env.ENCRYPTION_KEY,
-      audit_logging: true,
-      test_suite: true
-    }
+    service: 'Instagram Automation Backend',
+    version: '2.0.0',
+    architecture: 'Direct Supabase Connection with Static IP Whitelisting',
+    status: 'operational',
+    documentation: '/api',
+    health: '/health',
+    timestamp: new Date().toISOString()
   });
 });
 
-// Enhanced tunnel status endpoint (preserved + enhanced)
-app.get('/tunnel/status', async (req, res) => {
-  const tunnelStatus = {
-    provider: 'cloudflare',
-    backend: {
-      domain: 'instagram-backend.888intelligenceautomation.in',
-      active: true,
-      endpoint: 'https://instagram-backend.888intelligenceautomation.in',
-      webhook_url: 'https://instagram-backend.888intelligenceautomation.in/webhook/instagram'
-    },
-    database: {
-      domain: 'db-secure.888intelligenceautomation.in',
-      tunnel_configured: !!process.env.SUPABASE_TUNNEL_URL,
-      direct_access_blocked: true
-    },
-    security: {
-      zero_trust: true,
-      encryption_enabled: !!process.env.ENCRYPTION_KEY,
-      rls_enabled: true
-    },
-    timestamp: new Date().toISOString(),
-    requestId: req.requestId
-  };
-  
-  // Test database tunnel connectivity
-  try {
-    const dbConnected = await testConnection();
-    tunnelStatus.database.connected = dbConnected;
-    tunnelStatus.database.status = dbConnected ? 'operational' : 'degraded';
-  } catch (error) {
-    tunnelStatus.database.connected = false;
-    tunnelStatus.database.status = 'error';
-    tunnelStatus.database.error = error.message;
-  }
-  
-  res.json(tunnelStatus);
-});
-
-// =============================================================================
-// API DOCUMENTATION ENDPOINT
-// =============================================================================
-
-// API documentation endpoint (new addition)
 app.get('/api', (req, res) => {
   res.json({
     title: 'Instagram Automation Backend API',
-    version: '1.0.0',
-    description: 'Secure backend API for Instagram automation dashboard with Supabase integration',
+    version: '2.0.0',
+    description: 'Optimized backend with direct Supabase connection',
     architecture: {
-      backend_tunnel: 'instagram-backend.888intelligenceautomation.in',
-      database_tunnel: 'db-secure.888intelligenceautomation.in',
-      security_model: 'zero-trust'
+      api_tunnel: 'instagram-backend.888intelligenceautomation.in',
+      database: 'Direct connection to Supabase (uromexjprcrjfmhkmgxa.supabase.co)',
+      security: 'Static IP whitelisting on Supabase firewall',
+      removed: 'Database tunnel (Tunnel B) - eliminated due to proxy issues'
     },
     endpoints: {
-      '/health': 'System health check with database status',
-      '/health/database': 'Database-specific health check',
-      '/tunnel/status': 'Cloudflare tunnel status and connectivity',
-      '/api/test/*': 'Comprehensive testing suite for Supabase integration',
-      '/webhook/instagram': 'Instagram webhook endpoint',
-      '/legal/*': 'Privacy policy and terms of service'
+      health: {
+        '/health': 'Basic health check',
+        '/health/database': 'Database connection status',
+        '/status': 'Complete system status'
+      },
+      webhooks: {
+        '/webhook/instagram': 'Instagram webhook endpoint',
+        '/webhook/n8n-status': 'N8N integration status'
+      },
+      testing: {
+        '/api/test': 'Test suite overview',
+        '/api/test/supabase': 'Database connection test',
+        '/api/test/integration': 'Full integration test'
+      },
+      legal: {
+        '/legal/privacy': 'Privacy policy',
+        '/legal/terms': 'Terms of service'
+      }
     },
-    testing: {
-      suite_url: '/api/test',
-      integration_test: '/api/test/integration',
-      database_test: '/api/test/supabase'
-    },
-    timestamp: new Date().toISOString(),
-    requestId: req.requestId
+    timestamp: new Date().toISOString()
   });
 });
 
 // =============================================================================
-// ERROR HANDLING MIDDLEWARE
+// ERROR HANDLING
 // =============================================================================
 
-// 404 handler for undefined routes
-app.use('*', (req, res) => {
+// 404 handler
+app.use((req, res) => {
   res.status(404).json({
     error: 'Not Found',
     message: `Route ${req.method} ${req.originalUrl} not found`,
-    available_endpoints: [
-      'GET /',
-      'GET /health',
-      'GET /api',
-      'GET /api/test',
-      'GET /tunnel/status',
-      'GET /webhook/instagram',
-      'POST /webhook/instagram'
-    ],
+    availableEndpoints: ['/health', '/api', '/status'],
     timestamp: new Date().toISOString(),
     requestId: req.requestId
   });
@@ -345,16 +304,27 @@ app.use('*', (req, res) => {
 
 // Global error handler
 app.use((err, req, res, next) => {
-  console.error('🚨 Server Error:', {
+  console.error('💥 Server Error:', {
     error: err.message,
-    stack: err.stack,
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
     url: req.url,
     method: req.method,
-    requestId: req.requestId,
-    timestamp: new Date().toISOString()
+    requestId: req.requestId
   });
   
-  res.status(500).json({
+  // Log error to audit log
+  logAudit('server_error', null, {
+    action: 'error',
+    resource_type: 'server',
+    details: {
+      error: err.message,
+      url: req.url,
+      method: req.method
+    },
+    success: false
+  }, req).catch(console.error);
+  
+  res.status(err.status || 500).json({
     error: 'Internal Server Error',
     message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong',
     requestId: req.requestId,
@@ -363,87 +333,132 @@ app.use((err, req, res, next) => {
 });
 
 // =============================================================================
-// SERVER STARTUP WITH ENHANCED LOGGING AND TESTING
+// SERVER STARTUP WITH RESILIENT DATABASE CONNECTION
 // =============================================================================
 
-// Startup function with comprehensive testing
-const startServer = async () => {
-  console.log('\n🚀 Starting Instagram Automation Backend...\n');
+async function startServer() {
+  console.log('\n' + '='.repeat(60));
+  console.log('🚀 Instagram Automation Backend - Starting...');
+  console.log('='.repeat(60));
   
-  // Environment validation
-  console.log('🔧 Environment Configuration:');
-  console.log(`   NODE_ENV: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`   PORT: ${PORT}`);
-  console.log(`   Supabase Configured: ${!!process.env.SUPABASE_SERVICE_KEY ? '✅' : '❌'}`);
-  console.log(`   Encryption Enabled: ${!!process.env.ENCRYPTION_KEY ? '✅' : '❌'}`);
-  console.log(`   Tunnel URL: ${process.env.SUPABASE_TUNNEL_URL || 'Not configured'}`);
+  // Display configuration
+  console.log('\n📋 Configuration:');
+  console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`   Port: ${PORT}`);
+  console.log(`   Supabase URL: ${process.env.SUPABASE_URL || 'Not configured'}`);
+  console.log(`   Service Key: ${process.env.SUPABASE_SERVICE_KEY ? '✅ Configured' : '❌ Missing'}`);
+  console.log(`   Anon Key: ${process.env.SUPABASE_ANON_KEY ? '✅ Configured' : '❌ Missing'}`);
+  console.log(`   Encryption: ${process.env.ENCRYPTION_KEY ? '✅ Enabled' : '⚠️  Disabled'}`);
   
-  // Test Supabase connection on startup (Phase 1 requirement)
-  console.log('\n🗄️  Testing Supabase Connection...');
+  // Initialize Supabase with resilient connection
+  console.log('\n🔄 Initializing Supabase connection...');
+  
   try {
-    const connected = await testConnection();
-    if (connected) {
-      console.log('✅ Supabase: Connected successfully');
-      console.log('📊 Database: uromexjprcrjfmhkmgxa.supabase.co');
-      console.log('🛡️  Security: RLS policies active');
+    const { supabaseAdmin, connectionInfo } = await initializeSupabase({
+      retryAttempts: process.env.NODE_ENV === 'production' ? 5 : 3,
+      retryDelay: 5000,
+      timeout: 10000
+    });
+    
+    if (supabaseAdmin) {
+      console.log('\n✅ Database connection established');
+      console.log(`   Connected to: ${connectionInfo.url}`);
+      console.log(`   Connection established at: ${connectionInfo.timestamp}`);
+      
+      // Verify with a test query
+      const admin = getSupabaseAdmin();
+      if (admin) {
+        const { count, error } = await admin
+          .from('user_profiles')
+          .select('*', { count: 'exact', head: true });
+        
+        if (!error) {
+          console.log(`   Database verified: ${count || 0} user profiles`);
+        }
+      }
     } else {
-      console.warn('⚠️  Supabase: Connection failed - check credentials');
+      console.warn('\n⚠️  Starting without database connection');
+      console.warn('   Database features will be unavailable');
     }
   } catch (error) {
-    console.error('❌ Supabase: Connection error -', error.message);
+    console.error('\n❌ Database initialization failed:', error.message);
+    
+    // In production, this is critical
+    if (process.env.NODE_ENV === 'production') {
+      console.error('💥 Cannot start server in production without database');
+      process.exit(1);
+    } else {
+      console.warn('⚠️  Continuing in development mode without database');
+    }
   }
   
-  // Start the Express server
-  const server = app.listen(PORT, () => {
-    console.log('\n🌟 Server Successfully Started!');
-    console.log(`📡 Backend API: https://instagram-backend.888intelligenceautomation.in`);
-    console.log(`🏠 Local Access: http://localhost:${PORT}`);
-    console.log(`🔐 Database: https://db-secure.888intelligenceautomation.in`);
-    console.log(`🔗 Webhook: https://instagram-backend.888intelligenceautomation.in/webhook/instagram`);
-    console.log(`🎯 N8N Status: https://instagram-backend.888intelligenceautomation.in/webhook/n8n-status`);
-    
-    console.log('\n📝 Available API Endpoints:');
-    console.log('   GET  /health - System health check');
-    console.log('   GET  /api/test - Test suite overview');
-    console.log('   GET  /api/test/supabase - Database connection test');
-    console.log('   GET  /api/test/integration - Full integration test');
-    console.log('   POST /api/test/insert-test - Data insertion test');
-    console.log('   GET  /tunnel/status - Cloudflare tunnel status');
-    
-    console.log('\n🧪 Phase 1 Implementation Status:');
-    console.log('   ✅ Supabase client integration');
-    console.log('   ✅ Cloudflare tunnel architecture');
-    console.log('   ✅ Test suite implementation');
-    console.log('   ✅ Audit logging system');
-    console.log(`   ${!!process.env.ENCRYPTION_KEY ? '✅' : '⚠️ '} Instagram credential encryption`);
-    
-    console.log('\n🔧 Development URLs:');
-    console.log('   Test Suite: http://localhost:3000/test-connection');
-    console.log('   Admin Login: http://localhost:3000/admin');
-    console.log('   API Docs: http://localhost:' + PORT + '/api');
-    console.log('');
+  // Start Express server
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log('\n' + '='.repeat(60));
+    console.log('✅ Server Successfully Started!');
+    console.log('='.repeat(60));
+    console.log('\n📍 Access Points:');
+    console.log(`   Local: http://localhost:${PORT}`);
+    console.log(`   Tunnel: https://instagram-backend.888intelligenceautomation.in`);
+    console.log('\n🔗 Key Endpoints:');
+    console.log('   Health: /health');
+    console.log('   Database: /health/database');
+    console.log('   Status: /status');
+    console.log('   API Docs: /api');
+    console.log('\n🔐 Security:');
+    console.log('   CORS: Configured for allowed origins');
+    console.log('   Database: Direct connection with IP whitelisting');
+    console.log('   Encryption: ' + (process.env.ENCRYPTION_KEY ? 'Enabled' : 'Disabled'));
+    console.log('\n' + '='.repeat(60) + '\n');
   });
   
   // Graceful shutdown handling
-  process.on('SIGTERM', () => {
-    console.log('🔄 SIGTERM received, shutting down gracefully...');
-    server.close(() => {
-      console.log('👋 Server closed successfully');
+  const gracefulShutdown = async (signal) => {
+    console.log(`\n📴 ${signal} received, shutting down gracefully...`);
+    
+    server.close(async () => {
+      console.log('🔒 HTTP server closed');
+      
+      // Close database connections
+      try {
+        const admin = getSupabaseAdmin();
+        if (admin) {
+          // Supabase client doesn't need explicit closing
+          console.log('🔒 Database connections cleaned up');
+        }
+      } catch (error) {
+        console.error('Error during cleanup:', error);
+      }
+      
+      console.log('👋 Server shutdown complete');
       process.exit(0);
     });
+    
+    // Force shutdown after 10 seconds
+    setTimeout(() => {
+      console.error('⚠️  Forced shutdown after timeout');
+      process.exit(1);
+    }, 10000);
+  };
+  
+  // Handle shutdown signals
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+  
+  // Handle uncaught errors
+  process.on('uncaughtException', (error) => {
+    console.error('💥 Uncaught Exception:', error);
+    gracefulShutdown('uncaughtException');
   });
   
-  process.on('SIGINT', () => {
-    console.log('\n🔄 SIGINT received, shutting down gracefully...');
-    server.close(() => {
-      console.log('👋 Server closed successfully');
-      process.exit(0);
-    });
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('💥 Unhandled Rejection at:', promise, 'reason:', reason);
+    gracefulShutdown('unhandledRejection');
   });
-};
+}
 
 // Start the server
 startServer().catch((error) => {
-  console.error('💥 Failed to start server:', error);
+  console.error('💥 Fatal error during startup:', error);
   process.exit(1);
 });
