@@ -8,7 +8,7 @@ import type { AuthChangeEvent, Session, User as SupabaseUser } from '@supabase/s
 import type { Database } from '../lib/database.types';
 
 // =====================================
-// TYPE DEFINITIONS
+// TYPE DEFINITIONS - REFACTORED FOR TYPE INFERENCE
 // =====================================
 
 // Database type aliases
@@ -16,7 +16,10 @@ type UserProfile = Database['public']['Tables']['user_profiles']['Row'];
 type AdminUser = Database['public']['Tables']['admin_users']['Row'];
 type AdminUserUpdate = Database['public']['Tables']['admin_users']['Update'];
 
-// Legacy User interface for backward compatibility
+/**
+ * Legacy User interface for backward compatibility
+ * Used by Login.tsx and AdminLogin.tsx components
+ */
 interface User {
   id: string;
   username: string;
@@ -27,34 +30,126 @@ interface User {
   instagramConnected?: boolean;
 }
 
-// Complete AuthState interface with ALL legacy properties
-interface AuthState {
-  // Core state
+/**
+ * ✅ STEP 1: Separate state properties from actions
+ * This helps TypeScript's inference engine process the types correctly
+ */
+interface AuthStateProperties {
+  // Core authentication state
   user: User | null;
-  token: string | null;  // ✅ Legacy property for RequireAuth.tsx
+  token: string | null;  // Legacy property for RequireAuth.tsx
   session: Session | null;
   isAuthenticated: boolean;
   isAdmin: boolean;
   isLoading: boolean;
   permissions: string[];
   error: string | null;
+}
+
+/**
+ * ✅ CRITICAL FIX: Define what gets persisted to localStorage
+ * This type excludes transient state that shouldn't be persisted
+ */
+interface PersistedAuthState {
+  user: User | null;
+  token: string | null;
+  isAuthenticated: boolean;
+  isAdmin: boolean;
+  permissions: string[];
+  // Note: session, isLoading, and error are intentionally excluded
+  // These are transient and should reset on page reload
+}
+
+/**
+ * ✅ STEP 2: Define all action methods separately
+ * Explicit function signatures prevent type inference issues
+ */
+interface AuthStateActions {
+  // =====================================
+  // LEGACY METHODS (for backward compatibility)
+  // =====================================
   
-  // ✅ FIXED Legacy actions - now with correct signatures
-  login: (user: User, token: string) => void;  // Legacy signature for Login.tsx
-  adminLogin: (user: User, token: string) => void;  // Legacy signature for AdminLogin.tsx
+  /**
+   * Legacy login method - accepts user object and token
+   * @deprecated Use signInWithEmail for new code
+   * Used by Login.tsx
+   */
+  login: (user: User, token: string) => void;
+  
+  /**
+   * Legacy admin login method - accepts user object and token
+   * @deprecated Use signInAsAdmin for new code
+   * Used by AdminLogin.tsx
+   */
+  adminLogin: (user: User, token: string) => void;
+  
+  /**
+   * Legacy logout method - redirects to signOut
+   * @deprecated Use signOut for new code
+   */
   logout: () => Promise<void>;
+  
+  /**
+   * Legacy refresh token method
+   * @deprecated Token refresh is now handled automatically
+   */
   refreshToken: (token: string) => void;
-  updateUser: (user: Partial<User>) => void;
+  
+  /**
+   * Legacy update user method
+   */
+  updateUser: (updates: Partial<User>) => void;
+  
+  /**
+   * Legacy admin access check
+   */
   checkAdminAccess: () => boolean;
   
-  // Modern Supabase actions
+  // =====================================
+  // MODERN SUPABASE METHODS
+  // =====================================
+  
+  /**
+   * Modern email/password authentication
+   * Fetches user profile and sets up session
+   */
   signInWithEmail: (email: string, password: string) => Promise<void>;
+  
+  /**
+   * Admin authentication with additional role checks
+   * Validates admin status in database
+   */
   signInAsAdmin: (email: string, password: string) => Promise<void>;
+  
+  /**
+   * Sign out and clear all session data
+   * Logs audit event and redirects to login
+   */
   signOut: () => Promise<void>;
+  
+  /**
+   * Check and restore session from Supabase
+   * Called on app initialization
+   */
   checkSession: () => Promise<void>;
+  
+  /**
+   * Create test user for development
+   * @dev Only available in development mode
+   */
   createTestUser: () => Promise<void>;
+  
+  /**
+   * Clear error state
+   */
   clearError: () => void;
 }
+
+/**
+ * ✅ STEP 3: Combine properties and actions into final AuthState type
+ * This maintains the public API - NO BREAKING CHANGES for consuming components
+ */
+export type AuthState = AuthStateProperties & AuthStateActions;
 
 // =====================================
 // HELPER FUNCTIONS
@@ -62,6 +157,7 @@ interface AuthState {
 
 /**
  * Safely extracts username from email
+ * Fallback: 'user'
  */
 const getUsernameFromEmail = (email: string | null | undefined): string => {
   if (!email || typeof email !== 'string') return 'user';
@@ -71,6 +167,7 @@ const getUsernameFromEmail = (email: string | null | undefined): string => {
 
 /**
  * Formats username from full name
+ * Converts to lowercase and replaces spaces with underscores
  */
 const formatUsername = (fullName: string | null | undefined): string => {
   if (!fullName || typeof fullName !== 'string') return 'admin';
@@ -78,17 +175,20 @@ const formatUsername = (fullName: string | null | undefined): string => {
 };
 
 /**
- * Gets permissions array from JSON
+ * Type guard for permissions array
+ * Filters out non-string values
  */
 const getPermissions = (permissions: any): string[] => {
   if (Array.isArray(permissions)) {
     return permissions.filter((p): p is string => typeof p === 'string');
   }
+  // Default permissions for standard users
   return ['dashboard', 'content', 'engagement', 'analytics', 'settings'];
 };
 
 /**
- * Maps database user to app user
+ * Maps Supabase user and profiles to application User object
+ * Handles both regular users and admin users
  */
 const mapToUser = (
   supabaseUser: SupabaseUser | null,
@@ -116,14 +216,23 @@ const mapToUser = (
 };
 
 // =====================================
-// AUTH STORE IMPLEMENTATION
+// AUTH STORE IMPLEMENTATION - ENHANCED TYPE SAFETY
 // =====================================
 
-export const useAuthStore = create<AuthState>()(
+/**
+ * ✅ STEP 4: Use explicit persisted state type in persist generic
+ * This resolves the type inference failure by:
+ * 1. No generic on create()
+ * 2. Explicit AuthState on persist()
+ * 3. Explicit PersistedAuthState for partialize return
+ */
+export const useAuthStore = create(
   devtools(
-    persist(
+    persist<AuthState>(
       (set, get) => ({
-        // Initial state
+        // =====================================
+        // INITIAL STATE
+        // =====================================
         user: null,
         token: null,
         session: null,
@@ -137,12 +246,7 @@ export const useAuthStore = create<AuthState>()(
         // LEGACY METHODS (fixed for backward compatibility)
         // =====================================
         
-        /**
-         * Legacy login method - accepts user object and token
-         * Used by Login.tsx
-         */
-        login: (user: User, token: string) => {
-          // Direct state update for legacy compatibility
+        login: (user, token) => {
           set({
             user,
             token,
@@ -152,15 +256,10 @@ export const useAuthStore = create<AuthState>()(
             error: null
           });
           
-          console.log('Legacy login successful:', user.username);
+          console.log('✅ Legacy login successful:', user.username);
         },
         
-        /**
-         * Legacy admin login method - accepts user object and token
-         * Used by AdminLogin.tsx
-         */
-        adminLogin: (user: User, token: string) => {
-          // Direct state update for legacy compatibility
+        adminLogin: (user, token) => {
           set({
             user,
             token,
@@ -170,35 +269,23 @@ export const useAuthStore = create<AuthState>()(
             error: null
           });
           
-          console.log('Legacy admin login successful:', user.username);
+          console.log('✅ Legacy admin login successful:', user.username);
         },
         
-        /**
-         * Legacy logout method - redirects to signOut
-         */
         logout: async () => {
           await get().signOut();
         },
         
-        /**
-         * Legacy refresh token method
-         */
-        refreshToken: (token: string) => {
+        refreshToken: (token) => {
           set({ token });
         },
         
-        /**
-         * Legacy update user method
-         */
-        updateUser: (updates: Partial<User>) => {
+        updateUser: (updates) => {
           set((state) => ({
             user: state.user ? { ...state.user, ...updates } : null
           }));
         },
         
-        /**
-         * Legacy admin access check
-         */
         checkAdminAccess: () => {
           const state = get();
           return state.isAuthenticated && 
@@ -210,14 +297,10 @@ export const useAuthStore = create<AuthState>()(
         // MODERN SUPABASE METHODS
         // =====================================
         
-        /**
-         * Sign in with email and password
-         */
-        signInWithEmail: async (email: string, password: string) => {
+        signInWithEmail: async (email, password) => {
           set({ isLoading: true, error: null });
           
           try {
-            // Authenticate with Supabase
             const { data, error } = await supabase.auth.signInWithPassword({
               email,
               password
@@ -228,30 +311,26 @@ export const useAuthStore = create<AuthState>()(
               throw new Error('Login failed - no user data returned');
             }
             
-            // Get user profile
             const { data: profile, error: profileError } = await supabase
               .from('user_profiles')
               .select('*')
               .eq('user_id', data.user.id)
               .single();
             
-            // Handle profile not found gracefully
             if (profileError && profileError.code !== 'PGRST116') {
               console.error('Profile fetch error:', profileError);
             }
             
-            // Map to user object
             const user = mapToUser(data.user, profile);
             
             if (!user) {
               throw new Error('Failed to create user object');
             }
             
-            // Update state with all necessary properties
             set({
               user,
               session: data.session,
-              token: data.session.access_token,  // ✅ Set token for legacy components
+              token: data.session.access_token,
               isAuthenticated: true,
               isAdmin: user.role === 'admin' || user.role === 'super_admin',
               permissions: user.permissions,
@@ -259,10 +338,8 @@ export const useAuthStore = create<AuthState>()(
               error: null
             });
             
-            // Log successful login
             await logAuditEvent('user_login', 'success', { email });
             
-            // Update last active if profile exists
             if (profile) {
               await supabase
                 .from('user_profiles')
@@ -271,7 +348,7 @@ export const useAuthStore = create<AuthState>()(
             }
             
           } catch (error: any) {
-            console.error('Sign in error:', error);
+            console.error('❌ Sign in error:', error);
             
             const errorMessage = error?.message || 'Login failed';
             set({ 
@@ -283,28 +360,22 @@ export const useAuthStore = create<AuthState>()(
               session: null
             });
             
-            // Log failed login
             await logAuditEvent('user_login', 'failed', { email, error: errorMessage });
             
             throw error;
           }
         },
         
-        /**
-         * Sign in as admin
-         */
-        signInAsAdmin: async (email: string, password: string) => {
+        signInAsAdmin: async (email, password) => {
           set({ isLoading: true, error: null });
           
           try {
-            // First authenticate with Supabase
             const { data, error } = await supabase.auth.signInWithPassword({
               email,
               password
             });
             
             if (error) {
-              // Check for development admin credentials as fallback
               if (email === import.meta.env.VITE_ADMIN_EMAIL &&
                   password === import.meta.env.VITE_ADMIN_PASSWORD) {
                 
@@ -342,7 +413,6 @@ export const useAuthStore = create<AuthState>()(
               throw new Error('Admin login failed - no user data returned');
             }
             
-            // Check admin status
             const { data: adminProfile, error: adminError } = await supabase
               .from('admin_users')
               .select('*')
@@ -354,25 +424,22 @@ export const useAuthStore = create<AuthState>()(
               throw new Error('Unauthorized: Admin access required');
             }
             
-            // Get user profile for additional data
             const { data: profile } = await supabase
               .from('user_profiles')
               .select('*')
               .eq('user_id', data.user.id)
               .single();
             
-            // Map to user object with admin data
             const user = mapToUser(data.user, profile, adminProfile);
             
             if (!user) {
               throw new Error('Failed to create admin user object');
             }
             
-            // Update state
             set({
               user,
               session: data.session,
-              token: data.session.access_token,  // ✅ Set token
+              token: data.session.access_token,
               isAuthenticated: true,
               isAdmin: true,
               permissions: user.permissions,
@@ -380,7 +447,6 @@ export const useAuthStore = create<AuthState>()(
               error: null
             });
             
-            // Update admin last login
             const updateData: AdminUserUpdate = {
               last_login_at: new Date().toISOString(),
               login_attempts: 0
@@ -391,11 +457,10 @@ export const useAuthStore = create<AuthState>()(
               .update(updateData)
               .eq('email', email);
             
-            // Log successful admin login
             await logAuditEvent('admin_login', 'success', { email });
             
           } catch (error: any) {
-            console.error('Admin sign in error:', error);
+            console.error('❌ Admin sign in error:', error);
             
             const errorMessage = error?.message || 'Admin login failed';
             set({ 
@@ -407,13 +472,11 @@ export const useAuthStore = create<AuthState>()(
               session: null
             });
             
-            // Log failed admin login
             await logAuditEvent('admin_login', 'failed', { 
               email, 
               error: errorMessage 
             });
             
-            // Update failed login attempts
             try {
               const { data: admin } = await supabase
                 .from('admin_users')
@@ -429,30 +492,27 @@ export const useAuthStore = create<AuthState>()(
                   })
                   .eq('email', email);
               }
-            } catch {}
+            } catch {
+              // Silently fail - don't block login flow
+            }
             
             throw error;
           }
         },
         
-        /**
-         * Sign out
-         */
         signOut: async () => {
           const userId = get().user?.id;
           
           try {
-            // Log signout before clearing session
             if (userId && !userId.startsWith('admin-dev-')) {
               await logAuditEvent('logout', 'success', { userId });
             }
             
             await supabase.auth.signOut();
           } catch (error) {
-            console.error('Sign out error:', error);
+            console.error('❌ Sign out error:', error);
           }
           
-          // Clear all state
           set({
             user: null,
             token: null,
@@ -464,18 +524,13 @@ export const useAuthStore = create<AuthState>()(
             error: null
           });
           
-          // Clear localStorage
           localStorage.removeItem('auth-storage');
           
-          // Redirect to login
           if (typeof window !== 'undefined') {
             window.location.href = '/login';
           }
         },
         
-        /**
-         * Check current session
-         */
         checkSession: async () => {
           set({ isLoading: true });
           
@@ -483,14 +538,12 @@ export const useAuthStore = create<AuthState>()(
             const { data: { session } } = await supabase.auth.getSession();
             
             if (session?.user) {
-              // Get user profile
               const { data: profile } = await supabase
                 .from('user_profiles')
                 .select('*')
                 .eq('user_id', session.user.id)
                 .single();
               
-              // Check if admin
               const { data: adminProfile } = await supabase
                 .from('admin_users')
                 .select('*')
@@ -498,14 +551,13 @@ export const useAuthStore = create<AuthState>()(
                 .eq('is_active', true)
                 .single();
               
-              // Map to user object
               const user = mapToUser(session.user, profile, adminProfile);
               
               if (user) {
                 set({
                   user,
                   session,
-                  token: session.access_token,  // ✅ Set token
+                  token: session.access_token,
                   isAuthenticated: true,
                   isAdmin: user.role === 'admin' || user.role === 'super_admin',
                   permissions: user.permissions,
@@ -513,7 +565,6 @@ export const useAuthStore = create<AuthState>()(
                   error: null
                 });
                 
-                // Update last active
                 if (profile) {
                   await supabase
                     .from('user_profiles')
@@ -530,7 +581,6 @@ export const useAuthStore = create<AuthState>()(
                 });
               }
             } else {
-              // Check for dev admin session
               const currentUser = get().user;
               if (currentUser?.id === 'admin-dev-001') {
                 set({ isLoading: false });
@@ -546,7 +596,7 @@ export const useAuthStore = create<AuthState>()(
               });
             }
           } catch (error) {
-            console.error('Session check error:', error);
+            console.error('❌ Session check error:', error);
             set({ 
               isLoading: false,
               error: 'Failed to check session'
@@ -554,9 +604,6 @@ export const useAuthStore = create<AuthState>()(
           }
         },
         
-        /**
-         * Create test user for development
-         */
         createTestUser: async () => {
           try {
             const { data, error } = await supabase.auth.signUp({
@@ -572,16 +619,13 @@ export const useAuthStore = create<AuthState>()(
             
             if (error) throw error;
             
-            console.log('Test user created:', data.user?.email);
+            console.log('✅ Test user created:', data.user?.email);
           } catch (error) {
-            console.error('Create test user error:', error);
+            console.error('❌ Create test user error:', error);
             throw error;
           }
         },
         
-        /**
-         * Clear error state
-         */
         clearError: () => {
           set({ error: null });
         }
@@ -589,12 +633,14 @@ export const useAuthStore = create<AuthState>()(
       {
         name: 'auth-storage',
         storage: createJSONStorage(() => localStorage),
-        partialize: (state) => ({
+        // ✅ CRITICAL FIX: Explicit return type for partialize
+        partialize: (state): PersistedAuthState => ({
           user: state.user,
           token: state.token,
           isAuthenticated: state.isAuthenticated,
           isAdmin: state.isAdmin,
           permissions: state.permissions
+          // session, isLoading, error are intentionally NOT persisted
         })
       }
     ),
@@ -608,9 +654,8 @@ export const useAuthStore = create<AuthState>()(
 // AUTH STATE CHANGE LISTENER
 // =====================================
 
-// Set up Supabase auth state change listener
 supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
-  console.log('Auth state changed:', event);
+  console.log('🔄 Auth state changed:', event);
   
   const store = useAuthStore.getState();
   
@@ -653,6 +698,7 @@ supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null
 
 /**
  * Hook to check if user is authenticated
+ * @returns {object} Authentication status and loading state
  */
 export const useIsAuthenticated = () => {
   const { isAuthenticated, isLoading } = useAuthStore();
@@ -661,6 +707,7 @@ export const useIsAuthenticated = () => {
 
 /**
  * Hook to check if user is admin
+ * @returns {object} Admin status and loading state
  */
 export const useIsAdmin = () => {
   const { isAdmin, isLoading } = useAuthStore();
@@ -669,6 +716,7 @@ export const useIsAdmin = () => {
 
 /**
  * Hook to get current user
+ * @returns {object} Current user and loading state
  */
 export const useCurrentUser = () => {
   const { user, isLoading } = useAuthStore();

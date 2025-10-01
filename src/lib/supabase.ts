@@ -6,7 +6,8 @@ export * from './database.types';
 // =====================================
 // STEP 2: Import necessary dependencies
 // =====================================
-import { createClient } from '@supabase/supabase-js';
+// ✅ FIXED: Import RealtimePostgresChangesPayload for explicit typing
+import { createClient, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
 // Import the main Database type from the GENERATED file
 import type { Database } from './database.types';
@@ -236,9 +237,10 @@ export const getUserProfile = async (userId: string) => {
 // REAL-TIME SUBSCRIPTIONS
 // =====================================
 
+// ✅ FIXED: Explicitly type the callback parameter to remove implicit 'any' error
 export const subscribeToTable = <T extends keyof Database['public']['Tables']>(
   table: T,
-  callback: (payload: any) => void,
+  callback: (payload: RealtimePostgresChangesPayload<{ [key: string]: any }>) => void,
   filter?: string,
   options: SubscriptionOptions = {}
 ): RealtimeSubscription => {
@@ -254,7 +256,8 @@ export const subscribeToTable = <T extends keyof Database['public']['Tables']>(
         table: table as string,
         filter: filter
       },
-      (payload) => {
+      // ✅ The 'payload' parameter is now correctly and explicitly typed
+      (payload: RealtimePostgresChangesPayload<{ [key: string]: any }>) => {
         try {
           callback(payload);
         } catch (error) {
@@ -289,7 +292,7 @@ export const subscribeToTable = <T extends keyof Database['public']['Tables']>(
 
 export const subscribeToUserWorkflows = (
   userId: string,
-  callback: (payload: any) => void
+  callback: (payload: RealtimePostgresChangesPayload<{ [key: string]: any }>) => void
 ): RealtimeSubscription => {
   return subscribeToTable(
     'automation_workflows',
@@ -300,7 +303,7 @@ export const subscribeToUserWorkflows = (
 
 export const subscribeToWorkflowExecutions = (
   workflowId: string,
-  callback: (payload: any) => void
+  callback: (payload: RealtimePostgresChangesPayload<{ [key: string]: any }>) => void
 ): RealtimeSubscription => {
   return subscribeToTable(
     'workflow_executions',
@@ -400,6 +403,4 @@ export const isWorkflow = (data: any): data is Database['public']['Tables']['aut
 export default supabase;
 
 // Alias export for compatibility
-export {
-   supabase as client
-}
+export { supabase as client };
