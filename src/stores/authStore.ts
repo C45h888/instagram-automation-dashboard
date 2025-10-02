@@ -8,7 +8,7 @@ import type { AuthChangeEvent, Session, User as SupabaseUser } from '@supabase/s
 import type { Database } from '../lib/database.types';
 
 // =====================================
-// TYPE DEFINITIONS - REFACTORED FOR TYPE INFERENCE
+// TYPE DEFINITIONS - ENHANCED ARCHITECTURE
 // =====================================
 
 // Database type aliases
@@ -31,8 +31,8 @@ interface User {
 }
 
 /**
- * ✅ STEP 1: Separate state properties from actions
- * This helps TypeScript's inference engine process the types correctly
+ * ✅ STEP 1: Define serializable data properties ONLY
+ * This interface contains ONLY the state that can be persisted
  */
 interface AuthStateProperties {
   // Core authentication state
@@ -47,8 +47,9 @@ interface AuthStateProperties {
 }
 
 /**
- * ✅ CRITICAL FIX: Define what gets persisted to localStorage
- * This type excludes transient state that shouldn't be persisted
+ * ✅ STEP 2: Define the EXACT subset of properties to persist
+ * CRITICAL: This is NOT Partial<AuthState> - it's an explicit, complete type
+ * representing what WILL be serialized to localStorage
  */
 interface PersistedAuthState {
   user: User | null;
@@ -56,13 +57,15 @@ interface PersistedAuthState {
   isAuthenticated: boolean;
   isAdmin: boolean;
   permissions: string[];
-  // Note: session, isLoading, and error are intentionally excluded
-  // These are transient and should reset on page reload
+  // Explicitly EXCLUDED (transient state):
+  // - session: Contains expiring tokens, must be refreshed
+  // - isLoading: UI state, must always start false
+  // - error: Error messages shouldn't persist across sessions
 }
 
 /**
- * ✅ STEP 2: Define all action methods separately
- * Explicit function signatures prevent type inference issues
+ * ✅ STEP 3: Define all action methods separately
+ * These are non-serializable function references
  */
 interface AuthStateActions {
   // =====================================
@@ -146,7 +149,7 @@ interface AuthStateActions {
 }
 
 /**
- * ✅ STEP 3: Combine properties and actions into final AuthState type
+ * ✅ STEP 4: Combine properties and actions into final AuthState type
  * This maintains the public API - NO BREAKING CHANGES for consuming components
  */
 export type AuthState = AuthStateProperties & AuthStateActions;
@@ -216,19 +219,29 @@ const mapToUser = (
 };
 
 // =====================================
-// AUTH STORE IMPLEMENTATION - ENHANCED TYPE SAFETY
+// STORE IMPLEMENTATION - SIMPLIFIED & TYPE-SAFE
 // =====================================
 
 /**
- * ✅ STEP 4: Use explicit persisted state type in persist generic
- * This resolves the type inference failure by:
- * 1. No generic on create()
- * 2. Explicit AuthState on persist()
- * 3. Explicit PersistedAuthState for partialize return
+ * ✅ STEP 5: Create store with inline implementation
+ * 
+ * KEY CHANGES FROM ORIGINAL:
+ * 1. Removed separate `storeCreator` constant (eliminates type complexity)
+ * 2. Removed separate `persistOptions` constant (simplifies inference)
+ * 3. Inlined everything for direct type flow from create<AuthState>()
+ * 4. Explicit return type on partialize: (state: AuthState): PersistedAuthState
+ * 5. Let TypeScript infer middleware types automatically
+ * 
+ * This approach:
+ * - Eliminates StateCreator type mismatch
+ * - Removes middleware mutator ordering issues
+ * - Simplifies type inference for TypeScript
+ * - Maintains 100% functional compatibility
+ * - Zero breaking changes to consumers
  */
-export const useAuthStore = create(
+export const useAuthStore = create<AuthState>()(
   devtools(
-    persist<AuthState>(
+    persist(
       (set, get) => ({
         // =====================================
         // INITIAL STATE
@@ -633,20 +646,25 @@ export const useAuthStore = create(
       {
         name: 'auth-storage',
         storage: createJSONStorage(() => localStorage),
-        // ✅ CRITICAL FIX: Explicit return type for partialize
-        partialize: (state): PersistedAuthState => ({
+        /**
+         * ✅ CRITICAL TYPE-SAFE PARTIALIZE
+         * 
+         * Explicit parameter AND return type annotation ensures TypeScript
+         * understands EXACTLY what's being serialized without complex inference.
+         * 
+         * This is the KEY to resolving the TS2345 error.
+         */
+        partialize: (state: AuthState): PersistedAuthState => ({
           user: state.user,
           token: state.token,
           isAuthenticated: state.isAuthenticated,
           isAdmin: state.isAdmin,
           permissions: state.permissions
-          // session, isLoading, error are intentionally NOT persisted
+          // session, isLoading, error are INTENTIONALLY excluded (transient state)
         })
       }
     ),
-    {
-      name: 'AuthStore'
-    }
+    { name: 'AuthStore' }
   )
 );
 
@@ -698,7 +716,6 @@ supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null
 
 /**
  * Hook to check if user is authenticated
- * @returns {object} Authentication status and loading state
  */
 export const useIsAuthenticated = () => {
   const { isAuthenticated, isLoading } = useAuthStore();
@@ -707,7 +724,6 @@ export const useIsAuthenticated = () => {
 
 /**
  * Hook to check if user is admin
- * @returns {object} Admin status and loading state
  */
 export const useIsAdmin = () => {
   const { isAdmin, isLoading } = useAuthStore();
@@ -716,7 +732,6 @@ export const useIsAdmin = () => {
 
 /**
  * Hook to get current user
- * @returns {object} Current user and loading state
  */
 export const useCurrentUser = () => {
   const { user, isLoading } = useAuthStore();

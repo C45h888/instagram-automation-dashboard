@@ -7,8 +7,8 @@ export * from './database.types';
 // STEP 2: Import necessary dependencies
 // =====================================
 // ✅ FIXED: Import RealtimePostgresChangesPayload for explicit typing
-import { createClient, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
-
+import { createClient, } from '@supabase/supabase-js';
+import type {RealtimePostgresChangesPayload} from '@supabase/supabase-js'
 // Import the main Database type from the GENERATED file
 import type { Database } from './database.types';
 
