@@ -20,21 +20,68 @@ export default defineConfig({
     minify: 'esbuild',
     rollupOptions: {
       output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom'],
-          router: ['react-router-dom'],
-          ui: ['lucide-react', 'framer-motion'],
-          state: ['zustand'],
-          query: ['@tanstack/react-query']
-        }
+        // ✅ USE THIS (comprehensive)
+manualChunks: (id) => {
+  // Core React libraries
+  if (id.includes('node_modules/react/') || 
+      id.includes('node_modules/react-dom/')) {
+    return 'vendor';
+  }
+  
+  // Routing
+  if (id.includes('node_modules/react-router-dom/')) {
+    return 'router';
+  }
+  
+  // UI libraries
+  if (id.includes('node_modules/lucide-react/') || 
+      id.includes('node_modules/framer-motion/')) {
+    return 'ui';
+  }
+  
+  // State management
+  if (id.includes('node_modules/zustand/')) {
+    return 'state';
+  }
+  
+  // Data fetching
+  if (id.includes('node_modules/@tanstack/react-query/')) {
+    return 'query';
+  }
+  
+  // Supabase (LARGE - needs own chunk) - NEW!
+  if (id.includes('node_modules/@supabase/')) {
+    return 'supabase';
+  }
+  
+  // Admin pages - NEW!
+  if (id.includes('/src/pages/admin/') || 
+      id.includes('/src/pages/Admin')) {
+    return 'admin-pages';
+  }
+  
+  // User pages - NEW!
+  if (id.includes('/src/pages/Dashboard') ||
+      id.includes('/src/pages/Analytics') ||
+      id.includes('/src/pages/Settings')) {
+    return 'user-pages';
+  }
+  
+  // Authentication components - NEW!
+  if (id.includes('/src/pages/Login') ||
+      id.includes('/src/components/RequireAuth') ||
+      id.includes('/src/stores/authStore')) {
+    return 'auth';
+  }
+  
+  // Shared components - NEW!
+  if (id.includes('/src/components/')) {
+    return 'components';
+  }
+}
       }
     },
-    terserOptions: {
-      compress: {
-        drop_console: true,
-        drop_debugger: true
-      }
-    }
+    
   },
   server: {
     port: 3000,

@@ -1,30 +1,45 @@
-// src/App.tsx - Updated with Legal Pages
-import React from 'react';
+// src/App.tsx - Optimized with Lazy Loading
+import React, { lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-// Import Layout Components
+// ==========================================
+// EAGER IMPORTS (Critical - Always Needed)
+// ==========================================
+
+// Import Layout Components (always needed for protected routes)
 import Layout from './components/layout/Layout';
 import RequireAuth from './components/layout/RequireAuth';
 
-// Import existing pages - Fixed import paths
-import Dashboard from './pages/Dashboard';
-import Analytics from './pages/Analytics';
-import ContentManagement from './pages/ContentManagement';
-import Settings from './pages/Settings';
+// Keep Login eager - it's the entry point for unauthenticated users
 import Login from './pages/Login';
-import AdminLogin from './pages/AdminLogin';
-import EngagementMonitor from './pages/EngagementMonitor';
 
-// Import Legal Pages (NEW)
-import PrivacyPolicy from './pages/privacypolicy';
-import TermsOfService from './pages/TermsOfService';
-import DataDeletion from './pages/DataDeletion';
-import PrivacyDashboard from './pages/PrivacyDashboard';
-import TestConnection from './pages/TestConnection';
+// ==========================================
+// LAZY IMPORTS (Load on-demand)
+// ==========================================
 
+// Dashboard and main pages - loaded when user navigates to them
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Analytics = lazy(() => import('./pages/Analytics'));
+const ContentManagement = lazy(() => import('./pages/ContentManagement'));
+const Settings = lazy(() => import('./pages/Settings'));
+const EngagementMonitor = lazy(() => import('./pages/EngagementMonitor'));
 
-// Placeholder components (same as before)
+// Admin pages - only loaded when admin navigates to them
+const AdminLogin = lazy(() => import('./pages/AdminLogin'));
+
+// Legal pages - loaded when accessed (rare, so perfect for lazy loading)
+const PrivacyPolicy = lazy(() => import('./pages/privacypolicy'));
+const TermsOfService = lazy(() => import('./pages/TermsOfService'));
+const DataDeletion = lazy(() => import('./pages/DataDeletion'));
+const PrivacyDashboard = lazy(() => import('./pages/PrivacyDashboard'));
+const TestConnection = lazy(() => import('./pages/TestConnection'));
+
+// ==========================================
+// INLINE COMPONENTS (Placeholder Pages)
+// ==========================================
+// These are small and stay inline - no need for lazy loading
+
 const Engagement: React.FC = () => (
   <div className="space-y-8 animate-fade-in">
     <div className="glass-morphism-card p-6 rounded-2xl">
@@ -239,6 +254,10 @@ const Audience: React.FC = () => (
   </div>
 );
 
+// ==========================================
+// QUERY CLIENT CONFIGURATION
+// ==========================================
+
 // Query Client with optimized settings (compatible with React Query v5)
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -251,7 +270,11 @@ const queryClient = new QueryClient({
   },
 });
 
-// Loading component
+// ==========================================
+// LOADING COMPONENT
+// ==========================================
+
+// Loading component - shown while lazy components load
 const PageLoader: React.FC = () => (
   <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 flex items-center justify-center">
     <div className="text-center">
@@ -261,23 +284,40 @@ const PageLoader: React.FC = () => (
   </div>
 );
 
+// ==========================================
+// MAIN APP COMPONENT
+// ==========================================
+
 // Main App Component with Protected Routes
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <Router>
+        {/* 
+          React.Suspense wraps ALL routes to handle lazy loading
+          fallback={<PageLoader />} shows loading spinner while chunks download
+        */}
         <React.Suspense fallback={<PageLoader />}>
           <Routes>
-            {/* Public Legal Pages - NO AUTH REQUIRED (Meta Crawler Accessible) */}
+            {/* ==========================================
+                PUBLIC LEGAL PAGES - NO AUTH REQUIRED
+                These are lazy loaded since they're rarely accessed
+                ========================================== */}
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
             <Route path="/terms-of-service" element={<TermsOfService />} />
             <Route path="/data-deletion" element={<DataDeletion />} />
             
-            {/* Public Authentication Routes */}
+            {/* ==========================================
+                PUBLIC AUTHENTICATION ROUTES
+                Login is eager, AdminLogin is lazy
+                ========================================== */}
             <Route path="/login" element={<Login />} />
             <Route path="/admin/login" element={<AdminLogin />} />
             
-            {/* Protected Routes - Everything requires authentication */}
+            {/* ==========================================
+                PROTECTED ROUTES - REQUIRE AUTHENTICATION
+                All pages inside here are lazy loaded on-demand
+                ========================================== */}
             <Route 
               path="/" 
               element={
@@ -321,9 +361,13 @@ function App() {
               <Route path="ugc" element={<Audience />} />
             </Route>
             
+            {/* ==========================================
+                MISC ROUTES
+                ========================================== */}
+            <Route path="/test-connection" element={<TestConnection />} />
+            
             {/* Catch all - redirect to login if not authenticated */}
             <Route path="*" element={<Navigate to="/login" replace />} />
-            <Route path="/test-connection" element={<TestConnection />} />
           </Routes>
         </React.Suspense>
       </Router>
