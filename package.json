@@ -6,7 +6,7 @@
   "scripts": {
     "// ============ DEVELOPMENT SCRIPTS ============": "",
     "dev": "vite",
-    "build": "npx vite build",
+    "build": "cd $(git rev-parse --show-toplevel) && npx vite build",
      "preview":  "vite preview",
     
     
