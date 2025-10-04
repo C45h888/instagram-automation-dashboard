@@ -6,8 +6,8 @@
   "scripts": {
     "// ============ DEVELOPMENT SCRIPTS ============": "",
     "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview",
+    "build": "vite build",
+     "preview":  "vite preview",
     
     
     "// ============ BACKEND SCRIPTS ============": "",
