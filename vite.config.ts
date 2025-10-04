@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import type { UserConfig } from 'vite';
-import type { ManualChunksOption } from 'rollup';
+import type { ManualChunksOption, PreRenderedAsset } from 'rollup';
 
 /**
  * Vite Configuration for Instagram Automation Dashboard
@@ -12,6 +12,9 @@ import type { ManualChunksOption } from 'rollup';
  * - esbuild minification for fast builds
  * - Source maps for debugging
  * - Path aliases for clean imports
+ * 
+ * @version 2.0.0
+ * @updated 2025-10-04 - Complete refactor with Rollup v4 compatibility
  */
 
 /**
@@ -93,8 +96,7 @@ const manualChunks: ManualChunksOption = (id: string): string | undefined => {
  */
 const config: UserConfig = {
   plugins: [
-    // ✅ FIXED: Removed deprecated fastRefresh option
-    // Fast Refresh is now enabled by default in modern @vitejs/plugin-react
+    // Fast Refresh enabled by default in modern @vitejs/plugin-react
     react(),
   ],
   
@@ -132,16 +134,28 @@ const config: UserConfig = {
         manualChunks,
         
         // Asset file naming pattern
-        assetFileNames: (assetInfo): string => {
-          const info = assetInfo.name?.split('.') || [];
+        // ✅ FIXED: Using PreRenderedAsset type and names[0] property (Rollup v4+)
+        assetFileNames: (assetInfo: PreRenderedAsset): string => {
+          // Use names[0] instead of deprecated 'name' property
+          const fileName = assetInfo.names[0];
+          if (!fileName) {
+            return `assets/[name]-[hash][extname]`;
+          }
+          
+          const info = fileName.split('.');
           const ext = info[info.length - 1];
           
+          // Image assets
           if (/png|jpe?g|svg|gif|tiff|bmp|ico/i.test(ext)) {
             return `assets/images/[name]-[hash][extname]`;
           }
+          
+          // Font assets
           if (/woff2?|ttf|eot/i.test(ext)) {
             return `assets/fonts/[name]-[hash][extname]`;
           }
+          
+          // Default asset path
           return `assets/[name]-[hash][extname]`;
         },
         
