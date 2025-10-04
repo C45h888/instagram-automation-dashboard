@@ -2,6 +2,7 @@ services:
   - type: web
     name: instagram-automation-dashboard
     env: static
+    rootDirectory: .  # ← Add this line (. means project root)
     buildCommand: npm install && npm run build
     staticPublishPath: ./dist
     routes:
