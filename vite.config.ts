@@ -13,8 +13,8 @@ import type { ManualChunksOption, PreRenderedAsset } from 'rollup';
  * - Source maps for debugging
  * - Path aliases for clean imports
  * 
- * @version 2.0.0
- * @updated 2025-10-04 - Complete refactor with Rollup v4 compatibility
+ * @version 2.1.0
+ * @updated 2025-10-06 - Fixed assetFileNames function for CSS handling
  */
 
 /**
@@ -96,7 +96,7 @@ const manualChunks: ManualChunksOption = (id: string): string | undefined => {
  */
 const config: UserConfig = {
   plugins: [
-    // Fast Refresh enabled by default in modern @vitejs/plugin-react
+    // React plugin with Fast Refresh enabled by default
     react(),
   ],
   
@@ -133,17 +133,37 @@ const config: UserConfig = {
         // Manual chunking strategy for optimal code splitting
         manualChunks,
         
-        // Asset file naming pattern
-        // ✅ FIXED: Using PreRenderedAsset type and names[0] property (Rollup v4+)
+        // Asset file naming pattern - FIXED VERSION
         assetFileNames: (assetInfo: PreRenderedAsset): string => {
-          // Use names[0] instead of deprecated 'name' property
+          // Handle the case where names array might be empty or undefined
+          if (!assetInfo.names || assetInfo.names.length === 0) {
+            // Fallback to default naming pattern for unnamed assets
+            return `assets/[name]-[hash][extname]`;
+          }
+          
+          // Get the first name from the names array
           const fileName = assetInfo.names[0];
+          
+          // If fileName is still somehow undefined, use fallback
           if (!fileName) {
             return `assets/[name]-[hash][extname]`;
           }
           
-          const info = fileName.split('.');
-          const ext = info[info.length - 1];
+          // Get file extension
+          const parts = fileName.split('.');
+          
+          // If no extension found (shouldn't happen, but let's be safe)
+          if (parts.length < 2) {
+            return `assets/[name]-[hash][extname]`;
+          }
+          
+          // Get the extension (last part after splitting by '.')
+          const ext = parts[parts.length - 1];
+          
+          // CSS assets - special handling
+          if (ext === 'css') {
+            return `assets/css/[name]-[hash][extname]`;
+          }
           
           // Image assets
           if (/png|jpe?g|svg|gif|tiff|bmp|ico/i.test(ext)) {
@@ -155,7 +175,7 @@ const config: UserConfig = {
             return `assets/fonts/[name]-[hash][extname]`;
           }
           
-          // Default asset path
+          // Default asset path for everything else
           return `assets/[name]-[hash][extname]`;
         },
         

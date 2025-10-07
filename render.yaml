@@ -1,10 +1,20 @@
 services:
-  - type: web
-    name: instagram-automation-dashboard
+  # Service 1: The Frontend (Static Site)
+  - type: static
+    name: instagram-dashboard-frontend
     env: static
+    rootDir: .
     buildCommand: npm install && npm run build
     staticPublishPath: ./dist
     routes:
       - type: rewrite
         source: /*
         destination: /index.html
+
+  # Service 2: The Backend (Web Service)
+  - type: web
+    name: instagram-dashboard-backend
+    env: node
+    rootDir: ./backend_api
+    buildCommand: npm install
+    startCommand: npm start

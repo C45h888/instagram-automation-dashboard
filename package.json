@@ -6,7 +6,7 @@
   "scripts": {
     "// ============ DEVELOPMENT SCRIPTS ============": "",
     "dev": "vite",
-    "build": "npx vite build",
+    "build": "vite build --config ./vite.config.ts",
      "preview":  "vite preview",
     
     
