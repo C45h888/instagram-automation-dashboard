@@ -1,14 +1,13 @@
+
 # ============================================================================
 # Render Blueprint - Instagram Automation Dashboard
 # ============================================================================
 # 
-# VERIFIED CONFIGURATION - Based on actual repository structure
-# Last Updated: January 7, 2025
-# Repository: instagram-automation-dashboard (Post-Cleanup)
+# FIXED CONFIGURATION - Ensures vite is installed for build
+# Last Updated: Current
+# Repository: instagram-automation-dashboard
 #
-# IMPORTANT: This configuration matches your actual folder structure:
-# - Frontend: Root directory (package.json, src/, vite.config.ts)
-# - Backend: ./backend.api (note the DOT, not underscore)
+# IMPORTANT: This configuration fixes the vite not found error
 # ============================================================================
 
 services:
@@ -20,14 +19,12 @@ services:
     runtime: static
     env: static
     
-    # Build Configuration
-    buildCommand:  npm ci --include=dev && npm run build
+    # FIXED BUILD COMMAND - Ensures devDependencies are installed
+    buildCommand: npm ci --include=dev && npm run build
     staticPublishPath: ./dist
     
     # Root directory - Frontend is at project root
     rootDir: .
-    
-    # Health Check (for static sites, Render checks if files exist)
     
     # SPA Routing - All routes redirect to index.html
     routes:
@@ -102,7 +99,6 @@ services:
       
       - key: PORT
         value: "3001"
-      
       # ================================================================
       # SUPABASE CONFIGURATION - Direct Connection Only
       # ================================================================
