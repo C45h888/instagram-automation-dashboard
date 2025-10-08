@@ -12,9 +12,10 @@ import type { ManualChunksOption, PreRenderedAsset } from 'rollup';
  * - esbuild minification for fast builds
  * - Source maps for debugging
  * - Path aliases for clean imports
+ * - React deduplication for production stability
  * 
- * @version 2.1.0
- * @updated 2025-10-06 - Fixed assetFileNames function for CSS handling
+ * @version 2.2.0
+ * @updated 2025-10-08 - Added React deduplication to fix production build errors
  */
 
 /**
@@ -101,6 +102,7 @@ const config: UserConfig = {
   ],
   
   resolve: {
+    // Path aliases for clean imports throughout the application
     alias: {
       '@': path.resolve(__dirname, './src'),
       '@components': path.resolve(__dirname, './src/components'),
@@ -109,6 +111,22 @@ const config: UserConfig = {
       '@utils': path.resolve(__dirname, './src/utils'),
       '@constants': path.resolve(__dirname, './src/constants'),
     },
+    
+    /**
+     * Dedupe React dependencies to prevent multiple instances
+     * 
+     * CRITICAL FIX: Forces Vite to always resolve React and ReactDOM
+     * to a single instance from the project root. This prevents the
+     * "Cannot read properties of undefined (reading 'forwardRef')" error
+     * that occurs when packages like lucide-react receive an undefined
+     * React module in production builds.
+     * 
+     * Without this, Vite may bundle multiple React instances, causing
+     * peer dependencies to fail at runtime despite successful builds.
+     * 
+     * @see https://vitejs.dev/config/shared-options.html#resolve-dedupe
+     */
+    dedupe: ['react', 'react-dom'],
   },
   
   build: {
