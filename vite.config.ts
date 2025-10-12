@@ -4,6 +4,12 @@ import path from 'path';
 import type { UserConfig } from 'vite';
 import type { ManualChunksOption, PreRenderedAsset } from 'rollup';
 
+// Add to TOP of vite.config.ts (after imports)
+console.log('\n🔧 ========================================');
+console.log('✅ VITE CONFIG v2.3.0 LOADED');
+console.log('✅ React dedupe: ENABLED');
+console.log('✅ React alias:', path.resolve(__dirname, './node_modules/react'));
+console.log('========================================\n');
 /**
  * Vite Configuration for Instagram Automation Dashboard
  * 
