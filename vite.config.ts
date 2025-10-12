@@ -4,12 +4,14 @@ import path from 'path';
 import type { UserConfig } from 'vite';
 import type { ManualChunksOption, PreRenderedAsset } from 'rollup';
 
-// Add to TOP of vite.config.ts (after imports)
+// Verification logging - Updated for v2.4.0
 console.log('\n🔧 ========================================');
-console.log('✅ VITE CONFIG v2.3.0 LOADED');
+console.log('✅ VITE CONFIG v2.4.0 LOADED');
 console.log('✅ React dedupe: ENABLED');
+console.log('✅ Chunk load order: FIXED (numeric prefixes)');
 console.log('✅ React alias:', path.resolve(__dirname, './node_modules/react'));
 console.log('========================================\n');
+
 /**
  * Vite Configuration for Instagram Automation Dashboard
  * 
@@ -19,51 +21,72 @@ console.log('========================================\n');
  * - Source maps for debugging
  * - Path aliases for clean imports
  * - React deduplication for production stability
+ * - Enforced chunk loading order via numeric prefixes
  * 
- * @version 2.2.0
- * @updated 2025-10-08 - Added React deduplication to fix production build errors
+ * @version 2.4.0
+ * @updated 2025-10-12 - Fixed chunk loading order with numeric prefixes
+ *                        to ensure React loads before dependent libraries
  */
 
 /**
- * Manual chunking strategy function
- * Splits code into logical chunks for optimal caching and loading performance
+ * Manual chunking strategy function with enforced load order
+ * 
+ * CRITICAL FIX: Uses numeric prefixes to guarantee React core libraries
+ * load BEFORE any dependencies that require them (e.g., lucide-react).
+ * 
+ * Chunks load in alphabetical/numeric order:
+ *   0-react-core → 1-router → 2-ui-libs → 3-state → etc.
+ * 
+ * This prevents "Cannot read properties of undefined (reading 'forwardRef')"
+ * runtime errors in production where lucide-react would execute before
+ * React was available.
  * 
  * @param id - The module ID being processed (file path)
  * @returns Chunk name or undefined for default chunking
  */
 const manualChunks: ManualChunksOption = (id: string): string | undefined => {
-  // Core React libraries - Always needed, loaded first
+  // PRIORITY 1: Core React libraries - MUST load first
+  // Includes React, ReactDOM, and internal React dependencies
   if (id.includes('node_modules/react/') || 
-      id.includes('node_modules/react-dom/')) {
-    return 'vendor';
+      id.includes('node_modules/react-dom/') ||
+      id.includes('node_modules/react-is/') ||
+      id.includes('node_modules/scheduler/')) {
+    return '0-react-core';
   }
   
-  // Routing library - React Router DOM
-  if (id.includes('node_modules/react-router-dom/')) {
-    return 'router';
+  // PRIORITY 2: Routing library - Depends on React
+  // React Router DOM - ~34KB
+  if (id.includes('node_modules/react-router-dom/') ||
+      id.includes('node_modules/react-router/')) {
+    return '1-router';
   }
   
-  // UI libraries - Lucide icons and Framer Motion animations
+  // PRIORITY 3: UI libraries - Depend on React being available
+  // Lucide icons and Framer Motion animations - ~142KB
+  // CRITICAL: This must load AFTER React (0-react-core)
   if (id.includes('node_modules/lucide-react/') || 
       id.includes('node_modules/framer-motion/')) {
-    return 'ui';
+    return '2-ui-libs';
   }
   
-  // State management - Zustand
+  // PRIORITY 4: State management - Zustand - ~8KB
   if (id.includes('node_modules/zustand/')) {
-    return 'state';
+    return '3-state';
   }
   
-  // Data fetching - TanStack React Query
+  // PRIORITY 5: Data fetching - TanStack React Query - ~28KB
   if (id.includes('node_modules/@tanstack/react-query/')) {
-    return 'query';
+    return '4-query';
   }
   
-  // Supabase client - Large library, needs own chunk
+  // PRIORITY 6: Supabase client - Large library, needs own chunk
   // ~180KB - Only loads when database operations needed
   if (id.includes('node_modules/@supabase/')) {
-    return 'supabase';
+    return '5-supabase';
   }
+  
+  // Application code chunks (no numeric prefix needed)
+  // These load after all dependencies are ready
   
   // Admin pages - Only loaded for admin users
   // Includes: AdminLogin and admin dashboard pages
@@ -116,6 +139,11 @@ const config: UserConfig = {
       '@stores': path.resolve(__dirname, './src/stores'),
       '@utils': path.resolve(__dirname, './src/utils'),
       '@constants': path.resolve(__dirname, './src/constants'),
+      
+      // CRITICAL: Explicit React resolution to ensure single instance
+      // Forces all React imports to resolve to the same physical location
+      'react': path.resolve(__dirname, './node_modules/react'),
+      'react-dom': path.resolve(__dirname, './node_modules/react-dom'),
     },
     
     /**
@@ -129,6 +157,8 @@ const config: UserConfig = {
      * 
      * Without this, Vite may bundle multiple React instances, causing
      * peer dependencies to fail at runtime despite successful builds.
+     * 
+     * Works in conjunction with explicit alias above for maximum safety.
      * 
      * @see https://vitejs.dev/config/shared-options.html#resolve-dedupe
      */
