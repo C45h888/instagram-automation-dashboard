@@ -157,8 +157,8 @@ const Login: React.FC = () => {
           </div>
         </div>
 
-        {/* Alternative: More visible admin link for development */}
-        {process.env.NODE_ENV === 'development' && (
+        {/* Alternative: More visible admin link - controlled by environment variable */}
+        {import.meta.env.VITE_SHOW_ADMIN_LINK === 'true' && (
           <div className="mt-4 text-center">
             <Link
               to="/admin/login"
