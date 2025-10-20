@@ -13,6 +13,8 @@ node_modules
 dist
 dist-ssr
 *.local
+.claudeconfig.json
+.claudeconfig
 
 # Editor directories and files
 .vscode/*
