@@ -70,28 +70,121 @@ interface ImportMetaEnv {
   // =====================================
   // ADMIN & AUTHENTICATION
   // =====================================
-  
+
   /** Admin user email for dashboard access */
   readonly VITE_ADMIN_EMAIL?: string;
-  
+
   /** Admin user password for dashboard access */
   readonly VITE_ADMIN_PASSWORD?: string;
+
+  /**
+   * Authentication mode selector - controls which login methods are displayed
+   *
+   * @type {'facebook' | 'instagram' | 'both'}
+   * @default 'both'
+   *
+   * Options:
+   * - `'facebook'`: Shows only Facebook Login (Meta review mode)
+   * - `'instagram'`: Shows only Instagram OAuth (legacy mode)
+   * - `'both'`: Shows both login options (development/flexible)
+   *
+   * @example
+   * // Development - show both options
+   * VITE_AUTH_MODE=both
+   *
+   * @example
+   * // Production - Meta compliant
+   * VITE_AUTH_MODE=facebook
+   *
+   * @see {@link Login.tsx} for implementation
+   */
+  readonly VITE_AUTH_MODE?: 'facebook' | 'instagram' | 'both';
+
+  /** Feature flag: Show admin portal link on login page */
+  readonly VITE_SHOW_ADMIN_LINK?: string;
   
   // =====================================
   // WEBHOOK & META API CONFIGURATION
   // =====================================
-  
+
   /** Webhook URL for Instagram events */
   readonly VITE_WEBHOOK_URL?: string;
-  
+
   /** Webhook verification token for Instagram webhooks */
   readonly VITE_WEBHOOK_VERIFY_TOKEN?: string;
-  
-  /** Meta/Facebook App ID for Instagram API integration */
+
+  /**
+   * Meta/Facebook App ID for Instagram Business API integration
+   *
+   * @type {string}
+   * @required true (for Facebook OAuth to work)
+   *
+   * Obtain from: https://developers.facebook.com/apps
+   *
+   * This value is safe to expose client-side as it's used in OAuth URLs.
+   * The App ID identifies your application to Meta's authentication servers.
+   *
+   * @security Client-side safe - can be committed to version control
+   *
+   * @example
+   * VITE_META_APP_ID=123456789012345
+   *
+   * @throws {Error} If not set when Facebook login is attempted
+   *
+   * @see {@link https://developers.facebook.com/docs/development/create-an-app}
+   */
   readonly VITE_META_APP_ID?: string;
-  
-  /** Meta/Facebook App Secret for Instagram API integration */
+
+  /**
+   * Meta/Facebook App Secret for server-side token exchange
+   *
+   * @type {string}
+   * @required true (for backend token validation)
+   *
+   * Obtain from: https://developers.facebook.com/apps
+   *
+   * ⚠️ SECURITY WARNING:
+   * This value should ONLY be used server-side (backend).
+   * Do NOT expose this in client-side code or commit real values.
+   * Vite will include this in the bundle, so treat as potentially exposed.
+   *
+   * Best Practice: Store in backend environment only, not frontend.
+   *
+   * @security HIGH SENSITIVITY - Never commit real values
+   *
+   * @example
+   * // Development/testing only - use placeholder
+   * VITE_META_APP_SECRET=your_meta_app_secret_here
+   *
+   * @see {@link backend.api/config} for server-side usage
+   */
   readonly VITE_META_APP_SECRET?: string;
+
+  /**
+   * Custom OAuth redirect URI override
+   *
+   * @type {string}
+   * @required false
+   * @default `${window.location.origin}/auth/callback`
+   *
+   * Override the default OAuth callback URL if using a custom authentication flow.
+   * Must match exactly with URLs configured in Meta Developer Console.
+   *
+   * Format: Must be a complete HTTPS URL (HTTP allowed for localhost only)
+   *
+   * @example
+   * // Production custom callback
+   * VITE_OAUTH_REDIRECT_URI=https://api.yourdomain.com/auth/instagram/callback
+   *
+   * @example
+   * // Local development
+   * VITE_OAUTH_REDIRECT_URI=http://localhost:5173/auth/callback
+   *
+   * @validation Must match Meta Developer Console configuration
+   *
+   * @see {@link https://developers.facebook.com/docs/facebook-login/redirect}
+   */
+  readonly VITE_OAUTH_REDIRECT_URI?: string;
   
   // =====================================
   // ADD ANY ADDITIONAL VITE_ VARIABLES HERE

@@ -75,7 +75,7 @@
     "fresh-install": "npm run clean && npm install && npm run backend:install",
     
     "// ============ DATABASE MANAGEMENT ============": "",
-    "db:types": "npx supabase gen types typescript --project-id uromexjprcrjfmhkmgxa > src/types/database.ts",
+    "db:types": "npx supabase gen types typescript --project-id uromexjprcrjfmhkmgxa > src/lib/database.types.ts",
     "db:status": "npx supabase status",
     
     "// ============ PRODUCTION DEPLOYMENT ============": "",

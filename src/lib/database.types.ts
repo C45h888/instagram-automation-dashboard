@@ -1,4 +1,3 @@
-
 export type Json =
   | string
   | number
@@ -12,31 +11,6 @@ export type Database = {
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "13.0.4"
-  }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
   }
   public: {
     Tables: {
@@ -360,6 +334,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      data_deletion_requests: {
+        Row: {
+          completed_at: string | null
+          confirmation_code: string
+          error_message: string | null
+          id: string
+          meta_user_id: string
+          payload: Json | null
+          requested_at: string
+          status: string
+          status_url: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          confirmation_code: string
+          error_message?: string | null
+          id?: string
+          meta_user_id: string
+          payload?: Json | null
+          requested_at?: string
+          status?: string
+          status_url?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          confirmation_code?: string
+          error_message?: string | null
+          id?: string
+          meta_user_id?: string
+          payload?: Json | null
+          requested_at?: string
+          status?: string
+          status_url?: string | null
+        }
+        Relationships: []
       }
       instagram_business_accounts: {
         Row: {
@@ -731,6 +741,39 @@ export type Database = {
         }
         Relationships: []
       }
+      user_consents: {
+        Row: {
+          consent_given: boolean
+          consent_type: string
+          consented_at: string
+          id: string
+          ip_address: unknown | null
+          privacy_policy_version: string | null
+          terms_version: string | null
+          user_agent: string | null
+        }
+        Insert: {
+          consent_given: boolean
+          consent_type: string
+          consented_at?: string
+          id?: string
+          ip_address?: unknown | null
+          privacy_policy_version?: string | null
+          terms_version?: string | null
+          user_agent?: string | null
+        }
+        Update: {
+          consent_given?: boolean
+          consent_type?: string
+          consented_at?: string
+          id?: string
+          ip_address?: unknown | null
+          privacy_policy_version?: string | null
+          terms_version?: string | null
+          user_agent?: string | null
+        }
+        Relationships: []
+      }
       user_profiles: {
         Row: {
           avatar_url: string | null
@@ -1028,9 +1071,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       automation_type: [
