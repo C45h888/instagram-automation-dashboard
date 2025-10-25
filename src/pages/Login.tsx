@@ -19,24 +19,6 @@ const Login: React.FC = () => {
   const [isInstagramLoading, setIsInstagramLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'info' | 'error' | 'success'; text: string } | null>(null);
 
-  /**
-   * Facebook button loading state
-   * Tracks Facebook OAuth flow progress independently
-   *
-   * @type {boolean}
-   * @default false
-   */
-  const [isFacebookLoading, setIsFacebookLoading] = useState<boolean>(false);
-
-  /**
-   * Combined loading state for global UI effects
-   * Used to disable interactions during any OAuth flow
-   *
-   * @type {boolean}
-   * @computed
-   */
-  const isAnyAuthLoading = isFacebookLoading || isInstagramLoading;
-
   // ============================================
   // CONSENT STATE MANAGEMENT
   // ============================================
@@ -358,7 +340,7 @@ const Login: React.FC = () => {
     // ============================================
     // STEP 2: SET LOADING STATE
     // ============================================
-    setIsFacebookLoading(true);
+    setIsInstagramLoading(true);
     setMessage(null);
 
     try {
@@ -470,13 +452,13 @@ const Login: React.FC = () => {
           : 'Facebook login failed. Please try again or contact support.'
       });
     } finally {
-      setIsFacebookLoading(false);
+      setIsInstagramLoading(false);
     }
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 flex items-center justify-center p-4">
-      <div className="bg-white/10 backdrop-blur-xl p-8 rounded-2xl shadow-2xl w-full max-w-2xl border border-white/20 transition-all duration-300">
+      <div className="bg-white/10 backdrop-blur-xl p-8 rounded-2xl shadow-2xl w-full max-w-md border border-white/20">
         {/* Logo */}
         <div className="text-center mb-8">
           <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-r from-pink-500 to-orange-500 flex items-center justify-center">
@@ -685,268 +667,189 @@ const Login: React.FC = () => {
         </div>
 
         {/* ============================================ */}
-        {/* TWO-COLUMN AUTHENTICATION GRID              */}
-        {/* Mobile: Stacked | Desktop: Side-by-Side     */}
+        {/* META COMPLIANCE: Facebook Login Section     */}
+        {/* Priority: P0 (CRITICAL for Meta Review)     */}
         {/* ============================================ */}
-        <div className={`
-          grid gap-6 mt-8
-          ${showFacebookLogin && showInstagramLogin
-            ? 'grid-cols-1 md:grid-cols-2'
-            : 'grid-cols-1 max-w-md mx-auto'
-          }
-        `}>
 
-          {/* ============================================ */}
-          {/* LEFT COLUMN: Facebook OAuth (Primary Path)  */}
-          {/* ============================================ */}
-          {showFacebookLogin && (
-            <div className="space-y-4 flex flex-col h-full">
+        {showFacebookLogin && (
+          <div className="space-y-4 mb-6">
 
-              {/* ============================================ */}
-              {/* Meta Reviewer Attention Notice              */}
-              {/* ============================================ */}
-              <div className="bg-yellow-500/20 border-2 border-yellow-500 rounded-lg p-4 animate-pulse">
-                <div className="flex items-center gap-3">
-                  <Shield className="w-6 h-6 text-yellow-400 flex-shrink-0" />
-                  <div>
-                    <h3 className="text-yellow-300 font-bold text-sm uppercase tracking-wide">
-                      Meta Reviewer: Primary Auth Method
-                    </h3>
-                    <p className="text-yellow-200 text-xs mt-1">
-                      This Facebook login complies with Meta Platform Terms (February 2025)
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* ============================================ */}
-              {/* Facebook Login Button                       */}
-              {/* ============================================ */}
-              <button
-                onClick={handleFacebookLogin}
-                disabled={!consentGiven || isFacebookLoading || isAnyAuthLoading}
-                className={`
-                  w-full px-6 py-4 rounded-lg font-semibold text-base
-                  min-h-[80px]
-                  transition-all duration-200 transform
-                  flex items-center justify-center gap-3
-                  ${!consentGiven || isFacebookLoading || isAnyAuthLoading
-                    ? 'bg-gray-600 cursor-not-allowed opacity-50'
-                    : 'bg-[#1877F2] hover:bg-[#166FE5] hover:scale-[1.02] active:scale-[0.98]'
-                  }
-                  text-white shadow-lg hover:shadow-xl
-                  focus:outline-none focus:ring-4 focus:ring-blue-500/50
-                `}
-                aria-label="Continue with Facebook to connect Instagram Business account"
-                data-testid="facebook-login-button"
-              >
-                {isFacebookLoading ? (
-                  <div className="flex items-center space-x-3">
-                    <svg
-                      className="animate-spin h-6 w-6 text-white"
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      />
-                    </svg>
-                    <span>Connecting to Facebook...</span>
-                  </div>
-                ) : (
-                  <>
-                    {/* Facebook "f" Logo - Official Style */}
-                    <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center flex-shrink-0">
-                      <svg
-                        viewBox="0 0 24 24"
-                        className="w-5 h-5"
-                        fill="#1877F2"
-                        aria-hidden="true"
-                      >
-                        <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-                      </svg>
-                    </div>
-                    <span>Continue with Facebook</span>
-                  </>
-                )}
-              </button>
-
-              {/* ============================================ */}
-              {/* Facebook Information Box                    */}
-              {/* ============================================ */}
-              <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 flex-grow">
-                <h3 className="text-blue-300 font-semibold text-sm mb-2 flex items-center">
-                  <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+            
+            {/* ============================================ */}
+            {/* Facebook Login Button - Meta Compliant     */}
+            {/* ============================================ */}
+            <button
+              onClick={handleFacebookLogin}
+              disabled={!consentGiven || isInstagramLoading}
+              className={`
+                w-full py-4 px-6 rounded-xl font-semibold text-lg
+                flex items-center justify-center space-x-3
+                transition-all duration-300 transform
+                ${!consentGiven || isInstagramLoading
+                  ? 'bg-gray-600 cursor-not-allowed opacity-50'
+                  : 'bg-[#1877F2] hover:bg-[#166FE5] hover:scale-[1.02] active:scale-[0.98]'
+                }
+                text-white shadow-lg hover:shadow-xl
+                focus:outline-none focus:ring-4 focus:ring-blue-500/50
+              `}
+              aria-label="Continue with Facebook to connect Instagram Business account"
+              data-testid="facebook-login-button"
+            >
+              {isInstagramLoading ? (
+                <div className="flex items-center space-x-3">
+                  <svg
+                    className="animate-spin h-6 w-6 text-white"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
                   </svg>
-                  Why Facebook Login?
-                </h3>
-                <p className="text-gray-300 text-xs leading-relaxed mb-3">
-                  Instagram Business accounts are managed through Facebook's Business Suite.
-                  This secure login method provides:
-                </p>
-                <ul className="space-y-2 text-xs text-gray-400">
-                  <li className="flex items-start">
-                    <CheckCircle className="w-3 h-3 mr-2 mt-0.5 text-green-400 flex-shrink-0" />
-                    <span>Full access to Instagram Business features</span>
-                  </li>
-                  <li className="flex items-start">
-                    <CheckCircle className="w-3 h-3 mr-2 mt-0.5 text-green-400 flex-shrink-0" />
-                    <span>Meta Platform Terms compliance (Feb 2025)</span>
-                  </li>
-                  <li className="flex items-start">
-                    <CheckCircle className="w-3 h-3 mr-2 mt-0.5 text-green-400 flex-shrink-0" />
-                    <span>Enterprise-grade security & encryption</span>
-                  </li>
-                </ul>
-              </div>
+                  <span>Connecting to Facebook...</span>
+                </div>
+              ) : (
+                <>
+                  {/* Facebook "f" Logo - Official Style */}
+                  <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center flex-shrink-0">
+                    <svg
+                      viewBox="0 0 24 24"
+                      className="w-5 h-5"
+                      fill="#1877F2"
+                      aria-hidden="true"
+                    >
+                      <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                    </svg>
+                  </div>
+                  <span>Continue with Facebook</span>
+                </>
+              )}
+            </button>
 
-              {/* ============================================ */}
-              {/* Meta Compliance Footer Notice               */}
-              {/* ============================================ */}
-              <p className="text-gray-400 text-xs text-center leading-relaxed px-2">
-                By continuing, you'll be redirected to Facebook to authorize access.
-                We comply with{' '}
-                <span className="text-blue-400 font-medium">
-                  Meta Platform Terms (February 2025)
-                </span>.
+            
+            {/* ============================================ */}
+            {/* User Education Section                      */}
+            {/* ============================================ */}
+            <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+              <h3 className="text-blue-300 font-semibold text-sm mb-2 flex items-center">
+                <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+                Why Facebook Login?
+              </h3>
+              <p className="text-gray-300 text-xs leading-relaxed">
+                Instagram Business accounts are connected through Facebook.
+                This login securely connects your Instagram Business account for automation
+                and management features.
               </p>
-
             </div>
-          )}
 
-          {/* ============================================ */}
-          {/* RIGHT COLUMN: Instagram OAuth (Legacy)      */}
-          {/* ============================================ */}
-          {showInstagramLogin && (
-            <div className="space-y-4 flex flex-col h-full">
+            {/* ============================================ */}
+            {/* Meta Compliance Notice                      */}
+            {/* ============================================ */}
+            <p className="text-gray-400 text-xs text-center leading-relaxed px-2">
+              By continuing, you'll be redirected to Facebook to authorize access to your
+              Instagram Business account. We comply with{' '}
+              <span className="text-blue-400 font-medium">
+                Meta Platform Terms (February 2025)
+              </span>.
+            </p>
+          </div>
+        )}
 
-              {/* ============================================ */}
-              {/* Legacy Method Notice                        */}
-              {/* ============================================ */}
-              <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-4">
-                <div className="flex items-center gap-3">
-                  <Instagram className="w-5 h-5 text-pink-400 flex-shrink-0" />
-                  <div>
-                    <h3 className="text-gray-300 font-semibold text-sm">
-                      Legacy Authentication
-                    </h3>
-                    <p className="text-gray-400 text-xs mt-1">
-                      Direct Instagram OAuth (awaiting Meta approval)
-                    </p>
-                  </div>
-                </div>
-              </div>
+        {/* ============================================ */}
+        {/* Divider - Only shown in 'both' mode        */}
+        {/* ============================================ */}
+        {showFacebookLogin && showInstagramLogin && (
+          <div className="relative my-8">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-700"></div>
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-4 bg-gray-900 text-gray-400 font-medium">OR</span>
+            </div>
+          </div>
+        )}
 
-              {/* ============================================ */}
-              {/* Instagram Login Button                      */}
-              {/* ============================================ */}
-              <button
-                onClick={handleInstagramLogin}
-                disabled={!consentGiven || isInstagramLoading || isAnyAuthLoading}
-                className={`
-                  w-full py-4 rounded-lg font-semibold text-base
-                  min-h-[80px]
-                  transition-all duration-200 transform
-                  flex items-center justify-center gap-3
-                  ${!consentGiven || isInstagramLoading || isAnyAuthLoading
-                    ? 'bg-gray-600 cursor-not-allowed opacity-50'
-                    : 'bg-gradient-to-r from-pink-500 to-orange-500 hover:from-pink-600 hover:to-orange-600 text-white hover:scale-[1.02] active:scale-[0.98]'
-                  }
-                  shadow-lg hover:shadow-xl
-                  focus:outline-none focus:ring-4 focus:ring-pink-500/50
-                `}
-                aria-label="Continue with Instagram (Legacy Method)"
-                data-testid="instagram-login-button"
-              >
-                {isInstagramLoading ? (
-                  <span className="flex items-center space-x-3">
-                    <svg
-                      className="animate-spin h-5 w-5 text-white"
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      />
-                    </svg>
-                    <span>Connecting to Instagram...</span>
-                  </span>
-                ) : (
-                  <>
-                    <Instagram className="w-5 h-5" />
-                    <span>Continue with Instagram</span>
-                  </>
-                )}
-              </button>
+        {/* ============================================ */}
+        {/* LEGACY: Instagram OAuth (Preserved)         */}
+        {/* DO NOT MODIFY EXISTING BUTTON CODE          */}
+        {/* ============================================ */}
+        {showInstagramLogin && (
+          <div className="space-y-6">
+            {/* Optional: Label for clarity in 'both' mode */}
+            {showFacebookLogin && (
+              <p className="text-gray-500 text-xs text-center uppercase tracking-wider mb-4">
+                Legacy Authentication Method
+              </p>
+            )}
 
-              {/* ============================================ */}
-              {/* Instagram Information Box                   */}
-              {/* ============================================ */}
-              <div className="bg-gray-700/30 border border-gray-600 rounded-lg p-4 flex-grow">
-                <h3 className="text-gray-300 font-semibold text-sm mb-2 flex items-center">
-                  <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+            <button
+              onClick={handleInstagramLogin}
+              disabled={!consentGiven || isInstagramLoading}
+              className={`w-full py-4 rounded-lg font-semibold transition-all duration-200 transform flex items-center justify-center ${
+                !consentGiven || isInstagramLoading
+                  ? 'bg-gray-600 cursor-not-allowed opacity-50'
+                  : 'bg-gradient-to-r from-pink-500 to-orange-500 hover:from-pink-600 hover:to-orange-600 text-white hover:scale-105'
+              }`}
+            >
+              {isInstagramLoading ? (
+                <span className="flex items-center">
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                  About This Method
-                </h3>
-                <p className="text-gray-400 text-xs leading-relaxed mb-3">
-                  Direct Instagram OAuth integration. Currently awaiting Meta API approval
-                  for full Business features.
-                </p>
-                <div className="bg-blue-500/10 border border-blue-500/30 rounded p-3">
-                  <p className="text-blue-200 text-xs">
-                    <strong className="text-blue-300">Status:</strong> Limited functionality
-                    until Meta approval is complete. Full automation capabilities will be
-                    available once approved.
+                  Connecting to Instagram...
+                </span>
+              ) : (
+                <>
+                  <Instagram className="w-5 h-5 mr-2" />
+                  Continue with Instagram
+                </>
+              )}
+            </button>
+
+            {/* OAuth Status Message */}
+            <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+              <div className="flex items-start">
+                <div className="flex-1">
+                  <h3 className="text-blue-300 font-medium mb-1">Instagram Integration Status</h3>
+                  <p className="text-blue-200 text-sm">
+                    We're currently awaiting Meta API approval for Instagram Business features.
+                    Full automation capabilities will be available once approved.
                   </p>
                 </div>
               </div>
-
-              {/* ============================================ */}
-              {/* Security Features                           */}
-              {/* ============================================ */}
-              <div className="space-y-2 pt-3 border-t border-gray-700">
-                <div className="flex items-center text-gray-400 text-xs">
-                  <Lock className="w-3 h-3 mr-2 flex-shrink-0" />
-                  <span>OAuth 2.0 secure authentication</span>
-                </div>
-                <div className="flex items-center text-gray-400 text-xs">
-                  <Lock className="w-3 h-3 mr-2 flex-shrink-0" />
-                  <span>End-to-end encryption</span>
-                </div>
-                <div className="flex items-center text-gray-400 text-xs">
-                  <Lock className="w-3 h-3 mr-2 flex-shrink-0" />
-                  <span>Cloudflare security layer</span>
-                </div>
-              </div>
-
             </div>
-          )}
 
-        </div>
+            {/* Security Features */}
+            <div className="space-y-3 pt-4 border-t border-white/10">
+              <div className="flex items-center text-gray-400 text-sm">
+                <Lock className="w-4 h-4 mr-2" />
+                <span>Secure authentication via Instagram OAuth 2.0</span>
+              </div>
+              <div className="flex items-center text-gray-400 text-sm">
+                <Lock className="w-4 h-4 mr-2" />
+                <span>Your data is encrypted and protected</span>
+              </div>
+              <div className="flex items-center text-gray-400 text-sm">
+                <Lock className="w-4 h-4 mr-2" />
+                <span>Powered by Cloudflare security</span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Hidden Admin Portal Link */}
         {/* Subtle footer with hidden admin access */}
