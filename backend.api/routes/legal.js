@@ -411,7 +411,11 @@ router.post('/data-deletion', rateLimitDeletionRequests, async (req, res) => {
       throw new Error('Database connection not available');
     }
 
-    // Store deletion request
+    // Extract request metadata for audit trail
+    const userAgent = req.headers['user-agent'] || 'unknown';
+    const ipAddress = req.ip || req.socket?.remoteAddress || 'unknown';
+
+    // Store deletion request with enhanced tracking fields
     const { data: deletionRequest, error: insertError } = await supabaseAdmin
       .from('data_deletion_requests')
       .insert({
@@ -420,7 +424,13 @@ router.post('/data-deletion', rateLimitDeletionRequests, async (req, res) => {
         status: 'pending',
         requested_at: new Date().toISOString(),
         payload: payload,
-        status_url: statusUrl
+        status_url: statusUrl,
+        // Enhanced tracking fields
+        ip_address: ipAddress,
+        user_agent: userAgent,
+        created_by: 'meta_webhook',
+        retry_count: 0,
+        max_retries: parseInt(process.env.DELETION_MAX_RETRIES || '3', 10)
       })
       .select()
       .single();
@@ -431,12 +441,22 @@ router.post('/data-deletion', rateLimitDeletionRequests, async (req, res) => {
     }
 
     console.log('✅ Deletion request stored in database:', deletionRequest.id);
+    console.log('📝 Request metadata:', { ip: ipAddress, userAgent: userAgent.substring(0, 50) });
 
     // ===== STEP 8: Initiate asynchronous data deletion =====
     // Process deletion in background to avoid timeout
     setImmediate(async () => {
       try {
         console.log(`🗑️ Starting data deletion for Meta user: ${metaUserId}`);
+
+        // Update status to processing
+        await supabaseAdmin
+          .from('data_deletion_requests')
+          .update({
+            status: 'processing',
+            processing_started_at: new Date().toISOString()
+          })
+          .eq('id', deletionRequest.id);
 
         // Find internal user_id from Meta user_id
         const { data: instagramAccount, error: findError } = await supabaseAdmin
@@ -446,15 +466,17 @@ router.post('/data-deletion', rateLimitDeletionRequests, async (req, res) => {
           .single();
 
         if (findError || !instagramAccount) {
-          console.log(`⚠️ No internal user found for Meta user ${metaUserId} - marking as completed (Meta requirement)`);
+          console.log(`⚠️ No internal user found for Meta user ${metaUserId} - marking as no_account (Meta requirement)`);
 
           // Per Meta requirements: always return success even if user doesn't exist
           await supabaseAdmin
             .from('data_deletion_requests')
             .update({
-              status: 'completed',
+              status: 'no_account',
               completed_at: new Date().toISOString(),
-              error_message: 'User not found in system'
+              processed_at: new Date().toISOString(),
+              error_message: 'No account found in system for this Meta user ID',
+              error_code: 'USER_NOT_FOUND'
             })
             .eq('id', deletionRequest.id);
 
@@ -472,39 +494,49 @@ router.post('/data-deletion', rateLimitDeletionRequests, async (req, res) => {
           console.log('✅ User data deletion completed successfully');
           console.log('Deletion results:', deletionResult.results);
 
-          // Update request status
-          await supabaseAdmin
-            .from('data_deletion_requests')
-            .update({
-              status: 'completed',
-              completed_at: new Date().toISOString()
-            })
-            .eq('id', deletionRequest.id);
+          // Extract successfully deleted tables
+          const deletedTables = deletionResult.results
+            .filter(r => r.success)
+            .map(r => r.table);
+
+          // Update request status using database function
+          await supabaseAdmin.rpc('complete_deletion_request', {
+            p_confirmation_code: confirmationCode,
+            p_deleted_data_types: JSON.stringify(deletedTables)
+          });
+
+          console.log(`✅ Marked deletion as completed. Deleted data types: ${deletedTables.join(', ')}`);
         } else {
           console.error('❌ User data deletion failed:', deletionResult.error);
 
-          // Update with error
-          await supabaseAdmin
-            .from('data_deletion_requests')
-            .update({
-              status: 'failed',
-              completed_at: new Date().toISOString(),
-              error_message: deletionResult.error
-            })
-            .eq('id', deletionRequest.id);
+          // Update with error using database function (will handle retry logic)
+          await supabaseAdmin.rpc('fail_deletion_request', {
+            p_confirmation_code: confirmationCode,
+            p_error_message: deletionResult.error || 'Unknown deletion error',
+            p_error_code: 'DELETION_FAILED'
+          });
+
+          console.log('⏰ Deletion marked as failed - retry logic will be handled by database triggers');
         }
       } catch (deletionError) {
         console.error('❌ Error during data deletion:', deletionError);
 
-        // Update with error
-        await supabaseAdmin
-          .from('data_deletion_requests')
-          .update({
-            status: 'failed',
-            completed_at: new Date().toISOString(),
-            error_message: deletionError.message
-          })
-          .eq('id', deletionRequest.id);
+        // Update with error using database function (will handle retry logic)
+        try {
+          await supabaseAdmin.rpc('fail_deletion_request', {
+            p_confirmation_code: confirmationCode,
+            p_error_message: deletionError.message || 'Unexpected error during deletion',
+            p_error_code: 'SYSTEM_ERROR'
+          });
+        } catch (updateError) {
+          console.error('❌ Failed to update deletion status:', updateError);
+          // Log for manual follow-up
+          console.error('⚠️ CRITICAL: Manual intervention required for deletion:', {
+            confirmation_code: confirmationCode,
+            meta_user_id: metaUserId,
+            error: deletionError.message
+          });
+        }
       }
     });
 
@@ -990,6 +1022,250 @@ router.get('/data-deletion-instructions', (req, res) => {
   });
 });
 
+// =====================================
+// RETRY PROCESSING ENDPOINT
+// =====================================
+// Processes pending and failed deletion requests with retry logic
+// Should be called periodically via cron job or monitoring system
+
+router.post('/process-deletions', async (req, res) => {
+  const authHeader = req.headers.authorization;
+
+  // Simple API key authentication for cron jobs
+  const expectedKey = process.env.CRON_API_KEY || process.env.SUPABASE_SERVICE_KEY;
+  if (!authHeader || authHeader !== `Bearer ${expectedKey}`) {
+    return res.status(401).json({
+      error: 'Unauthorized',
+      message: 'Valid API key required'
+    });
+  }
+
+  try {
+    const { getSupabaseAdmin } = require('../config/supabase');
+    const supabaseAdmin = getSupabaseAdmin();
+
+    if (!supabaseAdmin) {
+      throw new Error('Database connection not available');
+    }
+
+    const limit = parseInt(req.query.limit || '10', 10);
+
+    // Get pending deletion requests using database function
+    const { data: pendingRequests, error: fetchError } = await supabaseAdmin
+      .rpc('get_pending_deletion_requests', { p_limit: limit });
+
+    if (fetchError) {
+      throw fetchError;
+    }
+
+    if (!pendingRequests || pendingRequests.length === 0) {
+      return res.json({
+        status: 'success',
+        message: 'No pending deletion requests',
+        processed: 0
+      });
+    }
+
+    console.log(`📋 Processing ${pendingRequests.length} deletion requests`);
+
+    const results = [];
+
+    // Process each deletion request
+    for (const request of pendingRequests) {
+      try {
+        console.log(`🔄 Processing deletion: ${request.confirmation_code} (retry ${request.retry_count})`);
+
+        // Find internal user_id from Meta user_id
+        const { data: instagramAccount } = await supabaseAdmin
+          .from('instagram_business_accounts')
+          .select('user_id')
+          .eq('instagram_user_id', request.meta_user_id)
+          .single();
+
+        if (!instagramAccount) {
+          // Mark as no_account
+          await supabaseAdmin
+            .from('data_deletion_requests')
+            .update({
+              status: 'no_account',
+              completed_at: new Date().toISOString(),
+              processed_at: new Date().toISOString(),
+              error_code: 'USER_NOT_FOUND'
+            })
+            .eq('confirmation_code', request.confirmation_code);
+
+          results.push({
+            confirmation_code: request.confirmation_code,
+            status: 'no_account',
+            message: 'User not found'
+          });
+          continue;
+        }
+
+        // Execute deletion
+        const { supabaseHelpers } = require('../config/supabase');
+        const deletionResult = await supabaseHelpers.deleteUserData(instagramAccount.user_id);
+
+        if (deletionResult.success) {
+          const deletedTables = deletionResult.results
+            .filter(r => r.success)
+            .map(r => r.table);
+
+          await supabaseAdmin.rpc('complete_deletion_request', {
+            p_confirmation_code: request.confirmation_code,
+            p_deleted_data_types: JSON.stringify(deletedTables)
+          });
+
+          results.push({
+            confirmation_code: request.confirmation_code,
+            status: 'completed',
+            deleted_tables: deletedTables.length
+          });
+        } else {
+          await supabaseAdmin.rpc('fail_deletion_request', {
+            p_confirmation_code: request.confirmation_code,
+            p_error_message: deletionResult.error,
+            p_error_code: 'DELETION_FAILED'
+          });
+
+          results.push({
+            confirmation_code: request.confirmation_code,
+            status: 'failed',
+            error: deletionResult.error
+          });
+        }
+      } catch (error) {
+        console.error(`❌ Error processing ${request.confirmation_code}:`, error);
+        results.push({
+          confirmation_code: request.confirmation_code,
+          status: 'error',
+          error: error.message
+        });
+      }
+    }
+
+    console.log(`✅ Processed ${results.length} deletion requests`);
+
+    res.json({
+      status: 'success',
+      processed: results.length,
+      results: results
+    });
+  } catch (error) {
+    console.error('❌ Error in process-deletions:', error);
+    res.status(500).json({
+      error: 'Internal server error',
+      message: error.message
+    });
+  }
+});
+
+// =====================================
+// ADMIN MONITORING ENDPOINTS
+// =====================================
+
+// Get all deletion requests (admin only)
+router.get('/admin/deletion-requests', async (req, res) => {
+  try {
+    // TODO: Add proper admin authentication
+    // For now, require API key
+    const authHeader = req.headers.authorization;
+    const expectedKey = process.env.ADMIN_API_KEY || process.env.SUPABASE_SERVICE_KEY;
+
+    if (!authHeader || authHeader !== `Bearer ${expectedKey}`) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Admin access required'
+      });
+    }
+
+    const { getSupabaseAdmin } = require('../config/supabase');
+    const supabaseAdmin = getSupabaseAdmin();
+
+    if (!supabaseAdmin) {
+      throw new Error('Database connection not available');
+    }
+
+    const { status, limit = 100, offset = 0 } = req.query;
+
+    let query = supabaseAdmin
+      .from('data_deletion_requests')
+      .select('*', { count: 'exact' })
+      .order('requested_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (status) {
+      query = query.eq('status', status);
+    }
+
+    const { data: requests, error, count } = await query;
+
+    if (error) {
+      throw error;
+    }
+
+    res.json({
+      success: true,
+      data: requests,
+      pagination: {
+        total: count,
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+        has_more: count > (parseInt(offset) + parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error fetching deletion requests:', error);
+    res.status(500).json({
+      error: 'Internal server error',
+      message: error.message
+    });
+  }
+});
+
+// Get deletion statistics (admin only)
+router.get('/admin/deletion-stats', async (req, res) => {
+  try {
+    // TODO: Add proper admin authentication
+    const authHeader = req.headers.authorization;
+    const expectedKey = process.env.ADMIN_API_KEY || process.env.SUPABASE_SERVICE_KEY;
+
+    if (!authHeader || authHeader !== `Bearer ${expectedKey}`) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Admin access required'
+      });
+    }
+
+    const { getSupabaseAdmin } = require('../config/supabase');
+    const supabaseAdmin = getSupabaseAdmin();
+
+    if (!supabaseAdmin) {
+      throw new Error('Database connection not available');
+    }
+
+    // Use database function to get statistics
+    const { data: stats, error } = await supabaseAdmin
+      .rpc('get_deletion_statistics');
+
+    if (error) {
+      throw error;
+    }
+
+    res.json({
+      success: true,
+      statistics: stats && stats.length > 0 ? stats[0] : {},
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Error fetching deletion statistics:', error);
+    res.status(500).json({
+      error: 'Internal server error',
+      message: error.message
+    });
+  }
+});
+
 // Health check for legal routes
 router.get('/health', (req, res) => {
   res.json({
@@ -998,7 +1274,11 @@ router.get('/health', (req, res) => {
       '/legal/privacy-policy',
       '/legal/terms-of-service',
       '/legal/data-deletion',
-      '/legal/data-deletion-instructions'
+      '/legal/data-deletion-instructions',
+      '/legal/deletion-status',
+      '/legal/process-deletions',
+      '/legal/admin/deletion-requests',
+      '/legal/admin/deletion-stats'
     ],
     meta_compliance: true,
     last_updated: LEGAL_CONTENT.privacyPolicy.lastUpdated

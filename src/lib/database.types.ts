@@ -113,6 +113,13 @@ export type Database = {
             foreignKeyName: "api_usage_business_account_id_fkey"
             columns: ["business_account_id"]
             isOneToOne: false
+            referencedRelation: "active_dm_summary"
+            referencedColumns: ["business_account_id"]
+          },
+          {
+            foreignKeyName: "api_usage_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
             referencedRelation: "instagram_business_accounts"
             referencedColumns: ["id"]
           },
@@ -126,7 +133,7 @@ export type Database = {
           error_message: string | null
           event_type: string
           id: string
-          ip_address: unknown | null
+          ip_address: unknown
           resource_id: string | null
           resource_type: string | null
           success: boolean | null
@@ -140,7 +147,7 @@ export type Database = {
           error_message?: string | null
           event_type: string
           id?: string
-          ip_address?: unknown | null
+          ip_address?: unknown
           resource_id?: string | null
           resource_type?: string | null
           success?: boolean | null
@@ -154,7 +161,7 @@ export type Database = {
           error_message?: string | null
           event_type?: string
           id?: string
-          ip_address?: unknown | null
+          ip_address?: unknown
           resource_id?: string | null
           resource_type?: string | null
           success?: boolean | null
@@ -259,6 +266,13 @@ export type Database = {
             foreignKeyName: "automation_workflows_business_account_id_fkey"
             columns: ["business_account_id"]
             isOneToOne: false
+            referencedRelation: "active_dm_summary"
+            referencedColumns: ["business_account_id"]
+          },
+          {
+            foreignKeyName: "automation_workflows_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
             referencedRelation: "instagram_business_accounts"
             referencedColumns: ["id"]
           },
@@ -330,6 +344,13 @@ export type Database = {
             foreignKeyName: "daily_analytics_business_account_id_fkey"
             columns: ["business_account_id"]
             isOneToOne: false
+            referencedRelation: "active_dm_summary"
+            referencedColumns: ["business_account_id"]
+          },
+          {
+            foreignKeyName: "daily_analytics_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
             referencedRelation: "instagram_business_accounts"
             referencedColumns: ["id"]
           },
@@ -339,35 +360,80 @@ export type Database = {
         Row: {
           completed_at: string | null
           confirmation_code: string
+          created_at: string
+          created_by: string | null
+          deleted_data_types: Json | null
+          deletion_verified: boolean | null
+          error_code: string | null
           error_message: string | null
           id: string
+          ip_address: unknown
+          max_retries: number
           meta_user_id: string
+          next_retry_at: string | null
           payload: Json | null
+          processed_at: string | null
+          processing_started_at: string | null
           requested_at: string
+          retry_count: number
           status: string
           status_url: string | null
+          updated_at: string
+          user_agent: string | null
+          verified_at: string | null
+          verified_by: string | null
         }
         Insert: {
           completed_at?: string | null
           confirmation_code: string
+          created_at?: string
+          created_by?: string | null
+          deleted_data_types?: Json | null
+          deletion_verified?: boolean | null
+          error_code?: string | null
           error_message?: string | null
           id?: string
+          ip_address?: unknown
+          max_retries?: number
           meta_user_id: string
+          next_retry_at?: string | null
           payload?: Json | null
+          processed_at?: string | null
+          processing_started_at?: string | null
           requested_at?: string
+          retry_count?: number
           status?: string
           status_url?: string | null
+          updated_at?: string
+          user_agent?: string | null
+          verified_at?: string | null
+          verified_by?: string | null
         }
         Update: {
           completed_at?: string | null
           confirmation_code?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_data_types?: Json | null
+          deletion_verified?: boolean | null
+          error_code?: string | null
           error_message?: string | null
           id?: string
+          ip_address?: unknown
+          max_retries?: number
           meta_user_id?: string
+          next_retry_at?: string | null
           payload?: Json | null
+          processed_at?: string | null
+          processing_started_at?: string | null
           requested_at?: string
+          retry_count?: number
           status?: string
           status_url?: string | null
+          updated_at?: string
+          user_agent?: string | null
+          verified_at?: string | null
+          verified_by?: string | null
         }
         Relationships: []
       }
@@ -533,6 +599,13 @@ export type Database = {
             foreignKeyName: "instagram_comments_business_account_id_fkey"
             columns: ["business_account_id"]
             isOneToOne: false
+            referencedRelation: "active_dm_summary"
+            referencedColumns: ["business_account_id"]
+          },
+          {
+            foreignKeyName: "instagram_comments_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
             referencedRelation: "instagram_business_accounts"
             referencedColumns: ["id"]
           },
@@ -608,8 +681,202 @@ export type Database = {
             foreignKeyName: "instagram_credentials_business_account_id_fkey"
             columns: ["business_account_id"]
             isOneToOne: false
+            referencedRelation: "active_dm_summary"
+            referencedColumns: ["business_account_id"]
+          },
+          {
+            foreignKeyName: "instagram_credentials_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
             referencedRelation: "instagram_business_accounts"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      instagram_dm_conversations: {
+        Row: {
+          ai_assistant_enabled: boolean | null
+          auto_reply_enabled: boolean | null
+          business_account_id: string
+          conversation_status: string
+          created_at: string
+          customer_instagram_id: string
+          customer_name: string | null
+          customer_profile_pic_url: string | null
+          customer_user_id: string | null
+          customer_username: string | null
+          first_message_at: string | null
+          id: string
+          instagram_thread_id: string
+          last_message_at: string | null
+          last_message_preview: string | null
+          last_user_message_at: string | null
+          message_count: number
+          unread_count: number
+          updated_at: string
+          window_expires_at: string | null
+          within_window: boolean
+        }
+        Insert: {
+          ai_assistant_enabled?: boolean | null
+          auto_reply_enabled?: boolean | null
+          business_account_id: string
+          conversation_status?: string
+          created_at?: string
+          customer_instagram_id: string
+          customer_name?: string | null
+          customer_profile_pic_url?: string | null
+          customer_user_id?: string | null
+          customer_username?: string | null
+          first_message_at?: string | null
+          id?: string
+          instagram_thread_id: string
+          last_message_at?: string | null
+          last_message_preview?: string | null
+          last_user_message_at?: string | null
+          message_count?: number
+          unread_count?: number
+          updated_at?: string
+          window_expires_at?: string | null
+          within_window?: boolean
+        }
+        Update: {
+          ai_assistant_enabled?: boolean | null
+          auto_reply_enabled?: boolean | null
+          business_account_id?: string
+          conversation_status?: string
+          created_at?: string
+          customer_instagram_id?: string
+          customer_name?: string | null
+          customer_profile_pic_url?: string | null
+          customer_user_id?: string | null
+          customer_username?: string | null
+          first_message_at?: string | null
+          id?: string
+          instagram_thread_id?: string
+          last_message_at?: string | null
+          last_message_preview?: string | null
+          last_user_message_at?: string | null
+          message_count?: number
+          unread_count?: number
+          updated_at?: string
+          window_expires_at?: string | null
+          within_window?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "instagram_dm_conversations_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
+            referencedRelation: "active_dm_summary"
+            referencedColumns: ["business_account_id"]
+          },
+          {
+            foreignKeyName: "instagram_dm_conversations_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
+            referencedRelation: "instagram_business_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "instagram_dm_conversations_customer_user_id_fkey"
+            columns: ["customer_user_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      instagram_dm_messages: {
+        Row: {
+          ai_generated: boolean | null
+          automation_workflow_id: string | null
+          conversation_id: string
+          created_at: string
+          delivered_at: string | null
+          error_code: string | null
+          error_message: string | null
+          id: string
+          instagram_message_id: string
+          is_from_business: boolean
+          is_read: boolean | null
+          media_type: string | null
+          media_url: string | null
+          message_text: string | null
+          message_type: string
+          read_at: string | null
+          send_status: string
+          sender_instagram_id: string
+          sender_username: string | null
+          sent_at: string
+          sent_by_user_id: string | null
+          updated_at: string
+          was_automated: boolean | null
+        }
+        Insert: {
+          ai_generated?: boolean | null
+          automation_workflow_id?: string | null
+          conversation_id: string
+          created_at?: string
+          delivered_at?: string | null
+          error_code?: string | null
+          error_message?: string | null
+          id?: string
+          instagram_message_id: string
+          is_from_business: boolean
+          is_read?: boolean | null
+          media_type?: string | null
+          media_url?: string | null
+          message_text?: string | null
+          message_type?: string
+          read_at?: string | null
+          send_status?: string
+          sender_instagram_id: string
+          sender_username?: string | null
+          sent_at: string
+          sent_by_user_id?: string | null
+          updated_at?: string
+          was_automated?: boolean | null
+        }
+        Update: {
+          ai_generated?: boolean | null
+          automation_workflow_id?: string | null
+          conversation_id?: string
+          created_at?: string
+          delivered_at?: string | null
+          error_code?: string | null
+          error_message?: string | null
+          id?: string
+          instagram_message_id?: string
+          is_from_business?: boolean
+          is_read?: boolean | null
+          media_type?: string | null
+          media_url?: string | null
+          message_text?: string | null
+          message_type?: string
+          read_at?: string | null
+          send_status?: string
+          sender_instagram_id?: string
+          sender_username?: string | null
+          sent_at?: string
+          sent_by_user_id?: string | null
+          updated_at?: string
+          was_automated?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "instagram_dm_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "instagram_dm_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "instagram_dm_messages_sent_by_user_id_fkey"
+            columns: ["sent_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["user_id"]
           },
         ]
       }
@@ -682,6 +949,13 @@ export type Database = {
             foreignKeyName: "instagram_media_business_account_id_fkey"
             columns: ["business_account_id"]
             isOneToOne: false
+            referencedRelation: "active_dm_summary"
+            referencedColumns: ["business_account_id"]
+          },
+          {
+            foreignKeyName: "instagram_media_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
             referencedRelation: "instagram_business_accounts"
             referencedColumns: ["id"]
           },
@@ -743,34 +1017,64 @@ export type Database = {
       }
       user_consents: {
         Row: {
+          browser_language: string | null
           consent_given: boolean
+          consent_method: string | null
+          consent_text: string | null
           consent_type: string
           consented_at: string
-          id: string
-          ip_address: unknown | null
+          created_at: string
+          id: string | null
+          ip_address: unknown
           privacy_policy_version: string | null
+          revocation_reason: string | null
+          revoked: boolean
+          revoked_at: string | null
+          revoked_by: string | null
           terms_version: string | null
+          updated_at: string
           user_agent: string | null
+          user_id: string | null
         }
         Insert: {
+          browser_language?: string | null
           consent_given: boolean
+          consent_method?: string | null
+          consent_text?: string | null
           consent_type: string
           consented_at?: string
-          id?: string
-          ip_address?: unknown | null
+          created_at?: string
+          id?: string | null
+          ip_address?: unknown
           privacy_policy_version?: string | null
+          revocation_reason?: string | null
+          revoked?: boolean
+          revoked_at?: string | null
+          revoked_by?: string | null
           terms_version?: string | null
+          updated_at?: string
           user_agent?: string | null
+          user_id?: string | null
         }
         Update: {
+          browser_language?: string | null
           consent_given?: boolean
+          consent_method?: string | null
+          consent_text?: string | null
           consent_type?: string
           consented_at?: string
-          id?: string
-          ip_address?: unknown | null
+          created_at?: string
+          id?: string | null
+          ip_address?: unknown
           privacy_policy_version?: string | null
+          revocation_reason?: string | null
+          revoked?: boolean
+          revoked_at?: string | null
+          revoked_by?: string | null
           terms_version?: string | null
+          updated_at?: string
           user_agent?: string | null
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -922,15 +1226,212 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      active_consents_summary: {
+        Row: {
+          consent_type: string | null
+          consents_denied: number | null
+          consents_given: number | null
+          privacy_policy_version: string | null
+          terms_version: string | null
+          total_consents: number | null
+          unique_users: number | null
+        }
+        Relationships: []
+      }
+      active_dm_summary: {
+        Row: {
+          active_windows: number | null
+          business_account_id: string | null
+          business_username: string | null
+          most_recent_message: string | null
+          total_conversations: number | null
+          total_messages: number | null
+          total_unread: number | null
+          unread_conversations: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
+      can_send_message: {
+        Args: { p_conversation_id: string }
+        Returns: {
+          can_send: boolean
+          expires_at: string
+          hours_remaining: number
+          minutes_remaining: number
+          reason: string
+          within_window: boolean
+        }[]
+      }
+      check_expired_windows: {
+        Args: never
+        Returns: {
+          conversation_ids: string[]
+          expired_count: number
+        }[]
+      }
+      complete_deletion_request: {
+        Args: { p_confirmation_code: string; p_deleted_data_types?: Json }
+        Returns: {
+          message: string
+          success: boolean
+        }[]
+      }
       decrypt_instagram_token: {
         Args: { encrypted_token: string }
         Returns: string
       }
-      encrypt_instagram_token: {
-        Args: { token: string }
+      encrypt_instagram_token: { Args: { token: string }; Returns: string }
+      fail_deletion_request: {
+        Args: {
+          p_confirmation_code: string
+          p_error_code?: string
+          p_error_message: string
+        }
+        Returns: {
+          message: string
+          next_retry_at: string
+          success: boolean
+          will_retry: boolean
+        }[]
+      }
+      get_active_consent: {
+        Args: { p_consent_type: string; p_user_id: string }
+        Returns: boolean
+      }
+      get_active_window_conversations: {
+        Args: { p_business_account_id: string; p_limit?: number }
+        Returns: {
+          conversation_id: string
+          customer_username: string
+          hours_remaining: number
+          last_message_at: string
+          unread_count: number
+        }[]
+      }
+      get_consent_audit_report: {
+        Args: { p_end_date: string; p_start_date: string }
+        Returns: {
+          consent_denied_count: number
+          consent_given_count: number
+          consent_type: string
+          revoked_count: number
+          unique_users: number
+        }[]
+      }
+      get_consent_history: {
+        Args: { p_consent_type?: string; p_user_id: string }
+        Returns: {
+          consent_given: boolean
+          consent_text: string
+          consent_type: string
+          consented_at: string
+          id: string
+          ip_address: unknown
+          privacy_policy_version: string
+          revoked: boolean
+          revoked_at: string
+          terms_version: string
+          user_agent: string
+        }[]
+      }
+      get_conversation_messages: {
+        Args: { p_conversation_id: string; p_limit?: number; p_offset?: number }
+        Returns: {
+          is_from_business: boolean
+          is_read: boolean
+          message_id: string
+          message_text: string
+          message_type: string
+          sent_at: string
+        }[]
+      }
+      get_conversation_with_window: {
+        Args: { p_conversation_id: string }
+        Returns: {
+          conversation_id: string
+          customer_username: string
+          hours_until_expiry: number
+          instagram_thread_id: string
+          last_message_at: string
+          message_count: number
+          unread_count: number
+          window_expires_at: string
+          within_window: boolean
+        }[]
+      }
+      get_deletion_statistics: {
+        Args: never
+        Returns: {
+          avg_completion_time_minutes: number
+          completed_requests: number
+          failed_requests: number
+          oldest_pending_age_hours: number
+          pending_requests: number
+          processing_requests: number
+          retry_queue_size: number
+          total_requests: number
+        }[]
+      }
+      get_pending_deletion_requests: {
+        Args: { p_limit?: number }
+        Returns: {
+          confirmation_code: string
+          error_message: string
+          id: string
+          meta_user_id: string
+          requested_at: string
+          retry_count: number
+          status: string
+        }[]
+      }
+      get_window_statistics: {
+        Args: { p_business_account_id: string }
+        Returns: {
+          active_windows: number
+          avg_hours_remaining: number
+          expired_windows: number
+          expiring_soon: number
+          no_window: number
+          total_conversations: number
+        }[]
+      }
+      has_required_consents: {
+        Args: { p_user_id: string }
+        Returns: {
+          has_all_required: boolean
+          missing_consents: string[]
+        }[]
+      }
+      record_consent: {
+        Args: {
+          p_browser_language?: string
+          p_consent_given: boolean
+          p_consent_method?: string
+          p_consent_text?: string
+          p_consent_type: string
+          p_ip_address: unknown
+          p_privacy_policy_version?: string
+          p_terms_version?: string
+          p_user_agent?: string
+          p_user_id: string
+        }
+        Returns: string
+      }
+      refresh_dm_summary: { Args: never; Returns: undefined }
+      revoke_consent: {
+        Args: { p_consent_type: string; p_reason?: string; p_user_id: string }
+        Returns: boolean
+      }
+      upsert_conversation: {
+        Args: {
+          p_business_account_id: string
+          p_customer_instagram_id: string
+          p_customer_name?: string
+          p_customer_username?: string
+          p_instagram_thread_id: string
+        }
         Returns: string
       }
     }
