@@ -1,6 +1,6 @@
 // src/App.tsx - Optimized with Lazy Loading
 import React, { lazy } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 // ==========================================
@@ -25,6 +25,11 @@ const ContentManagement = lazy(() => import('./pages/ContentManagement'));
 const Settings = lazy(() => import('./pages/Settings'));
 const EngagementMonitor = lazy(() => import('./pages/EngagementMonitor'));
 
+// Permission Demo Pages - Meta App Review (Phase 3)
+const CommentManagement = lazy(() => import('./pages/CommentManagement'));
+const ContentAnalytics = lazy(() => import('./pages/ContentAnalytics'));
+const DMInbox = lazy(() => import('./pages/DMInbox'));
+
 // Admin pages - only loaded when admin navigates to them
 const AdminLogin = lazy(() => import('./pages/AdminLogin'));
 
@@ -40,40 +45,50 @@ const TestConnection = lazy(() => import('./pages/TestConnection'));
 // ==========================================
 // These are small and stay inline - no need for lazy loading
 
-const Engagement: React.FC = () => (
-  <div className="space-y-8 animate-fade-in">
-    <div className="glass-morphism-card p-6 rounded-2xl">
-      <h1 className="text-4xl font-bold text-white mb-2 tracking-tight">💬 Engagement Hub</h1>
-      <p className="text-gray-300 text-lg">Monitor and respond to comments and messages</p>
+const Engagement: React.FC = () => {
+  const navigate = useNavigate();
+
+  return (
+    <div className="space-y-8 animate-fade-in">
+      <div className="glass-morphism-card p-6 rounded-2xl">
+        <h1 className="text-4xl font-bold text-white mb-2 tracking-tight">💬 Engagement Hub</h1>
+        <p className="text-gray-300 text-lg">Monitor and respond to comments and messages</p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div
+          onClick={() => navigate('/engagement/comments')}
+          className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-xl p-6 cursor-pointer hover:border-yellow-500/50 hover:bg-gray-800/70 transition-all"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-white">Comments</h3>
+            <span className="px-3 py-1 bg-yellow-500/20 text-yellow-400 rounded-full text-sm">12 new</span>
+          </div>
+          <p className="text-gray-400">Click to manage Instagram comments →</p>
+        </div>
+
+        <div
+          onClick={() => navigate('/engagement/messages')}
+          className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-xl p-6 cursor-pointer hover:border-blue-500/50 hover:bg-gray-800/70 transition-all"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-white">Direct Messages</h3>
+            <span className="px-3 py-1 bg-blue-500/20 text-blue-400 rounded-full text-sm">8 unread</span>
+          </div>
+          <p className="text-gray-400">Click to view DM inbox →</p>
+        </div>
+
+        <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-xl p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-white">Auto Responses</h3>
+            <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm">Active</span>
+          </div>
+          <p className="text-gray-400">N8N workflow integration active</p>
+        </div>
+      </div>
     </div>
-    
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-xl p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-white">Comments</h3>
-          <span className="px-3 py-1 bg-yellow-500/20 text-yellow-400 rounded-full text-sm">12 new</span>
-        </div>
-        <p className="text-gray-400">Real-time comment monitoring coming soon...</p>
-      </div>
-      
-      <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-xl p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-white">Direct Messages</h3>
-          <span className="px-3 py-1 bg-blue-500/20 text-blue-400 rounded-full text-sm">8 unread</span>
-        </div>
-        <p className="text-gray-400">DM management interface coming soon...</p>
-      </div>
-      
-      <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-xl p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-white">Auto Responses</h3>
-          <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm">Active</span>
-        </div>
-        <p className="text-gray-400">N8N workflow integration active</p>
-      </div>
-    </div>
-  </div>
-);
+  );
+};
 
 const Automations: React.FC = () => (
   <div className="space-y-8 animate-fade-in">
@@ -339,11 +354,13 @@ function App() {
               {/* Content Management */}
               <Route path="content" element={<ContentManagement />} />
               <Route path="content/create" element={<CreatePost />} />
-              
-              {/* Engagement */}
+              <Route path="content/analytics" element={<ContentAnalytics />} />
+
+              {/* Engagement Hub */}
               <Route path="engagement" element={<Engagement />} />
+              <Route path="engagement/comments" element={<CommentManagement />} />
+              <Route path="engagement/messages" element={<DMInbox />} />
               <Route path="engagement-monitor" element={<EngagementMonitor />} />
-              <Route path="messages" element={<Navigate to="/engagement" replace />} />
               
               {/* Automations */}
               <Route path="automations" element={<Automations />} />

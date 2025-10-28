@@ -16,6 +16,9 @@ import PerformanceChart from '../components/dashboard/PerformanceChart';
 import AsyncWrapper from '../components/ui/AsyncWrapper';
 import { useToast } from '../hooks/useToast';
 import { useRealtimeUpdates } from '../services/realtimeService';
+import { InstagramProfileCard } from '../components/permissions/InstagramProfile';
+import { useInstagramProfile } from '../hooks/useInstagramProfile';
+import { DemoModeToggle } from '../components/permissions/shared';
 
 // Real-time Test Panel Component
 const RealtimeTestPanel: React.FC = () => {
@@ -98,6 +101,7 @@ const RealtimeTestPanel: React.FC = () => {
 
 const Dashboard: React.FC = () => {
   const { metrics, activities, recentMedia, chartData, isLoading } = useDashboardData();
+  const { profile, isLoading: profileLoading, error: profileError } = useInstagramProfile();
   const toast = useToast();
 
   const handleActivityClick = (activity: any) => {
@@ -131,6 +135,32 @@ const Dashboard: React.FC = () => {
       >
         {() => <DashboardHeader />}
       </AsyncWrapper>
+
+      {/* Demo Mode Toggle */}
+      <DemoModeToggle />
+
+      {/* Instagram Profile Section */}
+      <div className="mb-8">
+        <h2 className="text-2xl font-bold text-white mb-4 flex items-center">
+          Connected Instagram Account
+          <span className="ml-2 text-sm font-normal text-gray-400">
+            (Demonstrates instagram_basic permission)
+          </span>
+        </h2>
+
+        <AsyncWrapper
+          loading={profileLoading}
+          error={profileError ? new Error(profileError) : null}
+          data={profile}
+          skeleton={() => (
+            <div className="glass-morphism-card p-6 rounded-xl animate-pulse">
+              <div className="h-32 bg-white/5 rounded-lg"></div>
+            </div>
+          )}
+        >
+          {(data) => <InstagramProfileCard account={data} />}
+        </AsyncWrapper>
+      </div>
 
       {/* Quick Actions - Gradient cards for main features */}
       <QuickActions />
