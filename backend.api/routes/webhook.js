@@ -4,6 +4,9 @@ const express = require('express');
 const router = express.Router();
 const axios = require('axios');
 
+// ✅ Import webhook signature verification middleware
+const { verifyInstagramWebhookSignature } = require('../middleware/webhook-verification');
+
 // ===== META INSTAGRAM WEBHOOKS (Incoming from Meta) =====
 
 // Webhook verification (Meta will call this)
@@ -28,71 +31,87 @@ router.get('/instagram', (req, res) => {
 });
 
 // Instagram event handler (Meta sends events here)
-router.post('/instagram', async (req, res) => {
+// Middleware will verify signature BEFORE calling the handler function
+router.post('/instagram', verifyInstagramWebhookSignature, async (req, res) => {
+  // ✅ Signature already verified by middleware at this point
+  // If we reach here, the webhook is authentic and came from Instagram
   const body = req.body;
-  console.log('📨 Instagram webhook event:', JSON.stringify(body, null, 2));
-  
-  if (body.object === 'instagram') {
-    // Process each entry
-    for (const entry of body.entry || []) {
-      for (const change of entry.changes || []) {
-        
-        // Route different event types to appropriate N8N workflows
-        switch(change.field) {
-          case 'comments':
-            await forwardToN8N('comment', {
-              webhook_url: process.env.N8N_COMMENT_WEBHOOK,
-              data: {
-                id: change.value.id || `comment_${Date.now()}`,
-                text: change.value.text,
-                from: {
-                  id: change.value.from?.id,
-                  username: change.value.from?.username
-                },
-                post_id: change.value.media?.id,
-                timestamp: new Date().toISOString(),
-                type: 'comment'
-              }
-            });
-            break;
-            
-          case 'mentions':
-            await forwardToN8N('mention', {
-              webhook_url: process.env.N8N_COMMENT_WEBHOOK,
-              data: {
-                id: change.value.id || `mention_${Date.now()}`,
-                text: change.value.text || 'Mentioned in post',
-                from: {
-                  id: change.value.from?.id,
-                  username: change.value.from?.username
-                },
-                post_id: change.value.media?.id,
-                timestamp: new Date().toISOString(),
-                type: 'mention'
-              }
-            });
-            break;
 
-          case 'messages':
-            await forwardToN8N('dm', {
-              webhook_url: process.env.N8N_DM_WEBHOOK,
-              data: {
-                id: change.value.id || `dm_${Date.now()}`,
-                message: change.value.text,
-                from: {
-                  id: change.value.from?.id,
-                  username: change.value.from?.username
-                },
-                timestamp: new Date().toISOString(),
-                type: 'dm'
-              }
-            });
-            break;
+  console.log('📨 Instagram webhook event (verified):', JSON.stringify(body, null, 2));
+  
+  // Validate webhook structure
+  if (body.object === 'instagram') {
+    try {
+      // Process webhook events
+      for (const entry of body.entry || []) {
+        for (const change of entry.changes || []) {
+          const field = change.field;
+          const value = change.value;
+
+          console.log(`   Processing ${field} event:`, JSON.stringify(value, null, 2));
+
+          // Route different event types to appropriate N8N workflows
+          switch(field) {
+            case 'comments':
+              await forwardToN8N('comment', {
+                webhook_url: process.env.N8N_COMMENT_WEBHOOK,
+                data: {
+                  id: change.value.id || `comment_${Date.now()}`,
+                  text: change.value.text,
+                  from: {
+                    id: change.value.from?.id,
+                    username: change.value.from?.username
+                  },
+                  post_id: change.value.media?.id,
+                  timestamp: new Date().toISOString(),
+                  type: 'comment'
+                }
+              });
+              break;
+
+            case 'mentions':
+              await forwardToN8N('mention', {
+                webhook_url: process.env.N8N_COMMENT_WEBHOOK,
+                data: {
+                  id: change.value.id || `mention_${Date.now()}`,
+                  text: change.value.text || 'Mentioned in post',
+                  from: {
+                    id: change.value.from?.id,
+                    username: change.value.from?.username
+                  },
+                  post_id: change.value.media?.id,
+                  timestamp: new Date().toISOString(),
+                  type: 'mention'
+                }
+              });
+              break;
+
+            case 'messages':
+              await forwardToN8N('dm', {
+                webhook_url: process.env.N8N_DM_WEBHOOK,
+                data: {
+                  id: change.value.id || `dm_${Date.now()}`,
+                  message: change.value.text,
+                  from: {
+                    id: change.value.from?.id,
+                    username: change.value.from?.username
+                  },
+                  timestamp: new Date().toISOString(),
+                  type: 'dm'
+                }
+              });
+              break;
+          }
         }
       }
+
+      // Acknowledge receipt to Instagram
+      res.status(200).send('EVENT_RECEIVED');
+    } catch (error) {
+      console.error('❌ Error processing webhook event:', error);
+      // Still return 200 to Instagram to prevent retries
+      res.status(200).send('EVENT_RECEIVED');
     }
-    
-    res.status(200).send('EVENT_RECEIVED');
   } else {
     console.log('❌ Invalid webhook object:', body.object);
     res.sendStatus(404);

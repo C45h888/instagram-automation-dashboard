@@ -61,7 +61,16 @@ app.use(cors(corsOptions));
 // MIDDLEWARE CONFIGURATION
 // =============================================================================
 
-app.use(bodyParser.json({ limit: '10mb' }));
+// ✅ CRITICAL: Preserve raw body for webhook signature verification
+// This custom verify function stores the raw Buffer before bodyParser parses it
+app.use(bodyParser.json({
+  limit: '10mb',
+  verify: (req, res, buf, encoding) => {
+    // Store raw buffer on request object for signature verification
+    // This runs BEFORE json parsing, preserving exact bytes
+    req.rawBody = buf;
+  }
+}));
 app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 
 // Request ID middleware
@@ -226,6 +235,15 @@ try {
   console.log('✅ Legal routes loaded');
 } catch (error) {
   console.error('❌ Failed to load legal routes:', error.message);
+}
+
+// ✅ Instagram API routes with rate limiting (Phase 4.2)
+try {
+  const instagramAPIRoutes = require('./routes/instagram-api');
+  app.use('/api/instagram', instagramAPIRoutes);
+  console.log('✅ Instagram API routes loaded (rate limited)');
+} catch (error) {
+  console.error('❌ Failed to load Instagram API routes:', error.message);
 }
 
 try {

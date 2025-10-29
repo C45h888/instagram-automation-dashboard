@@ -30,6 +30,9 @@ CONSENT_SYSTEM_INTEGRATION.md
 002_add_deletion_request_status__SURGICAL.sql
 003_fix_record_consent_ip_required.sql
 004_add_dm_tables.sql
+PHASE-4.2-IMPLEMENTATION-SUMMARY.md
+PHASE-4.3-IMPLEMENTATION-COMPLETE.md
+002_add_user_consents_table_SURGICAL.sql
 
 ## Environment files
 .env.production
