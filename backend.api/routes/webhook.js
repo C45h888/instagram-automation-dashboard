@@ -4,6 +4,18 @@ const express = require('express');
 const router = express.Router();
 const axios = require('axios');
 
+// Import Fixie proxy for static IP (Phase 5)
+const { createProxiedHttpClient } = require('../config/fixie-proxy');
+
+// Create proxied axios instance (singleton)
+const proxiedAxios = createProxiedHttpClient({
+  timeout: 15000,
+  headers: {
+    'User-Agent': 'Instagram-Automation-Backend/2.0',
+    'X-Client-Info': 'N8N-Integration'
+  }
+});
+
 // ✅ Import webhook signature verification middleware
 const { verifyInstagramWebhookSignature } = require('../middleware/webhook-verification');
 
@@ -127,8 +139,8 @@ async function forwardToN8N(eventType, { webhook_url, data }) {
 
   try {
     console.log(`📤 Forwarding ${eventType} to N8N:`, webhook_url);
-    
-    const response = await axios.post(webhook_url, data, {
+
+    const response = await proxiedAxios.post(webhook_url, data, {
       headers: {
         'Content-Type': 'application/json',
         'User-Agent': 'Instagram-Backend-Forwarder/1.0'
@@ -211,33 +223,33 @@ router.post('/n8n-content', (req, res) => {
 // Trigger content scheduling workflow
 router.post('/trigger-content', async (req, res) => {
   const data = req.body;
-  
+
   try {
-    await axios.post(process.env.N8N_CONTENT_WEBHOOK, {
+    await proxiedAxios.post(process.env.N8N_CONTENT_WEBHOOK, {
       trigger_type: 'manual',
       trigger_source: 'frontend',
       data: data,
       timestamp: new Date().toISOString()
     });
-    
+
     res.json({ status: 'triggered', message: 'Content workflow started' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to trigger workflow' });
   }
 });
 
-// Trigger hub coordination workflow  
+// Trigger hub coordination workflow
 router.post('/trigger-hub', async (req, res) => {
   const data = req.body;
-  
+
   try {
-    await axios.post(process.env.N8N_HUB_WEBHOOK, {
+    await proxiedAxios.post(process.env.N8N_HUB_WEBHOOK, {
       trigger_type: data.trigger_type || 'manual',
       trigger_source: 'frontend',
       data: data,
       timestamp: new Date().toISOString()
     });
-    
+
     res.json({ status: 'triggered', message: 'Hub workflow started' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to trigger workflow' });

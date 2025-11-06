@@ -5,14 +5,21 @@ const bodyParser = require('body-parser');
 require('dotenv').config({ path: '../.env' });
 
 // Import optimized Supabase configuration
-const { 
-  initializeSupabase, 
+const {
+  initializeSupabase,
   checkHealth,
   getSupabaseAdmin,
   getConnectionInfo,
   logApiRequest,
   logAudit
 } = require('./config/supabase');
+
+// Import Fixie Static IP Proxy (Phase 5)
+const {
+  initializeFixieProxy,
+  validateProxyConnection,
+  getProxyHealth
+} = require('./config/fixie-proxy');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -128,8 +135,10 @@ app.use((req, res, next) => {
 // HEALTH CHECK ENDPOINTS - CRITICAL FOR MONITORING
 // =============================================================================
 
-// Basic health check (no database required)
+// Basic health check with proxy status (Phase 5)
 app.get('/health', (req, res) => {
+  const proxyHealth = getProxyHealth();
+
   const health = {
     status: 'healthy',
     service: 'instagram-automation-backend',
@@ -146,9 +155,22 @@ app.get('/health', (req, res) => {
         total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
         unit: 'MB'
       }
+    },
+    proxy: {
+      enabled: proxyHealth.enabled,
+      initialized: proxyHealth.initialized,
+      httpAgent: proxyHealth.httpAgent,
+      socksAgent: proxyHealth.socksAgent,
+      staticIPs: proxyHealth.staticIPs,
+      metrics: {
+        requests: proxyHealth.metrics.requests,
+        failures: proxyHealth.metrics.failures,
+        avgResponseTime: proxyHealth.metrics.avgResponseTime,
+        lastError: proxyHealth.metrics.lastError
+      }
     }
   };
-  
+
   res.status(200).json(health);
 });
 
@@ -180,6 +202,18 @@ app.get('/health/database', async (req, res) => {
       requestId: req.requestId
     });
   }
+});
+
+// Dedicated proxy health endpoint (Phase 5)
+app.get('/health/proxy', (req, res) => {
+  const { getProxyMetrics } = require('./config/fixie-proxy');
+  const metrics = getProxyMetrics();
+
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    proxy: metrics
+  });
 });
 
 // Complete system status endpoint
@@ -367,7 +401,18 @@ async function startServer() {
   console.log(`   Service Key: ${process.env.SUPABASE_SERVICE_KEY ? '✅ Configured' : '❌ Missing'}`);
   console.log(`   Anon Key: ${process.env.SUPABASE_ANON_KEY ? '✅ Configured' : '❌ Missing'}`);
   console.log(`   Encryption: ${process.env.ENCRYPTION_KEY ? '✅ Enabled' : '⚠️  Disabled'}`);
-  
+
+  // Initialize Fixie Static IP Proxy (Phase 5)
+  console.log('\n🔒 Initializing Static IP Security...');
+  const proxyInit = initializeFixieProxy();
+
+  if (proxyInit.enabled) {
+    console.log('✅ Fixie proxy enabled');
+    console.log(`   Static IPs: ${proxyInit.staticIPs.join(', ')}`);
+  } else {
+    console.log(`ℹ️  Proxy not enabled: ${proxyInit.reason || 'Disabled in configuration'}`);
+  }
+
   // Initialize Supabase with resilient connection
   console.log('\n🔄 Initializing Supabase connection...');
   
@@ -411,7 +456,7 @@ async function startServer() {
   }
   
   // Start Express server
-  const server = app.listen(PORT, '0.0.0.0', () => {
+  const server = app.listen(PORT, '0.0.0.0', async () => {
     console.log('\n' + '='.repeat(60));
     console.log('✅ Server Successfully Started!');
     console.log('='.repeat(60));
@@ -427,6 +472,44 @@ async function startServer() {
     console.log('   CORS: Configured for allowed origins');
     console.log('   Database: Direct connection with IP whitelisting');
     console.log('   Encryption: ' + (process.env.ENCRYPTION_KEY ? 'Enabled' : 'Disabled'));
+
+    // Validate static IP proxy in production (Phase 5)
+    if (process.env.NODE_ENV === 'production' && process.env.USE_FIXIE_PROXY === 'true') {
+      console.log('\n🧪 Validating static IP connection...');
+
+      try {
+        const validation = await validateProxyConnection();
+
+        if (!validation.valid) {
+          console.error('\n' + '='.repeat(60));
+          console.error('❌ CRITICAL: STATIC IP VALIDATION FAILED!');
+          console.error('='.repeat(60));
+          console.error(`Reason: ${validation.reason}`);
+          console.error(`Detected IP: ${validation.ip || 'Unknown'}`);
+          console.error(`Expected IPs: ${validation.staticIPs?.join(', ') || 'None'}`);
+          console.error('\n⚠️  YOUR DATABASE IS NOT PROTECTED!');
+          console.error('⚠️  SERVER WILL SHUT DOWN IN 5 SECONDS...\n');
+
+          // Give time to read the error
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          process.exit(1);
+        }
+
+        console.log('\n✅ Static IP Validation Successful');
+        console.log(`   Detected IP: ${validation.ip}`);
+        console.log(`   Expected IPs: ${validation.staticIPs.join(', ')}`);
+        console.log(`   Status: ${validation.reason}`);
+
+      } catch (error) {
+        console.error('❌ Proxy validation error:', error.message);
+
+        if (process.env.NODE_ENV === 'production') {
+          console.error('⚠️  Cannot start in production without proxy validation');
+          process.exit(1);
+        }
+      }
+    }
+
     console.log('\n' + '='.repeat(60) + '\n');
   });
   
