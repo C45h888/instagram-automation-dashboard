@@ -3,10 +3,10 @@
 import React, { useState } from 'react';
 import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import LegalFooter from '../layout/LegalFooter';
-import { 
-  Home, Calendar, MessageCircle, BarChart3, Settings, 
+import {
+  Home, Calendar, MessageCircle, BarChart3, Settings,
   Users, Bot, Target, Search, Bell, Menu, X, LogOut,
-  ChevronDown, Plus
+  ChevronDown, Plus, Star
 } from 'lucide-react';
 
 interface NavigationItem {
@@ -26,9 +26,9 @@ const Layout: React.FC = () => {
 
   const navigationItems: NavigationItem[] = [
     { name: 'Dashboard', path: '/', icon: <Home className="w-5 h-5" /> },
-    { 
-      name: 'Content', 
-      path: '/content', 
+    {
+      name: 'Content',
+      path: '/content',
       icon: <Calendar className="w-5 h-5" />,
       subItems: [
         { name: 'Create Post', path: '/content/create' },
@@ -36,6 +36,7 @@ const Layout: React.FC = () => {
       ]
     },
     { name: 'Engagement', path: '/engagement', icon: <MessageCircle className="w-5 h-5" />, badge: 3 },
+    { name: 'UGC', path: '/ugc', icon: <Star className="w-5 h-5" /> },
     { name: 'Analytics', path: '/analytics', icon: <BarChart3 className="w-5 h-5" /> },
     { name: 'Automations', path: '/automations', icon: <Bot className="w-5 h-5" /> },
     { name: 'Campaigns', path: '/campaigns', icon: <Target className="w-5 h-5" /> },

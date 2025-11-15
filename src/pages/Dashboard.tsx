@@ -229,7 +229,7 @@ const Dashboard: React.FC = () => {
         skeleton={() => (
           <div className="glass-morphism-card p-6 rounded-2xl">
             <h2 className="text-xl font-bold text-white mb-6">Recent Media</h2>
-            <SkeletonMediaGrid itemCount={6} />
+            <SkeletonMediaGrid count={6} />
           </div>
         )}
       >

@@ -1,29 +1,25 @@
 import React from 'react';
-import Skeleton from './Skeleton';
 
 interface SkeletonMediaGridProps {
-  itemCount?: number;
-  className?: string;
+  count?: number;
 }
 
-const SkeletonMediaGrid: React.FC<SkeletonMediaGridProps> = ({ 
-  itemCount = 6, 
-  className = '' 
-}) => {
+export const SkeletonMediaGrid: React.FC<SkeletonMediaGridProps> = ({ count = 8 }) => {
   return (
-    <div className={`grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 ${className}`}>
-      {Array.from({ length: itemCount }).map((_, index) => (
-        <div 
-          key={index} 
-          className="relative aspect-square rounded-lg overflow-hidden"
-          style={{ animationDelay: `${index * 50}ms` }}
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+      {Array.from({ length: count }).map((_, index) => (
+        <div
+          key={index}
+          className="glass-morphism-card rounded-2xl overflow-hidden border border-gray-700/50 animate-pulse"
         >
-          <Skeleton width="100%" height="100%" className="absolute inset-0" />
-          <div className="absolute inset-0 bg-black/20 opacity-0 hover:opacity-100 transition-opacity">
-            <div className="absolute bottom-2 left-2 right-2 space-y-1">
-              <Skeleton width="60%" height={12} />
-              <Skeleton width="40%" height={10} />
-            </div>
+          {/* Image skeleton */}
+          <div className="w-full h-48 bg-gray-700/50" />
+
+          {/* Content skeleton */}
+          <div className="p-4 space-y-2">
+            <div className="h-4 bg-gray-700/50 rounded w-3/4" />
+            <div className="h-4 bg-gray-700/50 rounded w-1/2" />
+            <div className="h-3 bg-gray-700/50 rounded w-1/4 mt-2" />
           </div>
         </div>
       ))}

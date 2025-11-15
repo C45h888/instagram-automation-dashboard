@@ -33,6 +33,8 @@ CONSENT_SYSTEM_INTEGRATION.md
 PHASE-4.2-IMPLEMENTATION-SUMMARY.md
 PHASE-4.3-IMPLEMENTATION-COMPLETE.md
 002_add_user_consents_table_SURGICAL.sql
+005_create_ugc_tables.sql
+
 
 ## Environment files
 .env.production

@@ -12,6 +12,7 @@ import type {
   GeneratedDemoData,
   DemoDataOptions
 } from '../types/permissions';
+import type { VisitorPost, UGCStats } from '../types/ugc';
 
 class PermissionDemoService {
 
@@ -406,6 +407,105 @@ class PermissionDemoService {
       includeEdgeCases: true,
       timeRange: 'week'
     });
+  }
+
+  /**
+   * Generate demo UGC data for testing
+   * Returns realistic visitor posts with varied characteristics
+   * Demonstrates pages_read_user_content permission
+   */
+  static generateUGCDemoData(): { data: VisitorPost[]; stats: UGCStats } {
+    const now = new Date();
+
+    const demoAuthors = [
+      { name: 'Sarah Johnson', username: 'sarah_j_2025', avatar: 'https://i.pravatar.cc/150?img=1' },
+      { name: 'Mike Chen', username: 'mike_tech', avatar: 'https://i.pravatar.cc/150?img=2' },
+      { name: 'Emma Davis', username: 'emma_lifestyle', avatar: 'https://i.pravatar.cc/150?img=3' },
+      { name: 'Carlos Rodriguez', username: 'carlos_fit', avatar: 'https://i.pravatar.cc/150?img=4' },
+      { name: 'Aisha Patel', username: 'aisha_creates', avatar: 'https://i.pravatar.cc/150?img=5' },
+      { name: 'Tom Anderson', username: 'tom_a_style', avatar: 'https://i.pravatar.cc/150?img=6' },
+    ];
+
+    const demoMessages = [
+      { text: 'Absolutely love this brand! Best purchase ever 😍', sentiment: 'positive' as const },
+      { text: 'Just received my order. Quality is amazing!', sentiment: 'positive' as const },
+      { text: 'Has anyone tried their new product line?', sentiment: 'neutral' as const },
+      { text: 'Great customer service, highly recommend!', sentiment: 'positive' as const },
+      { text: 'Product arrived damaged, waiting for response...', sentiment: 'negative' as const },
+      { text: 'Loving the new collection! #brandlove', sentiment: 'positive' as const },
+    ];
+
+    const visitorPosts: VisitorPost[] = demoMessages.map((msg, i) => {
+      const author = demoAuthors[i % demoAuthors.length];
+      const hoursAgo = Math.floor(Math.random() * 72) + 1;
+      const createdTime = new Date(now.getTime() - hoursAgo * 60 * 60 * 1000);
+
+      return {
+        id: `demo-ugc-${i + 1}`,
+        business_account_id: 'demo-account',
+        visitor_post_id: `visitor_post_${i + 1}`,
+        message: msg.text,
+        author_id: `author_${i + 1}`,
+        author_name: author.name,
+        author_username: author.username,
+        author_profile_picture_url: author.avatar,
+        created_time: createdTime.toISOString(),
+        permalink_url: `https://www.instagram.com/p/demo${i + 1}/`,
+        media_type: i % 3 === 0 ? 'IMAGE' : i % 3 === 1 ? 'VIDEO' : 'TEXT',
+        media_url: i % 3 === 0 ? `https://picsum.photos/600/600?random=${i}` : null,
+        thumbnail_url: i % 3 === 0 ? `https://picsum.photos/300/300?random=${i}` : null,
+        media_count: 1,
+        like_count: Math.floor(Math.random() * 100) + 10,
+        comment_count: Math.floor(Math.random() * 30) + 1,
+        share_count: Math.floor(Math.random() * 20),
+        sentiment: msg.sentiment,
+        sentiment_score: msg.sentiment === 'positive' ? 0.8 : msg.sentiment === 'negative' ? -0.6 : 0.1,
+        priority: msg.sentiment === 'positive' ? 'high' : msg.sentiment === 'negative' ? 'urgent' : 'medium',
+        tags: ['testimonial', 'customer_content'],
+        featured: i < 2,
+        featured_at: i < 2 ? createdTime.toISOString() : null,
+        repost_permission_requested: i === 0,
+        repost_permission_granted: false,
+        reposted: false,
+        reposted_at: null,
+        internal_notes: null,
+        campaign_tag: null,
+        fetched_at: now.toISOString(),
+        updated_at: now.toISOString(),
+      };
+    });
+
+    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    const stats: UGCStats = {
+      totalPosts: visitorPosts.length,
+      postsThisWeek: visitorPosts.filter(p => {
+        return new Date(p.created_time) > weekAgo;
+      }).length,
+      postsThisMonth: visitorPosts.filter(p => {
+        return new Date(p.created_time) > monthAgo;
+      }).length,
+      sentimentBreakdown: {
+        positive: visitorPosts.filter(p => p.sentiment === 'positive').length,
+        neutral: visitorPosts.filter(p => p.sentiment === 'neutral').length,
+        negative: visitorPosts.filter(p => p.sentiment === 'negative').length,
+      },
+      featuredCount: visitorPosts.filter(p => p.featured).length,
+      permissionsPending: 1,
+      permissionsGranted: 0,
+      topTags: [
+        { tag: 'testimonial', count: 6 },
+        { tag: 'customer_content', count: 6 },
+      ],
+      engagementTotal: {
+        likes: visitorPosts.reduce((sum, p) => sum + (p.like_count || 0), 0),
+        comments: visitorPosts.reduce((sum, p) => sum + (p.comment_count || 0), 0),
+        shares: visitorPosts.reduce((sum, p) => sum + (p.share_count || 0), 0),
+      },
+    };
+
+    return { data: visitorPosts, stats };
   }
 }
 

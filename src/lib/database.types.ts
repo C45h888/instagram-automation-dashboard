@@ -1015,6 +1015,250 @@ export type Database = {
         }
         Relationships: []
       }
+      ugc_campaigns: {
+        Row: {
+          business_account_id: string
+          campaign_hashtag: string
+          campaign_name: string
+          created_at: string | null
+          description: string | null
+          end_date: string | null
+          id: string
+          start_date: string
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          business_account_id: string
+          campaign_hashtag: string
+          campaign_name: string
+          created_at?: string | null
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          start_date: string
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          business_account_id?: string
+          campaign_hashtag?: string
+          campaign_name?: string
+          created_at?: string | null
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          start_date?: string
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ugc_campaigns_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
+            referencedRelation: "active_dm_summary"
+            referencedColumns: ["business_account_id"]
+          },
+          {
+            foreignKeyName: "ugc_campaigns_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
+            referencedRelation: "instagram_business_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ugc_content: {
+        Row: {
+          author_id: string
+          author_name: string | null
+          author_profile_picture_url: string | null
+          author_username: string | null
+          business_account_id: string
+          campaign_tag: string | null
+          comment_count: number | null
+          created_time: string
+          featured: boolean | null
+          featured_at: string | null
+          fetched_at: string | null
+          id: string
+          internal_notes: string | null
+          like_count: number | null
+          media_count: number | null
+          media_type: string | null
+          media_url: string | null
+          message: string | null
+          permalink_url: string
+          priority: string | null
+          repost_permission_granted: boolean | null
+          repost_permission_requested: boolean | null
+          reposted: boolean | null
+          reposted_at: string | null
+          sentiment: string | null
+          sentiment_score: number | null
+          share_count: number | null
+          tags: string[] | null
+          thumbnail_url: string | null
+          updated_at: string | null
+          visitor_post_id: string
+        }
+        Insert: {
+          author_id: string
+          author_name?: string | null
+          author_profile_picture_url?: string | null
+          author_username?: string | null
+          business_account_id: string
+          campaign_tag?: string | null
+          comment_count?: number | null
+          created_time: string
+          featured?: boolean | null
+          featured_at?: string | null
+          fetched_at?: string | null
+          id?: string
+          internal_notes?: string | null
+          like_count?: number | null
+          media_count?: number | null
+          media_type?: string | null
+          media_url?: string | null
+          message?: string | null
+          permalink_url: string
+          priority?: string | null
+          repost_permission_granted?: boolean | null
+          repost_permission_requested?: boolean | null
+          reposted?: boolean | null
+          reposted_at?: string | null
+          sentiment?: string | null
+          sentiment_score?: number | null
+          share_count?: number | null
+          tags?: string[] | null
+          thumbnail_url?: string | null
+          updated_at?: string | null
+          visitor_post_id: string
+        }
+        Update: {
+          author_id?: string
+          author_name?: string | null
+          author_profile_picture_url?: string | null
+          author_username?: string | null
+          business_account_id?: string
+          campaign_tag?: string | null
+          comment_count?: number | null
+          created_time?: string
+          featured?: boolean | null
+          featured_at?: string | null
+          fetched_at?: string | null
+          id?: string
+          internal_notes?: string | null
+          like_count?: number | null
+          media_count?: number | null
+          media_type?: string | null
+          media_url?: string | null
+          message?: string | null
+          permalink_url?: string
+          priority?: string | null
+          repost_permission_granted?: boolean | null
+          repost_permission_requested?: boolean | null
+          reposted?: boolean | null
+          reposted_at?: string | null
+          sentiment?: string | null
+          sentiment_score?: number | null
+          share_count?: number | null
+          tags?: string[] | null
+          thumbnail_url?: string | null
+          updated_at?: string | null
+          visitor_post_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ugc_content_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
+            referencedRelation: "active_dm_summary"
+            referencedColumns: ["business_account_id"]
+          },
+          {
+            foreignKeyName: "ugc_content_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
+            referencedRelation: "instagram_business_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ugc_permissions: {
+        Row: {
+          business_account_id: string
+          created_at: string | null
+          denied_at: string | null
+          expires_at: string | null
+          granted_at: string | null
+          id: string
+          permission_type: string | null
+          request_message: string | null
+          requested_at: string | null
+          requested_via: string | null
+          status: string | null
+          terms_agreed: boolean | null
+          ugc_content_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          business_account_id: string
+          created_at?: string | null
+          denied_at?: string | null
+          expires_at?: string | null
+          granted_at?: string | null
+          id?: string
+          permission_type?: string | null
+          request_message?: string | null
+          requested_at?: string | null
+          requested_via?: string | null
+          status?: string | null
+          terms_agreed?: boolean | null
+          ugc_content_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          business_account_id?: string
+          created_at?: string | null
+          denied_at?: string | null
+          expires_at?: string | null
+          granted_at?: string | null
+          id?: string
+          permission_type?: string | null
+          request_message?: string | null
+          requested_at?: string | null
+          requested_via?: string | null
+          status?: string | null
+          terms_agreed?: boolean | null
+          ugc_content_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ugc_permissions_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
+            referencedRelation: "active_dm_summary"
+            referencedColumns: ["business_account_id"]
+          },
+          {
+            foreignKeyName: "ugc_permissions_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
+            referencedRelation: "instagram_business_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ugc_permissions_ugc_content_id_fkey"
+            columns: ["ugc_content_id"]
+            isOneToOne: false
+            referencedRelation: "ugc_content"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_consents: {
         Row: {
           browser_language: string | null

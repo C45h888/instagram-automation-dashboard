@@ -1,6 +1,7 @@
 // backend.api/routes/instagram-api.js (NEW FILE)
 const express = require('express');
 const router = express.Router();
+const axios = require('axios'); // ADDED: For Graph API calls
 const { instagramAPIRateLimiter, logAfterResponse } = require('../middleware/rate-limiter');
 const {
   exchangeForPageToken,
@@ -8,6 +9,55 @@ const {
   storePageToken,
   retrievePageToken
 } = require('../services/instagram-tokens');
+const { logAudit, supabase } = require('../config/supabase'); // ADDED: Audit logging + DB client
+
+// ==========================================
+// HELPER FUNCTIONS
+// ==========================================
+
+/**
+ * Validate image URL for Instagram posting
+ * Requirements:
+ *   - Must be HTTPS
+ *   - Must be publicly accessible
+ *   - Must be a valid image format
+ */
+function validateImageUrl(url) {
+  try {
+    const parsedUrl = new URL(url);
+
+    // Must use HTTPS
+    if (parsedUrl.protocol !== 'https:') {
+      return { valid: false, error: 'Image URL must use HTTPS protocol' };
+    }
+
+    // Check for valid image extension
+    const validExtensions = ['.jpg', '.jpeg', '.png', '.gif'];
+    const hasValidExtension = validExtensions.some(ext =>
+      parsedUrl.pathname.toLowerCase().endsWith(ext)
+    );
+
+    if (!hasValidExtension) {
+      return {
+        valid: false,
+        error: 'Image URL must end with .jpg, .jpeg, .png, or .gif'
+      };
+    }
+
+    // Check for localhost or private IPs (not allowed by Instagram)
+    const hostname = parsedUrl.hostname.toLowerCase();
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('192.168.')) {
+      return {
+        valid: false,
+        error: 'Image must be publicly accessible (not localhost or private IP)'
+      };
+    }
+
+    return { valid: true };
+  } catch (error) {
+    return { valid: false, error: 'Invalid URL format' };
+  }
+}
 
 // ==========================================
 // APPLY RATE LIMITING TO ALL ROUTES
@@ -199,55 +249,162 @@ router.get('/insights/:accountId', async (req, res) => {
 });
 
 /**
- * Get Instagram media
+ * GET /api/instagram/media/:accountId
+ * Fetches Instagram media for the authenticated business account
  *
- * Rate limited: 200 calls/hour per user
- * Logged: Every call tracked in api_usage table
+ * Query Parameters:
+ *   - userId: UUID of authenticated user
+ *   - businessAccountId: Instagram business account ID
+ *   - limit: Number of posts to fetch (default: 25, max: 100)
  *
- * @route GET /api/instagram/media/:accountId
- * @param {string} accountId - Instagram business account ID
- * @query {number} limit - Number of media items (default 25)
- * @returns {Object} Media items with rate limit remaining
+ * Returns: Array of media objects with metadata
  */
 router.get('/media/:accountId', async (req, res) => {
+  const requestStartTime = Date.now();
+
   try {
     const { accountId } = req.params;
-    const { limit = 25 } = req.query;
+    const { limit = 25, userId, businessAccountId } = req.query;
 
-    console.log(`🖼️  Fetching media for account: ${accountId} (limit: ${limit})`);
+    // ===== VALIDATION =====
+    if (!userId || !businessAccountId) {
+      console.error('❌ Missing required query parameters for media fetch');
+      return res.status(400).json({
+        success: false,
+        error: 'userId and businessAccountId are required',
+        code: 'MISSING_PARAMETERS'
+      });
+    }
 
-    // ===== YOUR INSTAGRAM API CALL HERE =====
-    // Example placeholder response
-    const media = {
-      account_id: accountId,
-      items: [
-        {
-          id: 'media_1',
-          type: 'IMAGE',
-          caption: 'Example post',
-          timestamp: new Date().toISOString()
+    // Validate limit parameter
+    const mediaLimit = Math.min(Math.max(parseInt(limit) || 25, 1), 100);
+
+    console.log(`🖼️  Fetching media for account: ${accountId} (limit: ${mediaLimit})`);
+
+    // ===== TOKEN RETRIEVAL =====
+    let pageToken;
+    try {
+      pageToken = await retrievePageToken(userId, businessAccountId);
+    } catch (tokenError) {
+      console.error('❌ Token retrieval failed:', tokenError.message);
+
+      // Log audit trail for failed token retrieval
+      await logAudit('token_retrieval_failed', userId, {
+        action: 'fetch_media',
+        business_account_id: businessAccountId,
+        error: tokenError.message
+      });
+
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication failed. Please reconnect your Instagram account.',
+        code: 'TOKEN_RETRIEVAL_FAILED'
+      });
+    }
+
+    const igAccountId = accountId;
+
+    // ===== GRAPH API CALL =====
+    const fields = 'id,media_type,media_url,thumbnail_url,caption,permalink,timestamp,like_count,comments_count';
+    const graphApiUrl = `https://graph.facebook.com/v18.0/${igAccountId}/media`;
+
+    try {
+      const response = await axios.get(graphApiUrl, {
+        params: {
+          fields,
+          access_token: pageToken,
+          limit: mediaLimit
+        },
+        timeout: 10000 // 10 second timeout
+      });
+
+      const responseTime = Date.now() - requestStartTime;
+
+      // Log successful API call
+      await logAudit('instagram_media_fetched', userId, {
+        action: 'fetch_media',
+        business_account_id: businessAccountId,
+        media_count: response.data.data?.length || 0,
+        response_time_ms: responseTime
+      });
+
+      // ===== SUCCESS RESPONSE =====
+      res.json({
+        success: true,
+        data: response.data.data || [],
+        paging: response.data.paging || {},
+        rate_limit: {
+          remaining: req.rateLimitRemaining || 'unknown',
+          limit: 200,
+          window: '1 hour'
+        },
+        meta: {
+          count: response.data.data?.length || 0,
+          response_time_ms: responseTime
         }
-        // ... more media items
-      ],
-      count: 1
-    };
+      });
 
-    // Include rate limit remaining in response
-    res.json({
-      success: true,
-      data: media,
-      rate_limit: {
-        remaining: req.rateLimitRemaining || 'unknown',
-        limit: 200,
-        window: '1 hour'
+    } catch (apiError) {
+      // Handle Graph API errors specifically
+      if (apiError.response) {
+        const { status, data } = apiError.response;
+        console.error(`❌ Graph API error (${status}):`, data);
+
+        // Log specific error types
+        await logAudit('instagram_api_error', userId, {
+          action: 'fetch_media',
+          business_account_id: businessAccountId,
+          status_code: status,
+          error_type: data.error?.type,
+          error_message: data.error?.message
+        });
+
+        // Handle specific error codes
+        if (status === 429) {
+          return res.status(429).json({
+            success: false,
+            error: 'Rate limit exceeded. Please try again later.',
+            code: 'RATE_LIMIT_EXCEEDED',
+            retry_after: apiError.response.headers['retry-after'] || 3600
+          });
+        }
+
+        if (status === 401 || status === 403) {
+          return res.status(401).json({
+            success: false,
+            error: 'Instagram access token expired or revoked. Please reconnect your account.',
+            code: 'TOKEN_INVALID'
+          });
+        }
+
+        return res.status(status).json({
+          success: false,
+          error: data.error?.message || 'Instagram API error',
+          code: data.error?.code || 'GRAPH_API_ERROR',
+          details: data.error
+        });
       }
-    });
+
+      throw apiError; // Re-throw for general error handler
+    }
+
   } catch (error) {
-    console.error('❌ Media error:', error);
+    const responseTime = Date.now() - requestStartTime;
+
+    console.error('❌ Media fetch error:', error.message);
+
+    // Log unexpected errors
+    await logAudit('media_fetch_error', req.query.userId, {
+      action: 'fetch_media',
+      error: error.message,
+      response_time_ms: responseTime
+    });
+
     res.status(500).json({
       success: false,
-      error: error.message,
-      code: 'MEDIA_ERROR'
+      error: 'Failed to fetch Instagram media',
+      code: 'INTERNAL_ERROR',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
@@ -308,6 +465,218 @@ router.get('/comments/:mediaId', async (req, res) => {
 });
 
 /**
+ * POST /api/instagram/create-post
+ * Creates and publishes a new Instagram post (2-step flow)
+ *
+ * Body:
+ *   - userId: UUID of authenticated user
+ *   - businessAccountId: Instagram business account ID
+ *   - caption: Post caption (max 2200 characters)
+ *   - image_url: Publicly accessible HTTPS image URL
+ *
+ * Returns: media_id and creation_id of published post
+ */
+router.post('/create-post', async (req, res) => {
+  const requestStartTime = Date.now();
+
+  try {
+    const { userId, businessAccountId, caption, image_url } = req.body;
+
+    // ===== VALIDATION =====
+    if (!userId || !businessAccountId || !caption || !image_url) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: userId, businessAccountId, caption, image_url',
+        code: 'MISSING_FIELDS'
+      });
+    }
+
+    // Validate caption length (Instagram limit: 2200 characters)
+    if (caption.length > 2200) {
+      return res.status(400).json({
+        success: false,
+        error: 'Caption exceeds maximum length of 2200 characters',
+        code: 'CAPTION_TOO_LONG'
+      });
+    }
+
+    // Validate image URL
+    const urlValidation = validateImageUrl(image_url);
+    if (!urlValidation.valid) {
+      return res.status(400).json({
+        success: false,
+        error: urlValidation.error,
+        code: 'INVALID_IMAGE_URL'
+      });
+    }
+
+    console.log('🚀 Starting 2-step post creation...');
+
+    // ===== TOKEN RETRIEVAL =====
+    let pageToken;
+    try {
+      pageToken = await retrievePageToken(userId, businessAccountId);
+    } catch (tokenError) {
+      console.error('❌ Token retrieval failed:', tokenError.message);
+
+      await logAudit('token_retrieval_failed', userId, {
+        action: 'create_post',
+        business_account_id: businessAccountId,
+        error: tokenError.message
+      });
+
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication failed. Please reconnect your Instagram account.',
+        code: 'TOKEN_RETRIEVAL_FAILED'
+      });
+    }
+
+    const igUserId = businessAccountId;
+
+    // ===== STEP 1: Create Media Container =====
+    console.log('   Step 1: Creating media container...');
+    let creationId;
+
+    try {
+      const containerUrl = `https://graph.facebook.com/v18.0/${igUserId}/media`;
+      const containerResponse = await axios.post(containerUrl, null, {
+        params: {
+          image_url: image_url,
+          caption: caption,
+          access_token: pageToken
+        },
+        timeout: 15000 // 15 second timeout for image processing
+      });
+
+      creationId = containerResponse.data.id;
+      console.log(`   ✅ Step 1 Success: creation_id = ${creationId}`);
+
+      await logAudit('instagram_container_created', userId, {
+        action: 'create_post_step_1',
+        business_account_id: businessAccountId,
+        creation_id: creationId
+      });
+
+    } catch (containerError) {
+      console.error('❌ Container creation failed:', containerError.response?.data || containerError.message);
+
+      await logAudit('instagram_container_error', userId, {
+        action: 'create_post_step_1',
+        business_account_id: businessAccountId,
+        error: containerError.response?.data?.error?.message || containerError.message
+      });
+
+      if (containerError.response) {
+        const { status, data } = containerError.response;
+        return res.status(status).json({
+          success: false,
+          error: data.error?.message || 'Failed to create media container',
+          code: 'CONTAINER_CREATION_FAILED',
+          details: data.error
+        });
+      }
+
+      throw containerError;
+    }
+
+    // ===== STEP 2: Publish Media Container =====
+    console.log('   Step 2: Publishing container...');
+    let mediaId;
+
+    try {
+      const publishUrl = `https://graph.facebook.com/v18.0/${igUserId}/media_publish`;
+      const publishResponse = await axios.post(publishUrl, null, {
+        params: {
+          creation_id: creationId,
+          access_token: pageToken
+        },
+        timeout: 15000
+      });
+
+      mediaId = publishResponse.data.id;
+      console.log(`   ✅ Step 2 Success: Post is live! media_id = ${mediaId}`);
+
+      const responseTime = Date.now() - requestStartTime;
+
+      await logAudit('instagram_post_published', userId, {
+        action: 'create_post_step_2',
+        business_account_id: businessAccountId,
+        media_id: mediaId,
+        creation_id: creationId,
+        response_time_ms: responseTime,
+        caption_length: caption.length
+      });
+
+    } catch (publishError) {
+      console.error('❌ Publishing failed:', publishError.response?.data || publishError.message);
+
+      await logAudit('instagram_publish_error', userId, {
+        action: 'create_post_step_2',
+        business_account_id: businessAccountId,
+        creation_id: creationId,
+        error: publishError.response?.data?.error?.message || publishError.message
+      });
+
+      if (publishError.response) {
+        const { status, data } = publishError.response;
+        return res.status(status).json({
+          success: false,
+          error: data.error?.message || 'Failed to publish post',
+          code: 'PUBLISH_FAILED',
+          details: data.error,
+          partial_success: {
+            creation_id: creationId,
+            status: 'Container created but not published'
+          }
+        });
+      }
+
+      throw publishError;
+    }
+
+    // ===== SUCCESS RESPONSE =====
+    const totalTime = Date.now() - requestStartTime;
+
+    res.json({
+      success: true,
+      message: 'Post published successfully!',
+      data: {
+        media_id: mediaId,
+        creation_id: creationId,
+        permalink: `https://www.instagram.com/p/${mediaId}/` // Note: This format may not work for all IDs
+      },
+      rate_limit: {
+        remaining: req.rateLimitRemaining || 'unknown',
+        limit: 200,
+        window: '1 hour'
+      },
+      meta: {
+        response_time_ms: totalTime
+      }
+    });
+
+  } catch (error) {
+    const responseTime = Date.now() - requestStartTime;
+
+    console.error('❌ Post creation error:', error.message);
+
+    await logAudit('post_creation_error', req.body.userId, {
+      action: 'create_post',
+      error: error.message,
+      response_time_ms: responseTime
+    });
+
+    res.status(500).json({
+      success: false,
+      error: 'Failed to publish post.',
+      code: 'INTERNAL_ERROR',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+/**
  * Health check endpoint (no rate limiting)
  *
  * @route GET /api/instagram/health
@@ -320,6 +689,399 @@ router.get('/health', (req, res) => {
     rate_limiting: 'enabled',
     timestamp: new Date().toISOString()
   });
+});
+
+// ==========================================
+// UGC MANAGEMENT ENDPOINTS
+// ==========================================
+// Permission Required: pages_read_user_content
+// Purpose: Monitor visitor posts (brand mentions) and manage permissions
+
+/**
+ * GET /api/instagram/visitor-posts
+ * Fetches visitor posts (UGC) for the business account
+ *
+ * Query Parameters:
+ *   - businessAccountId: Instagram business account UUID (required)
+ *   - limit: Number of posts to fetch (default: 20, max: 100)
+ *   - after: Pagination cursor (optional)
+ *
+ * Returns: Array of visitor posts with stats
+ */
+router.get('/visitor-posts', async (req, res) => {
+  const requestStartTime = Date.now();
+
+  try {
+    const { businessAccountId, limit = 20, after } = req.query;
+
+    console.log('[UGC] Fetching visitor posts for account:', businessAccountId);
+
+    // ===== VALIDATION =====
+    if (!businessAccountId) {
+      console.error('❌ Missing businessAccountId parameter');
+      return res.status(400).json({
+        success: false,
+        error: 'businessAccountId is required',
+        code: 'MISSING_PARAMETERS'
+      });
+    }
+
+    // Validate limit parameter
+    const postsLimit = Math.min(Math.max(parseInt(limit) || 20, 1), 100);
+
+    // ===== STEP 1: Get credentials from database =====
+    const { data: credentials, error: credError } = await supabase
+      .from('instagram_credentials')
+      .select('page_access_token, facebook_page_id')
+      .eq('business_account_id', businessAccountId)
+      .single();
+
+    if (credError || !credentials) {
+      console.error('[UGC] Credentials not found:', credError?.message);
+      return res.status(404).json({
+        success: false,
+        error: 'Credentials not found for this business account',
+        code: 'CREDENTIALS_NOT_FOUND'
+      });
+    }
+
+    // ===== STEP 2: Call Meta Graph API =====
+    const pageId = credentials.facebook_page_id;
+    const accessToken = credentials.page_access_token;
+
+    const metaUrl = new URL(`https://graph.facebook.com/v20.0/${pageId}/visitor_posts`);
+    metaUrl.searchParams.append('access_token', accessToken);
+    metaUrl.searchParams.append('fields', 'id,message,from,created_time,permalink_url,attachments,likes.summary(true),comments.summary(true)');
+    metaUrl.searchParams.append('limit', postsLimit.toString());
+    if (after) {
+      metaUrl.searchParams.append('after', after);
+    }
+
+    const metaResponse = await fetch(metaUrl.toString());
+
+    if (!metaResponse.ok) {
+      const errorData = await metaResponse.json();
+      console.error('[UGC] Meta API error:', errorData);
+
+      await logAudit('instagram_visitor_posts_error', null, {
+        action: 'fetch_visitor_posts',
+        business_account_id: businessAccountId,
+        status_code: metaResponse.status,
+        error: errorData.error?.message
+      });
+
+      return res.status(metaResponse.status).json({
+        success: false,
+        error: errorData.error?.message || 'Failed to fetch visitor posts',
+        code: 'META_API_ERROR'
+      });
+    }
+
+    const metaData = await metaResponse.json();
+
+    // ===== STEP 3: Transform and store in database =====
+    const visitorPosts = await Promise.all(
+      (metaData.data || []).map(async (post) => {
+        // Extract media info
+        let mediaType = 'TEXT';
+        let mediaUrl = null;
+        let thumbnailUrl = null;
+
+        if (post.attachments?.data?.[0]) {
+          const attachment = post.attachments.data[0];
+          mediaType = attachment.type === 'photo' ? 'IMAGE' :
+                      attachment.type === 'video' ? 'VIDEO' :
+                      attachment.type === 'album' ? 'CAROUSEL_ALBUM' : 'TEXT';
+
+          if (attachment.media?.image?.src) {
+            mediaUrl = attachment.media.image.src;
+            thumbnailUrl = attachment.media.image.src;
+          } else if (attachment.media?.source) {
+            mediaUrl = attachment.media.source;
+          }
+        }
+
+        const likeCount = post.likes?.summary?.total_count || 0;
+        const commentCount = post.comments?.summary?.total_count || 0;
+
+        // Upsert into database
+        const { data: ugcRecord, error: upsertError } = await supabase
+          .from('ugc_content')
+          .upsert({
+            business_account_id: businessAccountId,
+            visitor_post_id: post.id,
+            message: post.message || null,
+            author_id: post.from?.id || 'unknown',
+            author_name: post.from?.name || null,
+            author_username: post.from?.username || null,
+            author_profile_picture_url: post.from?.picture?.data?.url || null,
+            created_time: post.created_time,
+            permalink_url: post.permalink_url,
+            media_type: mediaType,
+            media_url: mediaUrl,
+            thumbnail_url: thumbnailUrl,
+            like_count: likeCount,
+            comment_count: commentCount,
+            share_count: 0,
+            sentiment: 'unknown',
+            priority: 'medium',
+            fetched_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }, {
+            onConflict: 'business_account_id,visitor_post_id'
+          })
+          .select()
+          .single();
+
+        if (upsertError) {
+          console.error('[UGC] Error upserting post:', upsertError);
+        }
+
+        return ugcRecord;
+      })
+    );
+
+    // ===== STEP 4: Calculate stats =====
+    const { data: statsData } = await supabase
+      .from('ugc_content')
+      .select('sentiment, featured, created_time')
+      .eq('business_account_id', businessAccountId);
+
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+
+    const stats = {
+      totalPosts: statsData?.length || 0,
+      postsThisWeek: statsData?.filter(p => {
+        return new Date(p.created_time) > weekAgo;
+      }).length || 0,
+      sentimentBreakdown: {
+        positive: statsData?.filter(p => p.sentiment === 'positive').length || 0,
+        neutral: statsData?.filter(p => p.sentiment === 'neutral').length || 0,
+        negative: statsData?.filter(p => p.sentiment === 'negative').length || 0,
+      },
+      featuredCount: statsData?.filter(p => p.featured).length || 0,
+    };
+
+    const responseTime = Date.now() - requestStartTime;
+
+    await logAudit('instagram_visitor_posts_fetched', null, {
+      action: 'fetch_visitor_posts',
+      business_account_id: businessAccountId,
+      posts_count: visitorPosts.filter(p => p !== null).length,
+      response_time_ms: responseTime
+    });
+
+    // ===== SUCCESS RESPONSE =====
+    res.json({
+      success: true,
+      data: visitorPosts.filter(p => p !== null),
+      paging: metaData.paging || {},
+      stats,
+      rate_limit: {
+        remaining: req.rateLimitRemaining || 'unknown',
+        limit: 200,
+        window: '1 hour'
+      },
+      meta: {
+        response_time_ms: responseTime
+      }
+    });
+
+  } catch (error) {
+    const responseTime = Date.now() - requestStartTime;
+    console.error('[UGC] Error fetching visitor posts:', error);
+
+    await logAudit('visitor_posts_error', null, {
+      action: 'fetch_visitor_posts',
+      error: error.message,
+      response_time_ms: responseTime
+    });
+
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      code: 'INTERNAL_ERROR'
+    });
+  }
+});
+
+/**
+ * PATCH /api/instagram/ugc/:postId/feature
+ * Toggle featured status of a visitor post
+ *
+ * Body:
+ *   - featured: boolean (true to feature, false to unfeature)
+ *
+ * Returns: Updated UGC content record
+ */
+router.patch('/ugc/:postId/feature', async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const { featured } = req.body;
+
+    console.log(`[UGC] Updating featured status for post ${postId}: ${featured}`);
+
+    // ===== VALIDATION =====
+    if (typeof featured !== 'boolean') {
+      return res.status(400).json({
+        success: false,
+        error: 'featured must be a boolean',
+        code: 'INVALID_PARAMETER'
+      });
+    }
+
+    // ===== UPDATE DATABASE =====
+    const { data, error } = await supabase
+      .from('ugc_content')
+      .update({
+        featured,
+        featured_at: featured ? new Date().toISOString() : null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', postId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('[UGC] Error updating featured status:', error);
+      return res.status(400).json({
+        success: false,
+        error: error.message,
+        code: 'UPDATE_FAILED'
+      });
+    }
+
+    await logAudit('ugc_featured_updated', null, {
+      action: 'update_featured_status',
+      post_id: postId,
+      featured
+    });
+
+    // ===== SUCCESS RESPONSE =====
+    res.json({
+      success: true,
+      data,
+      rate_limit: {
+        remaining: req.rateLimitRemaining || 'unknown',
+        limit: 200,
+        window: '1 hour'
+      }
+    });
+
+  } catch (error) {
+    console.error('[UGC] Error in feature toggle:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      code: 'INTERNAL_ERROR'
+    });
+  }
+});
+
+/**
+ * POST /api/instagram/ugc/request-permission
+ * Create a permission request record
+ *
+ * Body:
+ *   - ugcContentId: UUID of UGC content
+ *   - requestedVia: 'dm' | 'comment' | 'email' | 'manual'
+ *   - requestMessage: Permission request message text
+ *   - permissionType: 'one_time' | 'perpetual' | 'campaign_specific'
+ *
+ * Returns: Created permission request record
+ */
+router.post('/ugc/request-permission', async (req, res) => {
+  try {
+    const { ugcContentId, requestedVia, requestMessage, permissionType } = req.body;
+
+    console.log('[UGC] Creating permission request for content:', ugcContentId);
+
+    // ===== VALIDATION =====
+    if (!ugcContentId || !requestedVia || !requestMessage || !permissionType) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: ugcContentId, requestedVia, requestMessage, permissionType',
+        code: 'MISSING_FIELDS'
+      });
+    }
+
+    // ===== STEP 1: Get the UGC content =====
+    const { data: ugcContent, error: ugcError } = await supabase
+      .from('ugc_content')
+      .select('*')
+      .eq('id', ugcContentId)
+      .single();
+
+    if (ugcError || !ugcContent) {
+      console.error('[UGC] UGC content not found:', ugcError?.message);
+      return res.status(404).json({
+        success: false,
+        error: 'UGC content not found',
+        code: 'UGC_NOT_FOUND'
+      });
+    }
+
+    // ===== STEP 2: Create permission request =====
+    const { data: permission, error: permError } = await supabase
+      .from('ugc_permissions')
+      .insert({
+        ugc_content_id: ugcContentId,
+        business_account_id: ugcContent.business_account_id,
+        requested_via: requestedVia,
+        request_message: requestMessage,
+        permission_type: permissionType,
+        status: 'pending',
+        requested_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+
+    if (permError) {
+      console.error('[UGC] Error creating permission request:', permError);
+      return res.status(400).json({
+        success: false,
+        error: permError.message,
+        code: 'PERMISSION_CREATE_FAILED'
+      });
+    }
+
+    // ===== STEP 3: Update UGC content flag =====
+    await supabase
+      .from('ugc_content')
+      .update({
+        repost_permission_requested: true,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', ugcContentId);
+
+    await logAudit('ugc_permission_requested', null, {
+      action: 'request_permission',
+      ugc_content_id: ugcContentId,
+      permission_type: permissionType,
+      requested_via: requestedVia
+    });
+
+    // ===== SUCCESS RESPONSE =====
+    res.json({
+      success: true,
+      permission,
+      message: 'Permission request created successfully',
+      rate_limit: {
+        remaining: req.rateLimitRemaining || 'unknown',
+        limit: 200,
+        window: '1 hour'
+      }
+    });
+
+  } catch (error) {
+    console.error('[UGC] Error requesting permission:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      code: 'INTERNAL_ERROR'
+    });
+  }
 });
 
 // ==========================================

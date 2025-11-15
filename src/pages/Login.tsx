@@ -208,7 +208,7 @@ const Login: React.FC = () => {
       console.log('   Policy Versions: Privacy v2.0, Terms v2.0');
 
       // Optional: Store consent ID in session for reference
-      if (data && data[0]) {
+      if (data && data[0] && data[0].id) {
         sessionStorage.setItem('consent_id', data[0].id);
       }
 
@@ -388,7 +388,8 @@ const Login: React.FC = () => {
       ];
 
       // Build Facebook OAuth URL (CRITICAL: Not Instagram OAuth)
-      const facebookOAuthEndpoint = 'https://www.facebook.com/v18.0/dialog/oauth';
+      // TODO: Uncomment for production with approved Meta app
+      // const facebookOAuthEndpoint = 'https://www.facebook.com/v18.0/dialog/oauth';
       const redirectUri = `${window.location.origin}/auth/callback`;
       const clientId = import.meta.env.VITE_META_APP_ID;
 
@@ -401,12 +402,13 @@ const Login: React.FC = () => {
       }
 
       // State parameter with tracking metadata
-      const state = btoa(JSON.stringify({
-        timestamp: Date.now(),
-        returnUrl: from,
-        authMethod: 'facebook',
-        nonce: crypto.randomUUID()
-      }));
+      // TODO: Uncomment for production with approved Meta app
+      // const state = btoa(JSON.stringify({
+      //   timestamp: Date.now(),
+      //   returnUrl: from,
+      //   authMethod: 'facebook',
+      //   nonce: crypto.randomUUID()
+      // }));
 
       // Development mock (preserve existing mock authentication patterns)
       if (import.meta.env.DEV || import.meta.env.MODE === 'development') {
@@ -438,13 +440,14 @@ const Login: React.FC = () => {
       }
 
       // In production, redirect to Facebook OAuth
-      const oauthUrl = `${facebookOAuthEndpoint}?` +
-        `client_id=${clientId}` +
-        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-        `&scope=${encodeURIComponent(scopes.join(','))}` +
-        `&response_type=code` +
-        `&state=${state}` +
-        `&auth_type=rerequest`;
+      // TODO: Uncomment for production with approved Meta app
+      // const oauthUrl = `${facebookOAuthEndpoint}?` +
+      //   `client_id=${clientId}` +
+      //   `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+      //   `&scope=${encodeURIComponent(scopes.join(','))}` +
+      //   `&response_type=code` +
+      //   `&state=${state}` +
+      //   `&auth_type=rerequest`;
 
       console.log('🔵 Redirecting to Facebook OAuth...');
       console.log('  Redirect URI:', redirectUri);

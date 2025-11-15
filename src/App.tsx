@@ -29,6 +29,7 @@ const EngagementMonitor = lazy(() => import('./pages/EngagementMonitor'));
 const CommentManagement = lazy(() => import('./pages/CommentManagement'));
 const ContentAnalytics = lazy(() => import('./pages/ContentAnalytics'));
 const DMInbox = lazy(() => import('./pages/DMInbox'));
+const UGCManagement = lazy(() => import('./pages/UGCManagement'));
 
 // Admin pages - only loaded when admin navigates to them
 const AdminLogin = lazy(() => import('./pages/AdminLogin'));
@@ -373,9 +374,9 @@ function App() {
               
               {/* Audience */}
               <Route path="audience" element={<Audience />} />
-              
-              {/* UGC Route */}
-              <Route path="ugc" element={<Audience />} />
+
+              {/* UGC Management */}
+              <Route path="ugc" element={<UGCManagement />} />
             </Route>
             
             {/* ==========================================
