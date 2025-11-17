@@ -14,29 +14,82 @@ export const LEGAL_CONTENT = {
           id: "introduction",
           title: "1. Introduction",
           content: `888 Intelligence Automation ("we," "our," "us," or "Company") operates an Instagram Business Automation Platform that integrates with Meta's Instagram Graph API to provide comprehensive social media management and automation services. This Privacy Policy describes how we collect, use, process, share, and protect your information when you use our service.
-  
+
   Our Platform operates through:
   • Secure Cloudflare tunnel architecture with zero-trust security
   • Integration with Instagram's Graph API under Meta's Platform Terms
   • Advanced N8N workflow automation systems
   • AI-powered customer service and analytics capabilities
   • Cross-platform integration with business tools and services
-  
-  Meta Platform Compliance: This policy complies with Meta's Platform Terms effective February 3, 2025, including requirements for privacy policy accessibility, user consent for profile augmentation, and transparent data processing practices.`
+
+  Meta Platform Compliance: This policy complies with Meta's Platform Terms effective February 3, 2025, including requirements for privacy policy accessibility, user consent for profile augmentation, and transparent data processing practices.
+
+  Instagram Data Policy: Our use of Instagram data is also governed by Instagram's Data Policy, which you can review at: https://help.instagram.com/155833707900388
+
+  If you have questions about how Instagram itself handles your data, please refer to Instagram's Data Policy. This Privacy Policy describes only our handling of data obtained through your use of our service.`
         },
         {
           id: "information-we-collect",
           title: "2. Information We Collect",
           subsections: [
             {
-              title: "2.1 Instagram Business Data",
+              title: "2.1 Instagram API Permissions and Data Access",
+              content: `We request the following permissions from Instagram's Graph API to provide our automation services. By connecting your Instagram Business account, you authorize us to access data associated with these permissions:
+
+  instagram_basic (Basic Profile Information):
+  • Your Instagram business account username and ID
+  • Profile picture, biography, and website URL
+  • Account type (Business or Creator)
+  • Follower count and media count
+  Purpose: Display your account information in our dashboard and verify account ownership
+
+  instagram_manage_comments (Comment Management):
+  • Read comments on your posts and stories
+  • Reply to comments on your behalf
+  • Moderate and hide/unhide comments
+  • Access comment metadata (author, timestamp, like count)
+  Purpose: Automated comment moderation, AI-powered response generation, and community management
+
+  instagram_manage_insights (Analytics and Insights):
+  • Account-level insights (reach, impressions, profile views)
+  • Media-level insights (likes, comments, saves, shares)
+  • Story insights (replies, exits, taps forward/back)
+  • Audience demographics (age, gender, location, active hours)
+  Purpose: Performance analytics, automated reporting, and audience analysis
+
+  instagram_business_manage_messages (Direct Message Automation):
+  • Read direct messages sent to your business account
+  • Send automated responses within 24-hour messaging window
+  • Access message metadata and conversation history
+  • Manage message reactions
+  Purpose: Customer service automation, FAQ responses, and inquiry routing
+
+  pages_show_list (Facebook Pages Access):
+  • List of Facebook Pages you manage
+  • Page access tokens required for Instagram Business accounts
+  Purpose: Required for Instagram Business API access (Instagram accounts must be linked to Facebook Pages)
+
+  pages_read_engagement (Page Engagement Data):
+  • Page-level engagement metrics
+  • Visitor post data for brand mentions
+  Purpose: Cross-platform analytics and user-generated content discovery
+
+  pages_read_user_content (User-Generated Content):
+  • Posts by visitors to your Facebook Page
+  • Tagged posts mentioning your brand
+  Purpose: Brand mention monitoring and UGC collection for marketing campaigns
+
+  For complete details on how Instagram handles your data, please review Instagram's Data Policy: https://help.instagram.com/155833707900388`
+            },
+            {
+              title: "2.2 Instagram Business Data Collected",
               content: `Account Information:
   • Instagram business and creator account profiles
   • Account metadata (username, business name, biography)
   • Profile pictures, website URLs, and contact information
   • Account verification status and category classification
   • Follower and following counts, media statistics
-  
+
   Content and Media:
   • Instagram posts, stories, reels, and IGTV content
   • Media URLs, thumbnails, and permalinks
@@ -104,18 +157,109 @@ export const LEGAL_CONTENT = {
   • Security: TLS 1.3 encryption, Web Application Firewall, threat intelligence`
         },
         {
+          id: "legal-basis",
+          title: "5. Legal Basis for Data Processing (GDPR Compliance)",
+          content: `For users in the European Economic Area (EEA), United Kingdom, and Switzerland, we process your personal data under the following lawful bases as defined by the General Data Protection Regulation (GDPR):
+
+  Consent (Article 6(1)(a) GDPR):
+  • Instagram API data access and automation services
+  • AI-powered response generation
+  • Marketing communications and promotional materials
+  • Analytics and performance tracking
+  You may withdraw your consent at any time through the privacy dashboard or by contacting privacy@888intelligenceautomation.in
+
+  Contractual Necessity (Article 6(1)(b) GDPR):
+  • Providing our automation platform services
+  • Account management and authentication
+  • Processing your service subscriptions and payments
+  • Technical support and customer service
+  Processing is necessary to fulfill our contractual obligations to provide the services you've subscribed to.
+
+  Legitimate Interests (Article 6(1)(f) GDPR):
+  • Platform security and fraud prevention
+  • Service improvement and optimization
+  • Technical troubleshooting and bug fixes
+  • Business analytics and operational efficiency
+  We have conducted legitimate interest assessments to ensure our interests do not override your fundamental rights and freedoms.
+
+  Legal Obligations (Article 6(1)(c) GDPR):
+  • Tax and financial record keeping
+  • Compliance with law enforcement requests
+  • Regulatory reporting requirements
+  • Data breach notifications
+
+  Data Protection Officer Contact:
+  Email: privacy@888intelligenceautomation.in
+  Address: 888 Intelligence Automation, Data Protection Officer, [Your Business Address]
+
+  Supervisory Authority Rights:
+  EEA users have the right to lodge a complaint with their local data protection supervisory authority. Find your supervisory authority at: https://edpb.europa.eu/about-edpb/about-edpb/members_en`
+        },
+        {
+          id: "international-transfers",
+          title: "6. International Data Transfers",
+          content: `Our services involve international data transfers to countries outside the European Economic Area (EEA), United Kingdom, and Switzerland. We ensure adequate protection for these transfers through the following mechanisms:
+
+  Standard Contractual Clauses (SCCs):
+  We use European Commission-approved Standard Contractual Clauses (2021/914) with our third-party service providers located outside the EEA. These clauses provide contractual guarantees for data protection equivalent to GDPR standards.
+
+  Data Transfer Recipients and Safeguards:
+
+  United States (Meta/Instagram):
+  • Recipient: Meta Platforms, Inc.
+  • Purpose: Instagram Graph API integration
+  • Safeguards: Standard Contractual Clauses, Meta's Data Transfer Addendum
+  • Additional Info: https://www.facebook.com/privacy/policy
+
+  United States (Supabase):
+  • Recipient: Supabase, Inc.
+  • Purpose: Database hosting and authentication
+  • Safeguards: Standard Contractual Clauses, SOC 2 Type II certification, encryption in transit and at rest
+  • Data Center: AWS US-East-1 (Virginia) with optional EU hosting available
+
+  United States (OpenAI):
+  • Recipient: OpenAI, LP
+  • Purpose: AI-powered response generation
+  • Safeguards: Standard Contractual Clauses, OpenAI Data Processing Agreement
+  • Data Processing: https://openai.com/policies/data-processing-addendum
+
+  United States (Cloudflare):
+  • Recipient: Cloudflare, Inc.
+  • Purpose: Security, DDoS protection, and content delivery
+  • Safeguards: Standard Contractual Clauses, EU Data Localization options
+  • Data Processing: https://www.cloudflare.com/cloudflare-customer-dpa/
+
+  Your Rights Regarding International Transfers:
+  • Right to object to transfers on grounds relating to your particular situation
+  • Right to request a copy of the safeguards in place
+  • Right to request transfer to a data processor in your country (subject to technical feasibility)
+
+  Contact our Data Protection Officer at privacy@888intelligenceautomation.in for:
+  • Copies of Standard Contractual Clauses
+  • Information about specific data transfer safeguards
+  • Questions about international data processing`
+        },
+        {
           id: "your-rights",
-          title: "5. Your Rights and Controls",
+          title: "7. Your Rights and Controls",
           content: `Data Access: View all stored information through your dashboard or request a comprehensive data export in JSON format.
-  
+
   Data Deletion: Our platform provides a user-friendly data deletion interface accessible through your account dashboard at:
   https://instagram-backend.888intelligenceautomation.in/dashboard/privacy-controls
-  
+
   Deletion Options:
   • Selective Deletion: Choose specific data categories
   • Complete Account Deletion: Remove entire account and all associated data
   • Export Before Deletion: Automatically download your data before deletion (recommended)
-  • Third-Party Coordination: Automatically revoke Instagram tokens and disable connected services`
+  • Third-Party Coordination: Automatically revoke Instagram tokens and disable connected services
+
+  Additional GDPR Rights (for EEA/UK/Swiss users):
+  • Right to Rectification: Correct inaccurate or incomplete personal data
+  • Right to Restriction: Request limitation of processing in certain circumstances
+  • Right to Data Portability: Receive your data in a structured, machine-readable format
+  • Right to Object: Object to processing based on legitimate interests
+  • Right to Withdraw Consent: Withdraw consent for consent-based processing at any time
+  • Right to Complain: Lodge a complaint with your local data protection supervisory authority`
         },
         {
           id: "contact",

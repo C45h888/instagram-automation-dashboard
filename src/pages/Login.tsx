@@ -1,21 +1,24 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { supabase } from '../lib/supabase';
-import {
-  Instagram,      // Instagram logo
+import {  Instagram,      // Instagram logo
   Lock,           // Security/privacy indicator
   ChevronRight,   // Accordion arrow
   Shield,         // Permission/security icon for consent section
   CheckCircle     // Checkmark for permission list items
 } from 'lucide-react';
+import { useFacebookSDK, facebookLogin } from '../hooks/useFacebookSDK';
 
 const Login: React.FC = () => {
   const { login } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as any)?.from?.pathname || '/';
-  
+
+  // Initialize Facebook SDK
+  const fbSdkReady = useFacebookSDK();
+
   const [isInstagramLoading, setIsInstagramLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'info' | 'error' | 'success'; text: string } | null>(null);
 
@@ -321,62 +324,59 @@ const Login: React.FC = () => {
   /**
    * Facebook OAuth Handler for Instagram Business API Access
    *
-   * This handler is separate from handleInstagramLogin to maintain backwards compatibility.
-   * It uses Facebook's OAuth flow to request Instagram Business permissions.
+   * UPDATED: Now uses official Facebook JavaScript SDK for OAuth
+   * This is compliant with Meta's Brand Guidelines (February 2025)
    *
    * @remarks
-   * - Uses Facebook OAuth endpoints (not Instagram OAuth)
+   * - Uses Facebook SDK's FB.login() method (official approach)
    * - Requests Instagram Business API permissions via Facebook
    * - Complies with Meta Platform Terms (February 2025)
-   * - State parameter includes auth method for tracking
+   * - No custom OAuth redirect needed - SDK handles it
    *
-   * @see https://developers.facebook.com/docs/facebook-login/overview
+   * @see https://developers.facebook.com/docs/facebook-login/web
    */
   const handleFacebookLogin = async (): Promise<void> => {
     // ============================================
     // STEP 1: CONSENT VALIDATION (CRITICAL)
     // ============================================
-    // Required by Meta Platform Terms (February 2025)
-    // User MUST explicitly consent before OAuth redirect
-
     if (!consentGiven) {
-      // Show error message to user
       setMessage({
         type: 'error',
         text: 'Please accept the Privacy Policy and Terms of Service to continue with Facebook Login.'
       });
-
-      // Log attempted OAuth without consent (security audit)
       console.warn('⚠️ OAuth attempt without consent - Facebook Login blocked');
-
-      // Exit early - do NOT proceed with OAuth
       return;
     }
 
     // ============================================
-    // STEP 2: SET LOADING STATE
+    // STEP 2: CHECK FACEBOOK SDK
+    // ============================================
+    if (!fbSdkReady) {
+      setMessage({
+        type: 'error',
+        text: 'Facebook SDK not loaded yet. Please wait a moment and try again.'
+      });
+      return;
+    }
+
+    // ============================================
+    // STEP 3: SET LOADING STATE
     // ============================================
     setIsFacebookLoading(true);
     setMessage(null);
 
     try {
       // ============================================
-      // STEP 3: LOG CONSENT (BEFORE OAuth)
+      // STEP 4: LOG CONSENT (BEFORE OAuth)
       // ============================================
-      // CRITICAL: Log consent BEFORE redirecting to Facebook
-      // Ensures consent record exists before data access
-
       await logConsent();
 
-      console.log('🔵 Initiating Facebook OAuth for Instagram Business Account...');
+      console.log('🔵 Initiating Facebook OAuth via official SDK...');
       console.log('   ✅ User consent verified and logged');
 
       // ============================================
-      // STEP 4: PROCEED WITH OAUTH FLOW
+      // STEP 5: DEFINE INSTAGRAM BUSINESS SCOPES
       // ============================================
-      // Rest of existing Facebook OAuth logic...
-
-      // Required Instagram Business API scopes
       const scopes = [
         'instagram_basic',
         'instagram_manage_comments',
@@ -384,83 +384,102 @@ const Login: React.FC = () => {
         'instagram_business_manage_messages',
         'pages_show_list',
         'pages_read_engagement',
-        'pages_manage_metadata'
+        'pages_manage_metadata',
+        'pages_read_user_content'  // For UGC feature
       ];
 
-      // Build Facebook OAuth URL (CRITICAL: Not Instagram OAuth)
-      // TODO: Uncomment for production with approved Meta app
-      // const facebookOAuthEndpoint = 'https://www.facebook.com/v18.0/dialog/oauth';
-      const redirectUri = `${window.location.origin}/auth/callback`;
-      const clientId = import.meta.env.VITE_META_APP_ID;
+      // ============================================
+      // STEP 6: USE OFFICIAL FACEBOOK SDK LOGIN
+      // ============================================
+      const response = await facebookLogin(scopes);
 
-      // Validate required environment variables
-      if (!clientId || clientId === 'your_meta_app_id_here') {
-        throw new Error(
-          'VITE_META_APP_ID not properly configured. ' +
-          'Please set a valid Meta App ID in your environment variables.'
-        );
-      }
+      if (response.authResponse) {
+        console.log('✅ Facebook OAuth successful!');
+        console.log('   Access Token received');
+        console.log('   User ID:', response.authResponse.userID);
 
-      // State parameter with tracking metadata
-      // TODO: Uncomment for production with approved Meta app
-      // const state = btoa(JSON.stringify({
-      //   timestamp: Date.now(),
-      //   returnUrl: from,
-      //   authMethod: 'facebook',
-      //   nonce: crypto.randomUUID()
-      // }));
+        // Extract access token and user ID
+        const shortLivedToken = response.authResponse.accessToken;
+        const userID = response.authResponse.userID;
 
-      // Development mock (preserve existing mock authentication patterns)
-      if (import.meta.env.DEV || import.meta.env.MODE === 'development') {
-        console.log('🔵 Development Mode: Simulating Facebook OAuth...');
-
-        // Simulate OAuth delay
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        // Use existing login function
-        login({
-          id: 'dev_facebook_user',
-          username: 'facebook_dev_user',
-          avatarUrl: '',
-          permissions: ['dashboard', 'content', 'engagement', 'analytics', 'settings'],
-        }, 'mock_facebook_token');
-
-        // Success message using existing message system
+        // ============================================
+        // STEP 7: EXCHANGE TOKEN & GET INSTAGRAM DATA
+        // ============================================
         setMessage({
-          type: 'success',
-          text: '✅ Development: Facebook OAuth simulation successful'
+          type: 'info',
+          text: 'Setting up your Instagram Business account...'
         });
 
-        // Navigate using existing navigation pattern
-        setTimeout(() => {
-          navigate(from, { replace: true });
-        }, 1000);
+        try {
+          // Call backend to exchange token for long-lived token
+          const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+          const exchangeResponse = await fetch(`${backendUrl}/api/instagram/exchange-token`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              userAccessToken: shortLivedToken,
+              userId: userID,
+              businessAccountId: 'temp_' + userID // Will be updated with actual IG account ID
+            })
+          });
 
-        return;
+          if (!exchangeResponse.ok) {
+            const errorData = await exchangeResponse.json();
+            throw new Error(errorData.message || 'Token exchange failed');
+          }
+
+          const exchangeData = await exchangeResponse.json();
+
+          console.log('✅ Token exchange successful!');
+          console.log('   Page ID:', exchangeData.data.pageId);
+          console.log('   Page Name:', exchangeData.data.pageName);
+          console.log('   Instagram Business Account ID:', exchangeData.data.igBusinessAccountId);
+          console.log('   Token stored:', exchangeData.data.stored);
+
+          // Login with user ID and long-lived token
+          login({
+            id: userID,
+            username: exchangeData.data.pageName || 'instagram_user',
+            avatarUrl: '',
+            permissions: ['dashboard', 'content', 'engagement', 'analytics', 'settings'],
+          }, shortLivedToken); // Using short token temporarily, long token stored in DB
+
+          setMessage({
+            type: 'success',
+            text: '✅ Instagram Business account connected! Redirecting...'
+          });
+
+          // Navigate to dashboard
+          setTimeout(() => {
+            navigate(from, { replace: true });
+          }, 1500);
+
+        } catch (exchangeError) {
+          console.error('❌ Token exchange error:', exchangeError);
+
+          // Fallback: Login with short-lived token (will expire in 1 hour)
+          console.warn('⚠️ Using short-lived token as fallback');
+
+          login({
+            id: userID,
+            username: 'facebook_user',
+            avatarUrl: '',
+            permissions: ['dashboard', 'content', 'engagement', 'analytics', 'settings'],
+          }, shortLivedToken);
+
+          setMessage({
+            type: 'success',
+            text: '✅ Facebook login successful! Note: Token exchange failed, you may need to reconnect soon.'
+          });
+
+          setTimeout(() => {
+            navigate(from, { replace: true });
+          }, 2000);
+        }
       }
 
-      // In production, redirect to Facebook OAuth
-      // TODO: Uncomment for production with approved Meta app
-      // const oauthUrl = `${facebookOAuthEndpoint}?` +
-      //   `client_id=${clientId}` +
-      //   `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-      //   `&scope=${encodeURIComponent(scopes.join(','))}` +
-      //   `&response_type=code` +
-      //   `&state=${state}` +
-      //   `&auth_type=rerequest`;
-
-      console.log('🔵 Redirecting to Facebook OAuth...');
-      console.log('  Redirect URI:', redirectUri);
-      console.log('  Scopes:', scopes.join(', '));
-
-      // TODO: Uncomment for production with approved Meta app
-      // window.location.href = oauthUrl;
-
-      // Temporary placeholder for unapproved apps
-      setMessage({
-        type: 'info',
-        text: '⏳ Facebook OAuth integration pending Meta app approval. Using development mode.'
-      });
     } catch (error) {
       console.error('❌ Facebook OAuth Error:', error);
 
@@ -711,29 +730,36 @@ const Login: React.FC = () => {
                 </div>
               )}
 
-              {/* Facebook Login Button */}
+              {/* Facebook Login Button - Meta Brand Guidelines Compliant */}
+              {/* UPDATED 2025: Official Facebook SDK approach with exact brand colors */}
               <button
                 onClick={handleFacebookLogin}
                 disabled={!consentGiven || isFacebookLoading || isAnyAuthLoading}
                 className={`
-                  w-full py-4 px-6 rounded-xl font-semibold text-lg
-                  flex items-center justify-center space-x-3
-                  transition-all duration-300 transform
+                  w-full py-5 px-6 rounded-lg font-bold text-lg
+                  flex items-center justify-center space-x-4
+                  transition-all duration-200
                   ${!consentGiven || isFacebookLoading || isAnyAuthLoading
-                    ? 'bg-gray-600 cursor-not-allowed opacity-50'
-                    : 'bg-[#1877F2] hover:bg-[#166FE5] hover:scale-[1.02] active:scale-[0.98]'
+                    ? 'bg-gray-400 cursor-not-allowed opacity-60'
+                    : 'bg-[#1877F2] hover:bg-[#0C63D4] active:bg-[#0952b8]'
                   }
-                  text-white shadow-lg hover:shadow-xl
-                  focus:outline-none focus:ring-4 focus:ring-blue-500/50
-                  min-h-[80px]
+                  text-white shadow-2xl hover:shadow-blue-500/50
+                  focus:outline-none focus:ring-4 focus:ring-[#1877F2]/50
+                  border-4 border-white/20
+                  min-h-[90px]
+                  transform hover:scale-105 active:scale-95
                 `}
-                aria-label="Continue with Facebook to connect Instagram Business account"
+                aria-label="Continue with Facebook - Official Login Method for Instagram Business"
                 data-testid="facebook-login-button"
+                style={{
+                  fontFamily: 'Helvetica, Arial, sans-serif',
+                  letterSpacing: '0.25px'
+                }}
               >
                 {isFacebookLoading ? (
                   <div className="flex items-center space-x-3">
                     <svg
-                      className="animate-spin h-6 w-6 text-white"
+                      className="animate-spin h-7 w-7 text-white"
                       xmlns="http://www.w3.org/2000/svg"
                       fill="none"
                       viewBox="0 0 24 24"
@@ -752,22 +778,25 @@ const Login: React.FC = () => {
                         d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                       />
                     </svg>
-                    <span>Connecting to Facebook...</span>
+                    <span className="text-xl">Connecting to Facebook...</span>
                   </div>
                 ) : (
                   <>
-                    {/* Facebook "f" Logo */}
-                    <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center flex-shrink-0">
-                      <svg
-                        viewBox="0 0 24 24"
-                        className="w-5 h-5"
-                        fill="#1877F2"
-                        aria-hidden="true"
-                      >
-                        <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-                      </svg>
-                    </div>
-                    <span>Continue with Facebook</span>
+                    {/* Official Facebook "f" Logo - White on Blue background as per brand guidelines */}
+                    <svg
+                      width="32"
+                      height="32"
+                      viewBox="0 0 216 216"
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="flex-shrink-0"
+                      aria-hidden="true"
+                    >
+                      <path
+                        fill="#FFFFFF"
+                        d="M204.1 0H11.9C5.3 0 0 5.3 0 11.9v192.2c0 6.6 5.3 11.9 11.9 11.9h103.5v-83.6H87.2V99.8h28.1v-24c0-27.9 17-43.1 41.9-43.1 11.9 0 22.2.9 25.2 1.3v29.2h-17.3c-13.5 0-16.2 6.4-16.2 15.9v20.8h32.3l-4.2 32.6h-28.1V216h55c6.6 0 11.9-5.3 11.9-11.9V11.9C216 5.3 210.7 0 204.1 0z"
+                      />
+                    </svg>
+                    <span className="text-xl tracking-wide">Continue with Facebook</span>
                   </>
                 )}
               </button>

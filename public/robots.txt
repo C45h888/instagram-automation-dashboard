@@ -1,2 +1,45 @@
+# robots.txt for Instagram Automation Platform
+# Last Updated: 2025-01-17
+# Meta App Review Compliance: Allow all crawlers to access legal documents
+
+# ========================================
+# META/FACEBOOK CRAWLERS - ALLOW ALL
+# ========================================
+# Critical for App Review Process
+# Meta needs to crawl privacy policy, terms of service, and data deletion policy
+
+User-agent: Facebot
+Allow: /
+
+User-agent: FacebookExternalHit
+Allow: /
+
+# ========================================
+# ALL OTHER CRAWLERS - ALLOW ACCESS TO LEGAL DOCUMENTS
+# ========================================
+
 User-agent: *
-Allow: / 
+Allow: /legal/
+Allow: /privacy-policy
+Allow: /terms-of-service
+Allow: /data-deletion
+
+# Disallow admin and internal pages
+Disallow: /admin/
+Disallow: /dashboard/
+Disallow: /api/
+
+# ========================================
+# SITEMAPS
+# ========================================
+# Update these URLs to match your actual deployment
+
+Sitemap: https://instagram-backend.888intelligenceautomation.in/sitemap.xml
+
+# ========================================
+# ADDITIONAL INFO
+# ========================================
+# Legal Documents (publicly accessible):
+# - Privacy Policy: https://instagram-backend.888intelligenceautomation.in/legal/privacy-policy
+# - Terms of Service: https://instagram-backend.888intelligenceautomation.in/legal/terms-of-service
+# - Data Deletion: https://instagram-backend.888intelligenceautomation.in/legal/data-deletion

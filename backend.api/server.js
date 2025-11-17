@@ -88,6 +88,89 @@ app.use((req, res, next) => {
   next();
 });
 
+// =============================================================================
+// SECURITY HEADERS MIDDLEWARE - META COMPLIANCE & BEST PRACTICES
+// =============================================================================
+// Adds comprehensive security headers to all responses
+// Required for Meta App Review and industry best practices
+
+app.use((req, res, next) => {
+  // Strict-Transport-Security (HSTS)
+  // Forces HTTPS connections for 1 year, including subdomains
+  // Prevents man-in-the-middle attacks
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+
+  // Content-Security-Policy (CSP)
+  // Prevents XSS attacks by controlling which resources can be loaded
+  // Allows Facebook SDK, Supabase, and our own domains
+  const cspDirectives = [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://connect.facebook.net https://*.supabase.co",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com",
+    "img-src 'self' data: https: blob:",
+    "connect-src 'self' https://graph.facebook.com https://*.supabase.co https://api.ipify.org",
+    "frame-src 'self' https://www.facebook.com https://web.facebook.com",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'"
+  ].join('; ');
+  res.setHeader('Content-Security-Policy', cspDirectives);
+
+  // X-Frame-Options
+  // Prevents clickjacking attacks
+  // DENY = don't allow embedding in any iframe
+  res.setHeader('X-Frame-Options', 'DENY');
+
+  // X-Content-Type-Options
+  // Prevents MIME-type sniffing
+  // Forces browser to respect declared content type
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+
+  // X-XSS-Protection
+  // Legacy XSS protection for older browsers
+  // Modern browsers use CSP instead
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+
+  // Referrer-Policy
+  // Controls how much referrer information is sent
+  // strict-origin-when-cross-origin = full URL for same-origin, origin only for cross-origin
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+
+  // Permissions-Policy (formerly Feature-Policy)
+  // Controls which browser features can be used
+  // Restricts access to camera, microphone, geolocation, etc.
+  const permissionsPolicy = [
+    'camera=()',
+    'microphone=()',
+    'geolocation=()',
+    'payment=()',
+    'usb=()',
+    'magnetometer=()',
+    'gyroscope=()',
+    'accelerometer=()'
+  ].join(', ');
+  res.setHeader('Permissions-Policy', permissionsPolicy);
+
+  // X-Permitted-Cross-Domain-Policies
+  // Prevents Adobe Flash and PDF cross-domain requests
+  res.setHeader('X-Permitted-Cross-Domain-Policies', 'none');
+
+  // X-Download-Options
+  // IE-specific header to prevent file download in browser context
+  res.setHeader('X-Download-Options', 'noopen');
+
+  // Cache-Control for API responses
+  // Prevents sensitive data from being cached
+  if (req.url.startsWith('/api/')) {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  }
+
+  next();
+});
+
 // Request logging middleware
 app.use((req, res, next) => {
   const timestamp = new Date().toISOString();
