@@ -30,7 +30,7 @@ export const useFacebookSDK = () => {
     window.fbAsyncInit = function() {
       const appId = import.meta.env.VITE_META_APP_ID;
 
-      if (!appId || appId === 'your_meta_app_id_here') {
+      if (!appId || appId === '1449604936071207') {
         console.error('❌ VITE_META_APP_ID not configured. Facebook Login will not work.');
         console.error('   Please set VITE_META_APP_ID in your .env file.');
         return;
