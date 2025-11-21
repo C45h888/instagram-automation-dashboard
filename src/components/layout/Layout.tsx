@@ -59,11 +59,11 @@ const Layout: React.FC = () => {
   };
 
   return (
-    // Height cascade maintained for bug-free layout
-    <div className="h-full bg-gradient-to-br from-gray-900 via-black to-gray-900 flex flex-col">
-      
-      {/* Sticky Header - ~80px height */}
-      <header className="bg-gray-800/50 backdrop-blur-xl border-b border-gray-700 sticky top-0 z-50">
+    // Natural document scroll - allows content to grow beyond viewport
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 flex flex-col">
+
+      {/* Header - ~80px height (scrolls naturally with content) */}
+      <header className="bg-gray-800/50 backdrop-blur-xl border-b border-gray-700 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-20">
             
@@ -256,10 +256,9 @@ const Layout: React.FC = () => {
         )}
       </header>
 
-      {/* OPTIMIZED MAIN CONTAINER - Key changes for viewport optimization */}
-      <main className="flex-1 overflow-y-auto">
-     
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 lg:py-6">
+      {/* MAIN CONTAINER - Natural scroll, browser handles overflow */}
+      <main className="flex-1">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 lg:py-4">
           <Outlet />
         </div>
       </main>

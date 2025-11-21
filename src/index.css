@@ -35,22 +35,19 @@
 }
 
 /* ========================================
-   CRITICAL FIX: HEIGHT CASCADE FOR FLEXBOX
-   Maintains bug-free layout from previous optimization
+   NATURAL DOCUMENT SCROLL APPROACH
+   Allows content to grow beyond viewport for better UX
    ======================================== */
 
-/* 
- * BUG FIX: Removed invalid angle bracket syntax
- * ❌ BEFORE: <margin>: 0; and <padding>: 0;
- * ✅ AFTER: margin: 0; and padding: 0;
- * 
- * Establish definite height from viewport down to #root
- * This is essential for flex-1 to work correctly in Layout component
+/*
+ * Natural scroll implementation - content can expand beyond viewport
+ * Uses min-height instead of height to allow document growth
+ * Browser window handles scrolling naturally
  */
 html, body {
-  height: 100%; /* Changed from min-height to height for definite sizing */
-  margin: 0; /* ✅ FIXED: Remove default browser margins */
-  padding: 0; /* ✅ FIXED: Remove default browser padding */
+  min-height: 100%; /* Allows content to grow beyond viewport */
+  margin: 0; /* Remove default browser margins */
+  padding: 0; /* Remove default browser padding */
 }
 
 body {
@@ -58,18 +55,21 @@ body {
   background: linear-gradient(135deg, #0f0f0f 0%, #1a1a1a 100%);
 }
 
-/* CRITICAL: Root must have defined height for flex children to calculate properly */
+/* Root container allows vertical expansion while maintaining flex layout */
 #root {
-  height: 100%; /* Changed from min-height: 100vh to height: 100% */
+  min-height: 100vh; /* Minimum full viewport, can grow taller */
   display: flex; /* Ensure root is a flex container */
   flex-direction: column; /* Match Layout component's flex direction */
 }
 
-/* 
- * Why this height cascade works:
- * html (100% viewport) → body (100% of html) → #root (100% of body) → Layout (h-full)
- * This provides the definite height that flexbox needs to calculate flex-grow properly.
- * Without this, flex-1 on main content cannot determine available space.
+/*
+ * Why this natural scroll approach works:
+ * - html/body use min-height to allow growth
+ * - #root uses min-height: 100vh for full viewport minimum
+ * - Layout uses min-h-screen for same effect
+ * - Main content has flex-1 to fill available space
+ * - Footer appears at bottom (requires scrolling on long pages)
+ * - No overflow-y-auto on main = browser handles all scrolling
  */
 
 /* ========================================

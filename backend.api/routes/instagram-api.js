@@ -16,11 +16,11 @@ const { logAudit, supabase } = require('../config/supabase'); // ADDED: Audit lo
 // ==========================================
 
 /**
- * Validate image URL for Instagram posting
+ * Validate image or video URL for Instagram posting
  * Requirements:
  *   - Must be HTTPS
  *   - Must be publicly accessible
- *   - Must be a valid image format
+ *   - Must be a valid image or video format
  */
 function validateImageUrl(url) {
   try {
@@ -28,11 +28,11 @@ function validateImageUrl(url) {
 
     // Must use HTTPS
     if (parsedUrl.protocol !== 'https:') {
-      return { valid: false, error: 'Image URL must use HTTPS protocol' };
+      return { valid: false, error: 'Media URL must use HTTPS protocol' };
     }
 
-    // Check for valid image extension
-    const validExtensions = ['.jpg', '.jpeg', '.png', '.gif'];
+    // Check for valid image or video extension
+    const validExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.mp4', '.mov', '.avi'];
     const hasValidExtension = validExtensions.some(ext =>
       parsedUrl.pathname.toLowerCase().endsWith(ext)
     );
@@ -40,7 +40,7 @@ function validateImageUrl(url) {
     if (!hasValidExtension) {
       return {
         valid: false,
-        error: 'Image URL must end with .jpg, .jpeg, .png, or .gif'
+        error: 'Media URL must end with .jpg, .jpeg, .png, .gif, .mp4, .mov, or .avi'
       };
     }
 
@@ -49,7 +49,7 @@ function validateImageUrl(url) {
     if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('192.168.')) {
       return {
         valid: false,
-        error: 'Image must be publicly accessible (not localhost or private IP)'
+        error: 'Media must be publicly accessible (not localhost or private IP)'
       };
     }
 
