@@ -18,46 +18,82 @@ declare global {
 
 export const useFacebookSDK = () => {
   const [sdkReady, setSdkReady] = useState(false);
+  const [initAttempted, setInitAttempted] = useState(false);
 
   useEffect(() => {
-    // Check if SDK already loaded
-    if (window.FB) {
-      setSdkReady(true);
-      return;
-    }
+    // Prevent multiple initialization attempts
+    if (initAttempted) return;
 
-    // Initialize SDK when script loads
-    window.fbAsyncInit = function() {
+    const initializeFacebookSDK = () => {
       const appId = import.meta.env.VITE_META_APP_ID;
 
-      if (!appId || appId === '1449604936071207') {
+      if (!appId || appId === 'your_meta_app_id_here') {
         console.error('❌ VITE_META_APP_ID not configured. Facebook Login will not work.');
         console.error('   Please set VITE_META_APP_ID in your .env file.');
         return;
       }
 
-      window.FB.init({
-        appId: appId,
-        cookie: true,           // Enable cookies for session
-        xfbml: true,            // Parse social plugins on this page
-        version: 'v18.0'        // Use latest stable API version
-      });
+      // Check if already initialized
+      if (window.FB && typeof window.FB.getLoginStatus === 'function') {
+        console.log('✅ Facebook SDK already initialized');
+        setSdkReady(true);
+        return;
+      }
 
-      // Log page view for analytics
-      window.FB.AppEvents.logPageView();
+      // Initialize if SDK is loaded but not initialized
+      if (window.FB && typeof window.FB.init === 'function') {
+        window.FB.init({
+          appId: appId,
+          cookie: true,           // Enable cookies for session
+          xfbml: true,            // Parse social plugins on this page
+          version: 'v18.0'        // Use latest stable API version
+        });
 
-      console.log('✅ Facebook SDK initialized successfully');
-      console.log('   App ID:', appId);
-      console.log('   SDK Version: v18.0');
+        // Log page view for analytics
+        window.FB.AppEvents.logPageView();
 
-      setSdkReady(true);
+        console.log('✅ Facebook SDK initialized successfully');
+        console.log('   App ID:', appId);
+        console.log('   SDK Version: v18.0');
+
+        setSdkReady(true);
+        return;
+      }
     };
 
-    // If SDK script already loaded but not initialized, call init
-    if (typeof window.FB !== 'undefined' && !sdkReady) {
-      window.fbAsyncInit();
+    // Define the async init callback for SDK
+    window.fbAsyncInit = function() {
+      setInitAttempted(true);
+      initializeFacebookSDK();
+    };
+
+    // If SDK already loaded, initialize immediately
+    if (window.FB) {
+      setInitAttempted(true);
+      initializeFacebookSDK();
+    } else {
+      // Poll for SDK to load (handles race condition)
+      let pollCount = 0;
+      const maxPolls = 100; // 10 seconds (100 * 100ms)
+
+      const checkInterval = setInterval(() => {
+        pollCount++;
+
+        if (window.FB) {
+          clearInterval(checkInterval);
+          setInitAttempted(true);
+          initializeFacebookSDK();
+        } else if (pollCount >= maxPolls) {
+          clearInterval(checkInterval);
+          console.error('❌ Facebook SDK failed to load after 10 seconds');
+          console.error('   Check your internet connection and firewall settings');
+        }
+      }, 100); // Check every 100ms
+
+      // Cleanup function
+      return () => clearInterval(checkInterval);
     }
-  }, [sdkReady]);
+  }, []); // Empty dependency array - run once on mount
 
   return sdkReady;
 };
@@ -73,6 +109,12 @@ export const checkFacebookLoginStatus = (): Promise<any> => {
   return new Promise((resolve, reject) => {
     if (!window.FB) {
       reject(new Error('Facebook SDK not loaded'));
+      return;
+    }
+
+    // Verify SDK is fully initialized before calling getLoginStatus
+    if (typeof window.FB.getLoginStatus !== 'function') {
+      reject(new Error('Facebook SDK not initialized - FB.init() not called yet'));
       return;
     }
 

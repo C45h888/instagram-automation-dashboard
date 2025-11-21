@@ -50,6 +50,14 @@ storage-version
 supabase/.temp
 supabase/.cache
 
+# Playwright test results and artifacts
+test-results/
+playwright-report/
+playwright/.cache/
+*.mp4
+*.webm
+trace.zip
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

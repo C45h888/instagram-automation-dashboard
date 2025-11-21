@@ -7,14 +7,11 @@
     "// ============ DEVELOPMENT SCRIPTS ============": "",
     "dev": "vite",
     "build": "npx vite build --config ./vite.config.ts",
-     "preview":  "vite preview",
-    
-    
+    "preview": "vite preview",
     "// ============ BACKEND SCRIPTS ============": "",
     "backend": "cd backend && node server.js",
     "backend:dev": "cd backend && npm run dev",
     "backend:install": "cd backend && npm install",
-    
     "// ============ UNIFIED TUNNEL MANAGEMENT (NEW) ============": "",
     "tunnel": "node scripts/tunnel-manager-unified.js start --mode dual",
     "tunnel:single": "node scripts/tunnel-manager-unified.js start --mode single",
@@ -22,13 +19,11 @@
     "tunnel:status": "node scripts/tunnel-manager-unified.js status",
     "tunnel:stop": "node scripts/tunnel-manager-unified.js stop",
     "tunnel:test": "node scripts/tunnel-manager-unified.js test",
-    
     "// ============ LEGACY TUNNEL COMMANDS (Redirects to Unified) ============": "",
     "tunnel:api": "npm run tunnel:single",
     "tunnel:dual:status": "npm run tunnel:status",
     "tunnel:dual:stop": "npm run tunnel:stop",
     "tunnel:dual:test": "npm run tunnel:test",
-    
     "// ============ CLOUDFLARE DIRECT COMMANDS (Kept for debugging) ============": "",
     "tunnel:start": "cloudflared tunnel --url http://localhost:3001",
     "tunnel:named": "cloudflared tunnel run instagram-automation-backend",
@@ -36,7 +31,6 @@
     "tunnel:create-b": "cloudflared tunnel create supabase-secure-tunnel",
     "tunnel:kill": "pkill -f cloudflared",
     "tunnel:ps": "ps aux | grep cloudflared",
-    
     "// ============ TESTING ENDPOINTS ============": "",
     "test:backend": "curl http://localhost:3001/health",
     "test:webhook": "curl https://instagram-backend.888intelligenceautomation.in/health",
@@ -46,25 +40,21 @@
     "tunnel:test-api": "curl https://instagram-backend.888intelligenceautomation.in/health",
     "tunnel:test-db": "curl -I https://db-secure.888intelligenceautomation.in/rest/v1/",
     "test:full": "npm run test:backend && npm run test:webhook && npm run test:n8n",
-    
     "// ============ COMBINED DEVELOPMENT MODES ============": "",
     "dev:production": "concurrently \"npm run backend\" \"npm run tunnel:single\" \"npm run dev\"",
     "dev:secure": "concurrently \"npm run backend\" \"npm run tunnel:dual\" \"npm run dev\"",
     "dev:full": "concurrently \"npm run backend\" \"npm run tunnel\" \"npm run dev\"",
     "dev:local": "concurrently \"npm run backend\" \"npm run dev\"",
-    
     "// ============ SETUP & INSTALLATION ============": "",
     "setup": "npm install && npm run backend:install",
     "setup:tunnel-b": "bash deploy-tunnel-b.sh",
     "setup:supabase": "npm install @supabase/supabase-js && cd backend && npm install @supabase/supabase-js",
     "setup:unified": "node scripts/setup-unified-tunnel.js",
-    
     "// ============ ENVIRONMENT MANAGEMENT ============": "",
     "env:check": "node -e \"const fs=require('fs'); console.log('.env exists:', fs.existsSync('.env')); console.log('.env.tunnel-single exists:', fs.existsSync('.env.tunnel-single')); console.log('.env.tunnel-dual exists:', fs.existsSync('.env.tunnel-dual'));\"",
     "env:backup": "node -e \"const fs=require('fs'); const date=new Date().toISOString().replace(/[:.]/g,'-'); fs.existsSync('.env') && fs.copyFileSync('.env', `.env.backup.${date}`) && console.log(`Backup created: .env.backup.${date}`)\"",
     "env:list-backups": "ls -la .env.backup.* 2>/dev/null || echo 'No backups found'",
     "env:template:view": "cat .env.tunnel-dual 2>/dev/null || echo 'No dual template found. Run: npm run tunnel:dual'",
-    
     "// ============ UTILITY & MAINTENANCE ============": "",
     "check:cloudflared": "cloudflared --version",
     "check:backend": "ls -la backend/",
@@ -73,17 +63,27 @@
     "clean": "rm -rf node_modules backend/node_modules",
     "clean:tunnels": "rm -f tunnel-status.json tunnel-test-results.json .env.tunnel-*",
     "fresh-install": "npm run clean && npm install && npm run backend:install",
-    
     "// ============ DATABASE MANAGEMENT ============": "",
     "db:types": "npx supabase gen types typescript --project-id uromexjprcrjfmhkmgxa > src/lib/database.types.ts",
     "db:status": "npx supabase status",
-    
+    "// ============ PLAYWRIGHT E2E TESTING ============": "",
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "test:debug": "playwright test --debug",
+    "test:chromium": "playwright test --project=chromium",
+    "test:firefox": "playwright test --project=firefox",
+    "test:webkit": "playwright test --project=webkit",
+    "test:mobile": "playwright test --project='Mobile Chrome' --project='Mobile Safari'",
+    "test:login": "playwright test tests/e2e/login.spec.ts",
+    "test:dashboard": "playwright test tests/e2e/dashboard.spec.ts",
+    "test:report": "playwright show-report",
+    "test:codegen": "playwright codegen http://localhost:5173",
     "// ============ PRODUCTION DEPLOYMENT ============": "",
     "start": "npm run backend",
     "start:tunnels": "npm run tunnel",
     "deploy:pm2": "pm2 start ecosystem.config.js",
     "deploy:check": "pm2 status",
-    
     "// ============ MIGRATION HELPERS (Temporary - Remove after migration) ============": "",
     "migrate:backup-old": "mkdir -p scripts/deprecated && mv scripts/tunnel-manager-cf.js scripts/deprecated/ 2>/dev/null; mv scripts/tunnel-manager-dual.js scripts/deprecated/ 2>/dev/null || echo 'Old scripts already moved or not found'",
     "migrate:verify": "npm run env:check && npm run tunnel:status",
@@ -110,6 +110,8 @@
     "zustand": "^5.0.7"
   },
   "devDependencies": {
+    "@playwright/mcp": "^0.0.47",
+    "@playwright/test": "^1.56.1",
     "@types/node": "^20.0.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.3.7",
