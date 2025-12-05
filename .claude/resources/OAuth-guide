@@ -1,0 +1,2575 @@
+# Instagram OAuth 2.0 Implementation Guide
+## Comprehensive Reference for AI Coding Agents
+
+**Project**: 888 Intelligence Automation  
+**Stack**: React/Vite Frontend + Node.js/Express Backend + Supabase PostgreSQL + Render.com  
+**Purpose**: Integrate Instagram OAuth authentication for automation workflows  
+
+---
+
+## Table of Contents
+
+1. [OAuth 2.0 Fundamentals for Instagram](#oauth-fundamentals)
+2. [Architecture Analysis from Reference Repositories](#architecture-analysis)
+3. [Complete Implementation Blueprint](#implementation-blueprint)
+4. [Integration Guide for 888 Intelligence Automation](#integration-guide)
+5. [Security & Best Practices](#security-best-practices)
+6. [Testing & Debugging](#testing-debugging)
+7. [Troubleshooting Common Issues](#troubleshooting)
+
+---
+
+## 1. OAuth 2.0 Fundamentals for Instagram {#oauth-fundamentals}
+
+### 1.1 OAuth Flow Overview
+
+Instagram uses OAuth 2.0 Authorization Code Grant flow with the following steps:
+
+```
+┌─────────────┐                                     ┌──────────────┐
+│   User      │                                     │  Instagram   │
+│  Browser    │                                     │     API      │
+└──────┬──────┘                                     └──────┬───────┘
+       │                                                   │
+       │  1. Click "Connect Instagram"                    │
+       │  ─────────────────────────────────>              │
+       │                                                   │
+┌──────▼──────┐                                           │
+│  Frontend   │                                           │
+│  (React)    │                                           │
+└──────┬──────┘                                           │
+       │                                                   │
+       │  2. Request auth URL from backend                │
+       │  ─────────────────────────────────>              │
+       │                                                   │
+┌──────▼──────┐                                           │
+│  Backend    │  3. Generate auth URL with state          │
+│  (Express)  │  ─────────────────────────────────────────>
+└──────┬──────┘                                           │
+       │                                                   │
+       │  4. Return auth URL                              │
+       │  <─────────────────────────────────              │
+       │                                                   │
+┌──────▼──────┐                                           │
+│  Frontend   │  5. Redirect user to Instagram            │
+│             │  ─────────────────────────────────────────>
+└─────────────┘                                           │
+                                                           │
+┌─────────────┐                                    ┌──────▼───────┐
+│   User      │  6. User authorizes app            │  Instagram   │
+│  Browser    │  ────────────────────────>         │ OAuth Page   │
+└──────┬──────┘                                    └──────┬───────┘
+       │                                                   │
+       │  7. Instagram redirects with code                │
+       │  <─────────────────────────────────              │
+       │                                                   │
+┌──────▼──────┐                                           │
+│  Backend    │  8. Exchange code for token               │
+│  Callback   │  ─────────────────────────────────────────>
+│  Endpoint   │                                           │
+└──────┬──────┘                                           │
+       │  9. Receive access token                         │
+       │  <─────────────────────────────────              │
+       │                                                   │
+       │  10. Exchange short-lived for long-lived token   │
+       │  ─────────────────────────────────────────────────>
+       │                                                   │
+       │  11. Receive long-lived token (60 days)          │
+       │  <─────────────────────────────────              │
+       │                                                   │
+┌──────▼──────┐                                           │
+│  Database   │  12. Store account + token                │
+│  (Supabase) │  <─────────                               │
+└─────────────┘                                           │
+       │                                                   │
+┌──────▼──────┐                                           │
+│  Frontend   │  13. Redirect to success page             │
+│  Success    │  <─────────                               │
+└─────────────┘                                           │
+```
+
+### 1.2 Key Instagram OAuth Concepts
+
+#### A. Instagram Platform API vs Graph API
+
+**Instagram Platform API (Recommended - July 2024+)**
+- Direct Instagram authentication (no Facebook Page required)
+- Supports Business & Creator accounts
+- Endpoint: `https://api.instagram.com/oauth/authorize`
+- Token endpoint: `https://api.instagram.com/oauth/access_token`
+
+**Instagram Graph API (Legacy)**
+- Requires Facebook Page connection
+- Endpoint: `https://www.facebook.com/dialog/oauth`
+- More complex setup
+
+**Decision**: Use Instagram Platform API for new implementations.
+
+#### B. Token Types
+
+```javascript
+// Token Lifecycle
+{
+  "short_lived_token": {
+    "expires_in": 3600,           // 1 hour
+    "can_be_exchanged": true,
+    "use_case": "Initial OAuth callback"
+  },
+  "long_lived_token": {
+    "expires_in": 5184000,        // 60 days
+    "can_be_refreshed": true,
+    "use_case": "Production use"
+  },
+  "refreshed_token": {
+    "expires_in": 5184000,        // Another 60 days
+    "refresh_before": "7 days before expiry",
+    "use_case": "Continuous access"
+  }
+}
+```
+
+#### C. Required Permissions (Scopes)
+
+```javascript
+const INSTAGRAM_SCOPES = {
+  // Basic (Required for all)
+  basic: [
+    'instagram_business_basic',           // Profile info, media
+  ],
+  
+  // Publishing
+  publishing: [
+    'instagram_business_content_publish', // Post photos/videos
+  ],
+  
+  // Engagement
+  engagement: [
+    'instagram_manage_messages',          // DMs & comments
+    'instagram_manage_comments',          // Comment management
+  ],
+  
+  // Analytics
+  analytics: [
+    'instagram_manage_insights',          // Analytics data
+  ],
+  
+  // Advanced (Requires App Review)
+  advanced: [
+    'pages_show_list',                    // List connected pages
+    'pages_read_engagement',              // Page engagement data
+  ]
+};
+
+// Scope string format
+const scopeString = 'instagram_business_basic,instagram_business_content_publish,instagram_manage_messages';
+```
+
+---
+
+## 2. Architecture Analysis from Reference Repositories {#architecture-analysis}
+
+### 2.1 SashenJayathilaka/SAAS-Instagram-DM-Automations
+
+**Architecture Pattern**: Full-Stack Next.js with Server Actions
+
+#### Key Implementation Decisions:
+
+```typescript
+// File: actions/instagram/oauth.ts
+// Pattern: Next.js Server Actions for secure OAuth handling
+
+/**
+ * ANALYSIS:
+ * - Uses Next.js 14 Server Actions to keep secrets server-side
+ * - Clerk for user authentication (separate from Instagram OAuth)
+ * - Prisma ORM for type-safe database operations
+ * - State management with Redux for client-side
+ */
+
+// Their approach to state management during OAuth
+interface OAuthState {
+  userId: string;
+  productId: string;
+  timestamp: number;
+  csrfToken: string;
+}
+
+// State is encrypted and stored temporarily
+const encryptedState = encrypt(JSON.stringify(state));
+```
+
+**Database Schema**:
+```prisma
+// File: prisma/schema.prisma
+
+model InstagramAccount {
+  id                String   @id @default(uuid())
+  userId            String
+  productId         String
+  instagramUserId   String   @unique
+  username          String
+  accessToken       String   // Encrypted
+  tokenExpiresAt    DateTime?
+  isActive          Boolean  @default(true)
+  autoPost          Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Relations
+  automations       Automation[]
+  posts             InstagramPost[]
+  
+  @@unique([productId, isActive]) // Only one active account per product
+  @@index([userId])
+}
+
+model InstagramPost {
+  id                String   @id @default(uuid())
+  accountId         String
+  postId            String
+  caption           String   @db.Text
+  imageUrl          String
+  status            PostStatus @default(PENDING)
+  instagramMediaId  String?
+  permalink         String?
+  scheduledFor      DateTime?
+  postedAt          DateTime?
+  errorMessage      String?  @db.Text
+  retryCount        Int      @default(0)
+  createdAt         DateTime @default(now())
+  
+  account           InstagramAccount @relation(fields: [accountId], references: [id])
+  
+  @@index([accountId, status])
+}
+
+enum PostStatus {
+  PENDING
+  POSTED
+  FAILED
+  SCHEDULED
+}
+```
+
+**OAuth Flow Implementation**:
+
+```typescript
+// File: app/api/instagram/connect/route.ts
+
+import { NextRequest, NextResponse } from 'next/server';
+import { currentUser } from '@clerk/nextjs';
+import crypto from 'crypto';
+
+export async function POST(req: NextRequest) {
+  try {
+    // 1. Verify user authentication
+    const user = await currentUser();
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // 2. Parse request
+    const { productId } = await req.json();
+
+    // 3. Generate secure state
+    const state = {
+      userId: user.id,
+      productId,
+      timestamp: Date.now(),
+      csrfToken: crypto.randomBytes(32).toString('hex')
+    };
+
+    // 4. Store state temporarily (Redis or database)
+    await storeOAuthState(state.csrfToken, state, 600); // 10 min expiry
+
+    // 5. Build authorization URL
+    const params = new URLSearchParams({
+      client_id: process.env.INSTAGRAM_APP_ID!,
+      redirect_uri: process.env.INSTAGRAM_REDIRECT_URI!,
+      scope: 'instagram_business_basic,instagram_business_content_publish,instagram_manage_messages',
+      response_type: 'code',
+      state: state.csrfToken
+    });
+
+    const authUrl = `https://api.instagram.com/oauth/authorize?${params.toString()}`;
+
+    return NextResponse.json({ authUrl });
+
+  } catch (error) {
+    console.error('OAuth initiation error:', error);
+    return NextResponse.json(
+      { error: 'Failed to initiate OAuth' }, 
+      { status: 500 }
+    );
+  }
+}
+```
+
+**Callback Handler**:
+
+```typescript
+// File: app/api/instagram/callback/route.ts
+
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import axios from 'axios';
+
+export async function GET(req: NextRequest) {
+  try {
+    // 1. Extract query parameters
+    const { searchParams } = new URL(req.url);
+    const code = searchParams.get('code');
+    const state = searchParams.get('state');
+    const error = searchParams.get('error');
+
+    // 2. Handle user denial
+    if (error === 'access_denied') {
+      return NextResponse.redirect(
+        `${process.env.FRONTEND_URL}/instagram/error?reason=denied`
+      );
+    }
+
+    // 3. Validate state (CSRF protection)
+    const storedState = await getOAuthState(state!);
+    if (!storedState) {
+      return NextResponse.redirect(
+        `${process.env.FRONTEND_URL}/instagram/error?reason=invalid_state`
+      );
+    }
+
+    // 4. Exchange code for short-lived token
+    const tokenResponse = await axios.post(
+      'https://api.instagram.com/oauth/access_token',
+      {
+        client_id: process.env.INSTAGRAM_APP_ID,
+        client_secret: process.env.INSTAGRAM_APP_SECRET,
+        grant_type: 'authorization_code',
+        redirect_uri: process.env.INSTAGRAM_REDIRECT_URI,
+        code
+      },
+      {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      }
+    );
+
+    const { access_token: shortToken, user_id } = tokenResponse.data;
+
+    // 5. Exchange for long-lived token
+    const longLivedResponse = await axios.get(
+      'https://graph.instagram.com/access_token',
+      {
+        params: {
+          grant_type: 'ig_exchange_token',
+          client_secret: process.env.INSTAGRAM_APP_SECRET,
+          access_token: shortToken
+        }
+      }
+    );
+
+    const { access_token: longToken, expires_in } = longLivedResponse.data;
+
+    // 6. Fetch Instagram profile
+    const profileResponse = await axios.get(
+      `https://graph.instagram.com/me`,
+      {
+        params: {
+          fields: 'id,username,name,profile_picture_url,followers_count,media_count',
+          access_token: longToken
+        }
+      }
+    );
+
+    const profile = profileResponse.data;
+
+    // 7. Calculate token expiry
+    const expiresAt = new Date(Date.now() + expires_in * 1000);
+
+    // 8. Deactivate existing accounts for this product
+    await prisma.instagramAccount.updateMany({
+      where: {
+        productId: storedState.productId,
+        isActive: true
+      },
+      data: { isActive: false }
+    });
+
+    // 9. Save new account
+    const account = await prisma.instagramAccount.create({
+      data: {
+        userId: storedState.userId,
+        productId: storedState.productId,
+        instagramUserId: profile.id,
+        username: profile.username,
+        accessToken: await encrypt(longToken), // Encrypt token
+        tokenExpiresAt: expiresAt,
+        isActive: true
+      }
+    });
+
+    // 10. Clean up state
+    await deleteOAuthState(state!);
+
+    // 11. Redirect to success page
+    return NextResponse.redirect(
+      `${process.env.FRONTEND_URL}/instagram/success?username=${profile.username}`
+    );
+
+  } catch (error) {
+    console.error('OAuth callback error:', error);
+    return NextResponse.redirect(
+      `${process.env.FRONTEND_URL}/instagram/error?reason=callback_failed`
+    );
+  }
+}
+```
+
+**Key Takeaways from This Implementation**:
+1. ✅ Uses server-side encryption for tokens
+2. ✅ CSRF protection with state parameter
+3. ✅ Automatic token exchange (short → long-lived)
+4. ✅ Clean database design with one active account per product
+5. ✅ Proper error handling with user-friendly redirects
+
+---
+
+### 2.2 PrenSJ2/Instagram Platform API Gist
+
+**Architecture Pattern**: Separation of Concerns with Service Classes
+
+```python
+# File: services/instagram_oauth_service.py
+
+"""
+ANALYSIS:
+- Clean service-oriented architecture
+- Async/await for non-blocking operations
+- Comprehensive error handling
+- Token refresh logic built-in
+"""
+
+import httpx
+import os
+from typing import Dict, Any, Optional
+from datetime import datetime, timedelta
+from urllib.parse import urlencode
+
+class InstagramOAuthService:
+    """
+    Handles all Instagram OAuth operations
+    
+    Responsibilities:
+    - Generate authorization URLs
+    - Exchange codes for tokens
+    - Refresh long-lived tokens
+    - Fetch profile information
+    """
+    
+    def __init__(self):
+        self.app_id = os.getenv('INSTAGRAM_APP_ID')
+        self.app_secret = os.getenv('INSTAGRAM_APP_SECRET')
+        self.redirect_uri = os.getenv('INSTAGRAM_REDIRECT_URI')
+        self.graph_base = 'https://graph.instagram.com'
+        self.api_base = 'https://api.instagram.com'
+    
+    def get_auth_url(self, state: str, scopes: list[str] = None) -> str:
+        """
+        Generate Instagram authorization URL
+        
+        Args:
+            state: CSRF protection token
+            scopes: List of permission scopes
+            
+        Returns:
+            Complete authorization URL
+        """
+        if scopes is None:
+            scopes = [
+                'instagram_business_basic',
+                'instagram_business_content_publish',
+                'instagram_manage_messages'
+            ]
+        
+        params = {
+            'client_id': self.app_id,
+            'redirect_uri': self.redirect_uri,
+            'scope': ','.join(scopes),
+            'response_type': 'code',
+            'state': state
+        }
+        
+        return f'{self.api_base}/oauth/authorize?{urlencode(params)}'
+    
+    async def exchange_code_for_token(self, code: str) -> Dict[str, Any]:
+        """
+        Exchange authorization code for access token
+        
+        Flow:
+        1. Get short-lived token (1 hour)
+        2. Exchange for long-lived token (60 days)
+        3. Return combined data
+        
+        Args:
+            code: Authorization code from callback
+            
+        Returns:
+            Token data including access_token, expires_in, user_id
+        """
+        try:
+            async with httpx.AsyncClient() as client:
+                # Step 1: Get short-lived token
+                response = await client.post(
+                    f'{self.api_base}/oauth/access_token',
+                    data={
+                        'client_id': self.app_id,
+                        'client_secret': self.app_secret,
+                        'grant_type': 'authorization_code',
+                        'redirect_uri': self.redirect_uri,
+                        'code': code
+                    }
+                )
+                response.raise_for_status()
+                short_lived_data = response.json()
+                
+                # Step 2: Exchange for long-lived token
+                long_lived_data = await self._get_long_lived_token(
+                    short_lived_data['access_token']
+                )
+                
+                # Combine data
+                return {
+                    'access_token': long_lived_data['access_token'],
+                    'expires_in': long_lived_data['expires_in'],
+                    'expires_at': long_lived_data['expires_at'],
+                    'user_id': short_lived_data.get('user_id'),
+                    'token_type': 'long_lived'
+                }
+                
+        except httpx.HTTPError as e:
+            raise OAuthException(f'Token exchange failed: {str(e)}')
+    
+    async def _get_long_lived_token(self, short_token: str) -> Dict[str, Any]:
+        """
+        Exchange short-lived token for long-lived token (60 days)
+        
+        Args:
+            short_token: Short-lived access token
+            
+        Returns:
+            Long-lived token data
+        """
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f'{self.graph_base}/access_token',
+                    params={
+                        'grant_type': 'ig_exchange_token',
+                        'client_secret': self.app_secret,
+                        'access_token': short_token
+                    }
+                )
+                response.raise_for_status()
+                data = response.json()
+                
+                # Add expiry timestamp
+                if 'expires_in' in data:
+                    expires_at = datetime.utcnow() + timedelta(seconds=data['expires_in'])
+                    data['expires_at'] = expires_at.isoformat()
+                
+                return data
+                
+        except httpx.HTTPError as e:
+            # Fall back to short-lived token on error
+            print(f'Warning: Failed to get long-lived token: {e}')
+            return {
+                'access_token': short_token,
+                'expires_in': 3600,
+                'expires_at': (datetime.utcnow() + timedelta(hours=1)).isoformat()
+            }
+    
+    async def refresh_token(self, access_token: str) -> Optional[Dict[str, Any]]:
+        """
+        Refresh a long-lived token before it expires
+        
+        Best Practice: Refresh 7 days before expiry
+        
+        Args:
+            access_token: Current long-lived token
+            
+        Returns:
+            New token data or None if refresh fails
+        """
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f'{self.graph_base}/refresh_access_token',
+                    params={
+                        'grant_type': 'ig_refresh_token',
+                        'access_token': access_token
+                    }
+                )
+                response.raise_for_status()
+                data = response.json()
+                
+                # Add expiry timestamp
+                if 'expires_in' in data:
+                    expires_at = datetime.utcnow() + timedelta(seconds=data['expires_in'])
+                    data['expires_at'] = expires_at.isoformat()
+                
+                return data
+                
+        except httpx.HTTPError as e:
+            print(f'Token refresh failed: {e}')
+            return None
+    
+    async def get_instagram_profile(
+        self, 
+        access_token: str,
+        fields: list[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Fetch Instagram account information
+        
+        Args:
+            access_token: Valid access token
+            fields: List of fields to retrieve
+            
+        Returns:
+            Instagram profile data
+        """
+        if fields is None:
+            fields = [
+                'id',
+                'username',
+                'name',
+                'profile_picture_url',
+                'followers_count',
+                'media_count',
+                'account_type'
+            ]
+        
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f'{self.graph_base}/me',
+                    params={
+                        'fields': ','.join(fields),
+                        'access_token': access_token
+                    }
+                )
+                response.raise_for_status()
+                return response.json()
+                
+        except httpx.HTTPError as e:
+            raise OAuthException(f'Failed to fetch profile: {str(e)}')
+    
+    async def validate_token(self, access_token: str) -> bool:
+        """
+        Check if token is still valid
+        
+        Args:
+            access_token: Token to validate
+            
+        Returns:
+            True if valid, False otherwise
+        """
+        try:
+            await self.get_instagram_profile(access_token, fields=['id'])
+            return True
+        except:
+            return False
+
+
+class OAuthException(Exception):
+    """Custom exception for OAuth errors"""
+    pass
+```
+
+**API Endpoints Implementation**:
+
+```python
+# File: api/routes/instagram.py
+
+from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi.responses import RedirectResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime
+import secrets
+
+from services.instagram_oauth_service import InstagramOAuthService
+from database import get_db
+from models import InstagramAccount
+
+router = APIRouter(prefix='/api/instagram', tags=['instagram'])
+
+@router.post('/connect')
+async def initiate_oauth(
+    user_id: str,
+    product_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Initiate Instagram OAuth flow
+    
+    Returns authorization URL for frontend to redirect user
+    """
+    oauth_service = InstagramOAuthService()
+    
+    # Generate secure state token
+    state_token = secrets.token_urlsafe(32)
+    
+    # Store state in database with expiry
+    await store_oauth_state(
+        db=db,
+        state_token=state_token,
+        user_id=user_id,
+        product_id=product_id,
+        expires_at=datetime.utcnow() + timedelta(minutes=10)
+    )
+    
+    # Generate auth URL
+    auth_url = oauth_service.get_auth_url(state=state_token)
+    
+    return {
+        'success': True,
+        'auth_url': auth_url
+    }
+
+
+@router.get('/callback')
+async def oauth_callback(
+    code: str = Query(...),
+    state: str = Query(...),
+    error: str = Query(None),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Handle Instagram OAuth callback
+    
+    Process:
+    1. Validate state
+    2. Exchange code for token
+    3. Fetch profile
+    4. Save to database
+    5. Redirect to frontend
+    """
+    frontend_url = os.getenv('FRONTEND_URL')
+    
+    try:
+        # Handle user denial
+        if error == 'access_denied':
+            return RedirectResponse(
+                url=f'{frontend_url}/instagram/error?reason=access_denied',
+                status_code=302
+            )
+        
+        # Validate state
+        oauth_state = await get_oauth_state(db, state)
+        if not oauth_state:
+            raise HTTPException(status_code=400, detail='Invalid state')
+        
+        # Check state expiry
+        if oauth_state.expires_at < datetime.utcnow():
+            raise HTTPException(status_code=400, detail='State expired')
+        
+        oauth_service = InstagramOAuthService()
+        
+        # Exchange code for token
+        token_data = await oauth_service.exchange_code_for_token(code)
+        
+        # Fetch profile
+        profile = await oauth_service.get_instagram_profile(
+            token_data['access_token']
+        )
+        
+        # Deactivate existing accounts for this product
+        await db.execute(
+            update(InstagramAccount)
+            .where(
+                InstagramAccount.product_id == oauth_state.product_id,
+                InstagramAccount.is_active == True
+            )
+            .values(is_active=False)
+        )
+        
+        # Create new account record
+        new_account = InstagramAccount(
+            user_id=oauth_state.user_id,
+            product_id=oauth_state.product_id,
+            instagram_user_id=profile['id'],
+            username=profile['username'],
+            name=profile.get('name'),
+            profile_picture_url=profile.get('profile_picture_url'),
+            followers_count=profile.get('followers_count'),
+            access_token=encrypt_token(token_data['access_token']),
+            token_expires_at=datetime.fromisoformat(token_data['expires_at']),
+            is_active=True
+        )
+        
+        db.add(new_account)
+        await db.commit()
+        
+        # Clean up state
+        await delete_oauth_state(db, state)
+        
+        # Redirect to success page
+        return RedirectResponse(
+            url=f'{frontend_url}/instagram/success?username={profile["username"]}',
+            status_code=302
+        )
+        
+    except Exception as e:
+        print(f'OAuth callback error: {str(e)}')
+        return RedirectResponse(
+            url=f'{frontend_url}/instagram/error?reason=callback_failed',
+            status_code=302
+        )
+
+
+@router.post('/refresh-token/{account_id}')
+async def refresh_account_token(
+    account_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Refresh an Instagram account's access token
+    
+    Should be called 7 days before token expiry
+    """
+    # Fetch account
+    account = await db.get(InstagramAccount, account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail='Account not found')
+    
+    oauth_service = InstagramOAuthService()
+    
+    # Decrypt current token
+    current_token = decrypt_token(account.access_token)
+    
+    # Refresh token
+    new_token_data = await oauth_service.refresh_token(current_token)
+    
+    if not new_token_data:
+        raise HTTPException(status_code=400, detail='Token refresh failed')
+    
+    # Update account
+    account.access_token = encrypt_token(new_token_data['access_token'])
+    account.token_expires_at = datetime.fromisoformat(new_token_data['expires_at'])
+    
+    await db.commit()
+    
+    return {
+        'success': True,
+        'expires_at': new_token_data['expires_at']
+    }
+
+
+@router.get('/accounts')
+async def list_accounts(
+    product_id: str = Query(None),
+    user_id: str = Query(None),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    List connected Instagram accounts
+    
+    Can filter by product_id or user_id
+    """
+    query = select(InstagramAccount).where(InstagramAccount.is_active == True)
+    
+    if product_id:
+        query = query.where(InstagramAccount.product_id == product_id)
+    if user_id:
+        query = query.where(InstagramAccount.user_id == user_id)
+    
+    result = await db.execute(query)
+    accounts = result.scalars().all()
+    
+    return {
+        'accounts': [
+            {
+                'id': acc.id,
+                'username': acc.username,
+                'name': acc.name,
+                'profile_picture_url': acc.profile_picture_url,
+                'followers_count': acc.followers_count,
+                'token_expires_at': acc.token_expires_at.isoformat() if acc.token_expires_at else None
+            }
+            for acc in accounts
+        ]
+    }
+
+
+@router.delete('/accounts/{account_id}')
+async def disconnect_account(
+    account_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Disconnect an Instagram account (soft delete)
+    """
+    account = await db.get(InstagramAccount, account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail='Account not found')
+    
+    account.is_active = False
+    await db.commit()
+    
+    return {'success': True}
+```
+
+**Key Takeaways from This Implementation**:
+1. ✅ Clean service layer separation
+2. ✅ Comprehensive error handling
+3. ✅ Built-in token refresh logic
+4. ✅ Async/await for better performance
+5. ✅ Type hints for better code clarity
+
+---
+
+### 2.3 Instagram-Automations/api-for-instagram
+
+**Architecture Pattern**: Modular Node.js with TypeScript
+
+```typescript
+// File: src/services/InstagramAuthService.ts
+
+import axios, { AxiosInstance } from 'axios';
+import { EventEmitter } from 'events';
+
+/**
+ * ANALYSIS:
+ * - Event-driven architecture for token refresh
+ * - Built-in retry logic with exponential backoff
+ * - Rate limit handling
+ * - Webhook integration ready
+ */
+
+interface TokenData {
+  accessToken: string;
+  expiresAt: Date;
+  tokenType: 'short_lived' | 'long_lived';
+}
+
+interface InstagramProfile {
+  id: string;
+  username: string;
+  name?: string;
+  profile_picture_url?: string;
+  followers_count?: number;
+  media_count?: number;
+  account_type: 'BUSINESS' | 'CREATOR' | 'PERSONAL';
+}
+
+export class InstagramAuthService extends EventEmitter {
+  private client: AxiosInstance;
+  private readonly APP_ID: string;
+  private readonly APP_SECRET: string;
+  private readonly REDIRECT_URI: string;
+  
+  // Rate limiting
+  private requestCount: number = 0;
+  private requestWindow: Date = new Date();
+  private readonly RATE_LIMIT = 200; // requests per hour
+  
+  constructor() {
+    super();
+    
+    this.APP_ID = process.env.INSTAGRAM_APP_ID!;
+    this.APP_SECRET = process.env.INSTAGRAM_APP_SECRET!;
+    this.REDIRECT_URI = process.env.INSTAGRAM_REDIRECT_URI!;
+    
+    // Configure axios client
+    this.client = axios.create({
+      timeout: 30000,
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    // Add response interceptor for error handling
+    this.client.interceptors.response.use(
+      response => response,
+      error => this.handleApiError(error)
+    );
+  }
+  
+  /**
+   * Generate authorization URL with optional scopes
+   */
+  public getAuthorizationUrl(
+    state: string,
+    scopes?: string[]
+  ): string {
+    const defaultScopes = [
+      'instagram_business_basic',
+      'instagram_business_content_publish'
+    ];
+    
+    const params = new URLSearchParams({
+      client_id: this.APP_ID,
+      redirect_uri: this.REDIRECT_URI,
+      scope: (scopes || defaultScopes).join(','),
+      response_type: 'code',
+      state
+    });
+    
+    return `https://api.instagram.com/oauth/authorize?${params.toString()}`;
+  }
+  
+  /**
+   * Exchange authorization code for tokens
+   * Automatically handles short-lived to long-lived exchange
+   */
+  public async exchangeCodeForToken(code: string): Promise<TokenData> {
+    try {
+      // Get short-lived token
+      const shortLivedToken = await this.getShortLivedToken(code);
+      
+      // Exchange for long-lived token
+      const longLivedToken = await this.getLongLivedToken(shortLivedToken);
+      
+      // Emit token received event
+      this.emit('token:received', longLivedToken);
+      
+      return longLivedToken;
+      
+    } catch (error) {
+      this.emit('token:error', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Get short-lived token from authorization code
+   */
+  private async getShortLivedToken(code: string): Promise<string> {
+    const response = await this.client.post(
+      'https://api.instagram.com/oauth/access_token',
+      {
+        client_id: this.APP_ID,
+        client_secret: this.APP_SECRET,
+        grant_type: 'authorization_code',
+        redirect_uri: this.REDIRECT_URI,
+        code
+      },
+      {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      }
+    );
+    
+    return response.data.access_token;
+  }
+  
+  /**
+   * Exchange short-lived for long-lived token
+   */
+  private async getLongLivedToken(shortToken: string): Promise<TokenData> {
+    try {
+      const response = await this.client.get(
+        'https://graph.instagram.com/access_token',
+        {
+          params: {
+            grant_type: 'ig_exchange_token',
+            client_secret: this.APP_SECRET,
+            access_token: shortToken
+          }
+        }
+      );
+      
+      const { access_token, expires_in } = response.data;
+      
+      return {
+        accessToken: access_token,
+        expiresAt: new Date(Date.now() + expires_in * 1000),
+        tokenType: 'long_lived'
+      };
+      
+    } catch (error) {
+      // Fall back to short-lived token
+      console.warn('Failed to get long-lived token, using short-lived');
+      return {
+        accessToken: shortToken,
+        expiresAt: new Date(Date.now() + 3600 * 1000),
+        tokenType: 'short_lived'
+      };
+    }
+  }
+  
+  /**
+   * Refresh long-lived token
+   * Returns new token or null if refresh fails
+   */
+  public async refreshToken(
+    currentToken: string
+  ): Promise<TokenData | null> {
+    try {
+      const response = await this.client.get(
+        'https://graph.instagram.com/refresh_access_token',
+        {
+          params: {
+            grant_type: 'ig_refresh_token',
+            access_token: currentToken
+          }
+        }
+      );
+      
+      const { access_token, expires_in } = response.data;
+      
+      const newTokenData: TokenData = {
+        accessToken: access_token,
+        expiresAt: new Date(Date.now() + expires_in * 1000),
+        tokenType: 'long_lived'
+      };
+      
+      // Emit token refreshed event
+      this.emit('token:refreshed', newTokenData);
+      
+      return newTokenData;
+      
+    } catch (error) {
+      this.emit('token:refresh_failed', error);
+      return null;
+    }
+  }
+  
+  /**
+   * Get Instagram profile information
+   */
+  public async getProfile(
+    accessToken: string,
+    fields?: string[]
+  ): Promise<InstagramProfile> {
+    await this.checkRateLimit();
+    
+    const defaultFields = [
+      'id',
+      'username',
+      'name',
+      'profile_picture_url',
+      'followers_count',
+      'media_count',
+      'account_type'
+    ];
+    
+    const response = await this.client.get(
+      'https://graph.instagram.com/me',
+      {
+        params: {
+          fields: (fields || defaultFields).join(','),
+          access_token: accessToken
+        }
+      }
+    );
+    
+    return response.data;
+  }
+  
+  /**
+   * Validate if token is still active
+   */
+  public async validateToken(accessToken: string): Promise<boolean> {
+    try {
+      await this.getProfile(accessToken, ['id']);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  
+  /**
+   * Rate limit checker
+   */
+  private async checkRateLimit(): Promise<void> {
+    const now = new Date();
+    const hourAgo = new Date(now.getTime() - 3600000);
+    
+    if (this.requestWindow < hourAgo) {
+      // Reset counter
+      this.requestCount = 0;
+      this.requestWindow = now;
+    }
+    
+    if (this.requestCount >= this.RATE_LIMIT) {
+      const waitTime = 3600000 - (now.getTime() - this.requestWindow.getTime());
+      throw new Error(`Rate limit exceeded. Try again in ${Math.ceil(waitTime / 60000)} minutes`);
+    }
+    
+    this.requestCount++;
+  }
+  
+  /**
+   * Handle API errors with retry logic
+   */
+  private async handleApiError(error: any): Promise<never> {
+    if (error.response) {
+      const { status, data } = error.response;
+      
+      // Rate limit error
+      if (status === 429) {
+        this.emit('rate_limit', data);
+        throw new Error('Rate limit exceeded');
+      }
+      
+      // Invalid token
+      if (status === 401 || status === 400) {
+        this.emit('token:invalid', data);
+        throw new Error('Invalid or expired token');
+      }
+      
+      // Server error - retry with backoff
+      if (status >= 500) {
+        this.emit('server_error', { status, data });
+        // Implement retry logic here
+      }
+    }
+    
+    throw error;
+  }
+  
+  /**
+   * Auto-refresh token before expiry
+   * Call this periodically (e.g., daily cron job)
+   */
+  public async autoRefreshToken(
+    accountId: string,
+    currentToken: string,
+    expiresAt: Date,
+    daysBeforeExpiry: number = 7
+  ): Promise<TokenData | null> {
+    const daysUntilExpiry = 
+      (expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24);
+    
+    if (daysUntilExpiry <= daysBeforeExpiry) {
+      console.log(`Refreshing token for account ${accountId} (expires in ${Math.floor(daysUntilExpiry)} days)`);
+      return await this.refreshToken(currentToken);
+    }
+    
+    return null;
+  }
+}
+
+// Export singleton instance
+export const instagramAuth = new InstagramAuthService();
+```
+
+**Express Routes Implementation**:
+
+```typescript
+// File: src/routes/instagram.routes.ts
+
+import { Router } from 'express';
+import { body, query, validationResult } from 'express-validator';
+import { instagramAuth } from '../services/InstagramAuthService';
+import { InstagramAccountRepository } from '../repositories/InstagramAccountRepository';
+import { authenticateUser } from '../middleware/auth';
+import crypto from 'crypto';
+
+const router = Router();
+const accountRepo = new InstagramAccountRepository();
+
+/**
+ * Initiate OAuth flow
+ * POST /api/instagram/connect
+ */
+router.post(
+  '/connect',
+  authenticateUser,
+  [
+    body('productId').isUUID().withMessage('Invalid product ID')
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+      
+      const { productId } = req.body;
+      const userId = req.user.id;
+      
+      // Generate state token
+      const state = crypto.randomBytes(32).toString('hex');
+      
+      // Store state temporarily
+      await accountRepo.storeOAuthState({
+        stateToken: state,
+        userId,
+        productId,
+        expiresAt: new Date(Date.now() + 600000) // 10 minutes
+      });
+      
+      // Generate auth URL
+      const authUrl = instagramAuth.getAuthorizationUrl(state);
+      
+      res.json({ authUrl });
+      
+    } catch (error) {
+      console.error('OAuth initiation error:', error);
+      res.status(500).json({ error: 'Failed to initiate OAuth' });
+    }
+  }
+);
+
+/**
+ * OAuth callback handler
+ * GET /api/instagram/callback
+ */
+router.get(
+  '/callback',
+  [
+    query('code').notEmpty().withMessage('Code is required'),
+    query('state').notEmpty().withMessage('State is required')
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.redirect(
+          `${process.env.FRONTEND_URL}/instagram/error?reason=invalid_params`
+        );
+      }
+      
+      const { code, state, error } = req.query;
+      
+      // Handle denial
+      if (error === 'access_denied') {
+        return res.redirect(
+          `${process.env.FRONTEND_URL}/instagram/error?reason=access_denied`
+        );
+      }
+      
+      // Validate state
+      const oauthState = await accountRepo.getOAuthState(state as string);
+      if (!oauthState) {
+        return res.redirect(
+          `${process.env.FRONTEND_URL}/instagram/error?reason=invalid_state`
+        );
+      }
+      
+      // Exchange code for token
+      const tokenData = await instagramAuth.exchangeCodeForToken(code as string);
+      
+      // Get profile
+      const profile = await instagramAuth.getProfile(tokenData.accessToken);
+      
+      // Deactivate existing accounts
+      await accountRepo.deactivateAccountsForProduct(oauthState.productId);
+      
+      // Create new account
+      const account = await accountRepo.createAccount({
+        userId: oauthState.userId,
+        productId: oauthState.productId,
+        instagramUserId: profile.id,
+        username: profile.username,
+        name: profile.name,
+        profilePictureUrl: profile.profile_picture_url,
+        followersCount: profile.followers_count,
+        accessToken: tokenData.accessToken, // Encrypt in production
+        tokenExpiresAt: tokenData.expiresAt,
+        isActive: true
+      });
+      
+      // Clean up state
+      await accountRepo.deleteOAuthState(state as string);
+      
+      // Redirect to success
+      res.redirect(
+        `${process.env.FRONTEND_URL}/instagram/success?username=${profile.username}`
+      );
+      
+    } catch (error) {
+      console.error('OAuth callback error:', error);
+      res.redirect(
+        `${process.env.FRONTEND_URL}/instagram/error?reason=callback_failed`
+      );
+    }
+  }
+);
+
+/**
+ * List connected accounts
+ * GET /api/instagram/accounts
+ */
+router.get(
+  '/accounts',
+  authenticateUser,
+  async (req, res) => {
+    try {
+      const { productId } = req.query;
+      const userId = req.user.id;
+      
+      const accounts = await accountRepo.getActiveAccounts(
+        userId,
+        productId as string
+      );
+      
+      res.json({ accounts });
+      
+    } catch (error) {
+      console.error('Failed to fetch accounts:', error);
+      res.status(500).json({ error: 'Failed to fetch accounts' });
+    }
+  }
+);
+
+/**
+ * Refresh token
+ * POST /api/instagram/accounts/:accountId/refresh
+ */
+router.post(
+  '/accounts/:accountId/refresh',
+  authenticateUser,
+  async (req, res) => {
+    try {
+      const { accountId } = req.params;
+      
+      const account = await accountRepo.getAccountById(accountId);
+      if (!account) {
+        return res.status(404).json({ error: 'Account not found' });
+      }
+      
+      // Verify ownership
+      if (account.userId !== req.user.id) {
+        return res.status(403).json({ error: 'Unauthorized' });
+      }
+      
+      // Refresh token
+      const newTokenData = await instagramAuth.refreshToken(account.accessToken);
+      
+      if (!newTokenData) {
+        return res.status(400).json({ error: 'Token refresh failed' });
+      }
+      
+      // Update account
+      await accountRepo.updateAccount(accountId, {
+        accessToken: newTokenData.accessToken,
+        tokenExpiresAt: newTokenData.expiresAt
+      });
+      
+      res.json({
+        success: true,
+        expiresAt: newTokenData.expiresAt
+      });
+      
+    } catch (error) {
+      console.error('Token refresh error:', error);
+      res.status(500).json({ error: 'Token refresh failed' });
+    }
+  }
+);
+
+/**
+ * Disconnect account
+ * DELETE /api/instagram/accounts/:accountId
+ */
+router.delete(
+  '/accounts/:accountId',
+  authenticateUser,
+  async (req, res) => {
+    try {
+      const { accountId } = req.params;
+      
+      const account = await accountRepo.getAccountById(accountId);
+      if (!account) {
+        return res.status(404).json({ error: 'Account not found' });
+      }
+      
+      // Verify ownership
+      if (account.userId !== req.user.id) {
+        return res.status(403).json({ error: 'Unauthorized' });
+      }
+      
+      // Soft delete
+      await accountRepo.deactivateAccount(accountId);
+      
+      res.json({ success: true });
+      
+    } catch (error) {
+      console.error('Account deletion error:', error);
+      res.status(500).json({ error: 'Failed to disconnect account' });
+    }
+  }
+);
+
+export default router;
+```
+
+**Background Job for Token Refresh**:
+
+```typescript
+// File: src/jobs/tokenRefreshJob.ts
+
+import cron from 'node-cron';
+import { instagramAuth } from '../services/InstagramAuthService';
+import { InstagramAccountRepository } from '../repositories/InstagramAccountRepository';
+
+const accountRepo = new InstagramAccountRepository();
+
+/**
+ * Cron job to refresh tokens 7 days before expiry
+ * Runs daily at 2 AM
+ */
+export const tokenRefreshJob = cron.schedule('0 2 * * *', async () => {
+  console.log('Running token refresh job...');
+  
+  try {
+    // Get accounts expiring in next 7 days
+    const expiringAccounts = await accountRepo.getAccountsExpiringWithinDays(7);
+    
+    console.log(`Found ${expiringAccounts.length} accounts needing token refresh`);
+    
+    for (const account of expiringAccounts) {
+      try {
+        const newTokenData = await instagramAuth.refreshToken(account.accessToken);
+        
+        if (newTokenData) {
+          await accountRepo.updateAccount(account.id, {
+            accessToken: newTokenData.accessToken,
+            tokenExpiresAt: newTokenData.expiresAt
+          });
+          
+          console.log(`✓ Refreshed token for account ${account.username}`);
+        } else {
+          console.error(`✗ Failed to refresh token for account ${account.username}`);
+          
+          // Notify user via email/notification
+          await notifyTokenRefreshFailure(account);
+        }
+        
+        // Rate limiting: wait 1 second between requests
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+      } catch (error) {
+        console.error(`Error refreshing token for ${account.username}:`, error);
+      }
+    }
+    
+    console.log('Token refresh job completed');
+    
+  } catch (error) {
+    console.error('Token refresh job failed:', error);
+  }
+});
+
+async function notifyTokenRefreshFailure(account: any) {
+  // Implement your notification logic here
+  // e.g., send email, push notification, etc.
+  console.log(`TODO: Notify user ${account.userId} about token refresh failure for ${account.username}`);
+}
+
+// Start the job
+export function startTokenRefreshJob() {
+  tokenRefreshJob.start();
+  console.log('Token refresh job started (runs daily at 2 AM)');
+}
+```
+
+**Key Takeaways from This Implementation**:
+1. ✅ Event-driven architecture for flexibility
+2. ✅ Built-in rate limiting
+3. ✅ Comprehensive error handling with retry logic
+4. ✅ Automated token refresh with cron jobs
+5. ✅ TypeScript for type safety
+
+---
+
+## 3. Complete Implementation Blueprint {#implementation-blueprint}
+
+### 3.1 Database Schema Design
+
+```sql
+-- File: supabase/migrations/001_instagram_oauth.sql
+
+-- Enable UUID extension
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- OAuth state table (temporary storage)
+CREATE TABLE instagram_oauth_states (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  state_token VARCHAR(255) UNIQUE NOT NULL,
+  user_id VARCHAR(255) NOT NULL,
+  product_id VARCHAR(255) NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+  
+  -- Indexes
+  INDEX idx_state_token (state_token),
+  INDEX idx_expires_at (expires_at)
+);
+
+-- Instagram accounts table
+CREATE TABLE instagram_accounts (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id VARCHAR(255) NOT NULL,
+  product_id VARCHAR(255) NOT NULL,
+  
+  -- Instagram data
+  instagram_user_id VARCHAR(255) UNIQUE NOT NULL,
+  username VARCHAR(255) NOT NULL,
+  name VARCHAR(255),
+  profile_picture_url TEXT,
+  followers_count INTEGER,
+  media_count INTEGER,
+  account_type VARCHAR(50) DEFAULT 'BUSINESS',
+  
+  -- Token management
+  access_token TEXT NOT NULL, -- Encrypted
+  token_expires_at TIMESTAMP WITH TIME ZONE,
+  last_token_refresh TIMESTAMP WITH TIME ZONE,
+  
+  -- Status
+  is_active BOOLEAN DEFAULT TRUE,
+  auto_post BOOLEAN DEFAULT FALSE,
+  
+  -- Timestamps
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  
+  -- Constraints
+  CONSTRAINT unique_active_account_per_product 
+    UNIQUE (product_id, is_active) 
+    WHERE is_active = TRUE,
+  
+  -- Indexes
+  INDEX idx_user_id (user_id),
+  INDEX idx_product_id (product_id),
+  INDEX idx_instagram_user_id (instagram_user_id),
+  INDEX idx_token_expiry (token_expires_at),
+  INDEX idx_active_accounts (product_id, is_active) WHERE is_active = TRUE
+);
+
+-- Instagram posts table
+CREATE TABLE instagram_posts (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  account_id UUID NOT NULL REFERENCES instagram_accounts(id) ON DELETE CASCADE,
+  post_id UUID NOT NULL, -- Your app's post ID
+  
+  -- Post content
+  caption TEXT NOT NULL,
+  image_url TEXT NOT NULL,
+  hashtags TEXT[], -- Array of hashtags
+  
+  -- Publishing status
+  status VARCHAR(50) DEFAULT 'PENDING',
+  instagram_media_id VARCHAR(255),
+  instagram_permalink TEXT,
+  
+  -- Scheduling
+  scheduled_for TIMESTAMP WITH TIME ZONE,
+  posted_at TIMESTAMP WITH TIME ZONE,
+  
+  -- Error handling
+  error_message TEXT,
+  retry_count INTEGER DEFAULT 0,
+  last_retry_at TIMESTAMP WITH TIME ZONE,
+  
+  -- Timestamps
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  
+  -- Indexes
+  INDEX idx_account_id (account_id),
+  INDEX idx_post_id (post_id),
+  INDEX idx_status (status),
+  INDEX idx_scheduled_for (scheduled_for) WHERE scheduled_for IS NOT NULL,
+  INDEX idx_pending_posts (account_id, status) WHERE status IN ('PENDING', 'SCHEDULED')
+);
+
+-- Automation rules table
+CREATE TABLE instagram_automations (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  account_id UUID NOT NULL REFERENCES instagram_accounts(id) ON DELETE CASCADE,
+  
+  -- Rule configuration
+  name VARCHAR(255) NOT NULL,
+  trigger_type VARCHAR(50) NOT NULL, -- 'comment', 'dm', 'mention', 'keyword'
+  trigger_condition TEXT NOT NULL,
+  action_type VARCHAR(50) NOT NULL, -- 'reply', 'dm', 'like', 'follow'
+  action_data TEXT NOT NULL,
+  
+  -- Status
+  is_active BOOLEAN DEFAULT TRUE,
+  
+  -- Statistics
+  trigger_count INTEGER DEFAULT 0,
+  last_triggered_at TIMESTAMP WITH TIME ZONE,
+  
+  -- Timestamps
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  
+  -- Indexes
+  INDEX idx_account_automations (account_id, is_active) WHERE is_active = TRUE
+);
+
+-- Token refresh log
+CREATE TABLE instagram_token_refresh_log (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  account_id UUID NOT NULL REFERENCES instagram_accounts(id) ON DELETE CASCADE,
+  
+  -- Refresh details
+  old_expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+  new_expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+  success BOOLEAN NOT NULL,
+  error_message TEXT,
+  
+  -- Timestamp
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  
+  -- Indexes
+  INDEX idx_account_refresh_log (account_id, created_at DESC)
+);
+
+-- Function to update updated_at timestamp
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Triggers for updated_at
+CREATE TRIGGER update_instagram_accounts_updated_at
+  BEFORE UPDATE ON instagram_accounts
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_instagram_posts_updated_at
+  BEFORE UPDATE ON instagram_posts
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_instagram_automations_updated_at
+  BEFORE UPDATE ON instagram_automations
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+-- Function to clean up expired OAuth states
+CREATE OR REPLACE FUNCTION cleanup_expired_oauth_states()
+RETURNS void AS $$
+BEGIN
+  DELETE FROM instagram_oauth_states
+  WHERE expires_at < NOW();
+END;
+$$ LANGUAGE plpgsql;
+
+-- Schedule cleanup (requires pg_cron extension)
+-- Run every hour
+SELECT cron.schedule(
+  'cleanup-oauth-states',
+  '0 * * * *',
+  'SELECT cleanup_expired_oauth_states();'
+);
+```
+
+### 3.2 Environment Variables Template
+
+```env
+# File: .env.example
+
+# ===================================
+# INSTAGRAM API CONFIGURATION
+# ===================================
+
+# Instagram App Credentials (from Meta Developer Dashboard)
+INSTAGRAM_APP_ID=your_instagram_app_id_here
+INSTAGRAM_APP_SECRET=your_instagram_app_secret_here
+
+# OAuth Configuration
+INSTAGRAM_REDIRECT_URI=https://yourdomain.com/api/instagram/callback
+INSTAGRAM_GRAPH_API_VERSION=v24.0
+
+# Webhook Configuration
+INSTAGRAM_WEBHOOK_VERIFY_TOKEN=your_webhook_verify_token_here
+INSTAGRAM_WEBHOOK_SECRET=your_webhook_secret_here
+
+# ===================================
+# APPLICATION CONFIGURATION
+# ===================================
+
+# Frontend URL
+FRONTEND_URL=https://yourdomain.com
+VITE_API_BASE_URL=https://api.yourdomain.com
+
+# Backend Configuration
+PORT=3001
+NODE_ENV=production
+
+# ===================================
+# DATABASE CONFIGURATION
+# ===================================
+
+# Supabase
+DATABASE_URL=postgresql://postgres:password@db.supabase.co:5432/postgres
+DIRECT_URL=postgresql://postgres:password@db.supabase.co:5432/postgres
+
+# ===================================
+# AUTHENTICATION
+# ===================================
+
+# JWT Secret for your app's auth
+JWT_SECRET=your_jwt_secret_here
+JWT_EXPIRES_IN=7d
+
+# ===================================
+# ENCRYPTION
+# ===================================
+
+# For encrypting access tokens in database
+ENCRYPTION_KEY=your_32_character_encryption_key
+ENCRYPTION_ALGORITHM=aes-256-cbc
+
+# ===================================
+# REDIS (for state management)
+# ===================================
+
+REDIS_URL=redis://localhost:6379
+REDIS_TTL=600 # 10 minutes for OAuth state
+
+# ===================================
+# LOGGING
+# ===================================
+
+LOG_LEVEL=info
+LOG_FILE=logs/instagram-automation.log
+
+# ===================================
+# RATE LIMITING
+# ===================================
+
+RATE_LIMIT_WINDOW=3600000 # 1 hour in milliseconds
+RATE_LIMIT_MAX_REQUESTS=200
+
+# ===================================
+# CRON JOBS
+# ===================================
+
+# Token refresh job schedule (cron format)
+TOKEN_REFRESH_SCHEDULE=0 2 * * * # Daily at 2 AM
+TOKEN_REFRESH_DAYS_BEFORE_EXPIRY=7
+
+# ===================================
+# MONITORING
+# ===================================
+
+SENTRY_DSN=your_sentry_dsn_here # Optional
+```
+
+---
+
+## 4. Integration Guide for 888 Intelligence Automation {#integration-guide}
+
+### 4.1 Project Structure
+
+```
+888-intelligence-automation/
+├── frontend/                      # React/Vite Frontend
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── instagram/
+│   │   │   │   ├── InstagramConnect.tsx
+│   │   │   │   ├── InstagramCallback.tsx
+│   │   │   │   ├── InstagramAccountCard.tsx
+│   │   │   │   └── InstagramPublisher.tsx
+│   │   │   └── ...
+│   │   ├── hooks/
+│   │   │   ├── useInstagramAuth.ts
+│   │   │   └── useInstagramAccount.ts
+│   │   ├── services/
+│   │   │   └── instagramApi.ts
+│   │   └── ...
+│   └── ...
+│
+├── backend/                       # Node.js/Express Backend
+│   ├── src/
+│   │   ├── routes/
+│   │   │   └── instagram.routes.ts
+│   │   ├── services/
+│   │   │   ├── InstagramOAuthService.ts
+│   │   │   ├── InstagramPublisher.ts
+│   │   │   └── TokenEncryption.ts
+│   │   ├── repositories/
+│   │   │   └── InstagramAccountRepository.ts
+│   │   ├── middleware/
+│   │   │   ├── auth.ts
+│   │   │   └── rateLimiter.ts
+│   │   ├── jobs/
+│   │   │   └── tokenRefreshJob.ts
+│   │   ├── utils/
+│   │   │   ├── encryption.ts
+│   │   │   └── validation.ts
+│   │   └── index.ts
+│   └── ...
+│
+├── database/
+│   └── migrations/
+│       └── 001_instagram_oauth.sql
+│
+└── ...
+```
+
+### 4.2 Step-by-Step Implementation
+
+#### **STEP 1: Database Setup**
+
+```bash
+# Apply database migration to Supabase
+psql $DATABASE_URL < database/migrations/001_instagram_oauth.sql
+```
+
+#### **STEP 2: Install Dependencies**
+
+```bash
+# Backend dependencies
+cd backend
+npm install express axios dotenv
+npm install --save-dev @types/express @types/node typescript
+
+# Additional utilities
+npm install crypto-js node-cron
+
+# Frontend dependencies
+cd ../frontend
+npm install axios zustand react-router-dom
+```
+
+#### **STEP 3: Create Backend Service**
+
+```typescript
+// File: backend/src/services/InstagramOAuthService.ts
+
+import axios, { AxiosInstance } from 'axios';
+import { encrypt, decrypt } from '../utils/encryption';
+
+interface TokenData {
+  accessToken: string;
+  expiresAt: Date;
+  userId: string;
+}
+
+export class InstagramOAuthService {
+  private client: AxiosInstance;
+  private readonly APP_ID: string;
+  private readonly APP_SECRET: string;
+  private readonly REDIRECT_URI: string;
+
+  constructor() {
+    this.APP_ID = process.env.INSTAGRAM_APP_ID!;
+    this.APP_SECRET = process.env.INSTAGRAM_APP_SECRET!;
+    this.REDIRECT_URI = process.env.INSTAGRAM_REDIRECT_URI!;
+
+    this.client = axios.create({
+      timeout: 30000
+    });
+  }
+
+  // Generate authorization URL
+  getAuthorizationUrl(state: string, scopes?: string[]): string {
+    const defaultScopes = [
+      'instagram_business_basic',
+      'instagram_business_content_publish',
+      'instagram_manage_messages'
+    ];
+
+    const params = new URLSearchParams({
+      client_id: this.APP_ID,
+      redirect_uri: this.REDIRECT_URI,
+      scope: (scopes || defaultScopes).join(','),
+      response_type: 'code',
+      state
+    });
+
+    return `https://api.instagram.com/oauth/authorize?${params}`;
+  }
+
+  // Exchange code for token
+  async exchangeCodeForToken(code: string): Promise<TokenData> {
+    // Get short-lived token
+    const shortResponse = await this.client.post(
+      'https://api.instagram.com/oauth/access_token',
+      {
+        client_id: this.APP_ID,
+        client_secret: this.APP_SECRET,
+        grant_type: 'authorization_code',
+        redirect_uri: this.REDIRECT_URI,
+        code
+      },
+      {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      }
+    );
+
+    const shortToken = shortResponse.data.access_token;
+    const userId = shortResponse.data.user_id;
+
+    // Exchange for long-lived token
+    const longResponse = await this.client.get(
+      'https://graph.instagram.com/access_token',
+      {
+        params: {
+          grant_type: 'ig_exchange_token',
+          client_secret: this.APP_SECRET,
+          access_token: shortToken
+        }
+      }
+    );
+
+    return {
+      accessToken: longResponse.data.access_token,
+      expiresAt: new Date(Date.now() + longResponse.data.expires_in * 1000),
+      userId
+    };
+  }
+
+  // Get Instagram profile
+  async getProfile(accessToken: string) {
+    const response = await this.client.get(
+      'https://graph.instagram.com/me',
+      {
+        params: {
+          fields: 'id,username,name,profile_picture_url,followers_count,media_count,account_type',
+          access_token: accessToken
+        }
+      }
+    );
+
+    return response.data;
+  }
+
+  // Refresh token
+  async refreshToken(currentToken: string): Promise<TokenData | null> {
+    try {
+      const response = await this.client.get(
+        'https://graph.instagram.com/refresh_access_token',
+        {
+          params: {
+            grant_type: 'ig_refresh_token',
+            access_token: currentToken
+          }
+        }
+      );
+
+      return {
+        accessToken: response.data.access_token,
+        expiresAt: new Date(Date.now() + response.data.expires_in * 1000),
+        userId: '' // Not returned on refresh
+      };
+    } catch (error) {
+      console.error('Token refresh failed:', error);
+      return null;
+    }
+  }
+}
+```
+
+#### **STEP 4: Create API Routes**
+
+```typescript
+// File: backend/src/routes/instagram.routes.ts
+
+import { Router } from 'express';
+import { InstagramOAuthService } from '../services/InstagramOAuthService';
+import { supabase } from '../config/supabase';
+import crypto from 'crypto';
+
+const router = Router();
+const oauth = new InstagramOAuthService();
+
+// Initiate OAuth
+router.post('/connect', async (req, res) => {
+  try {
+    const { userId, productId } = req.body;
+
+    // Generate state
+    const state = crypto.randomBytes(32).toString('hex');
+
+    // Store state in database
+    await supabase.from('instagram_oauth_states').insert({
+      state_token: state,
+      user_id: userId,
+      product_id: productId,
+      expires_at: new Date(Date.now() + 600000) // 10 min
+    });
+
+    // Get auth URL
+    const authUrl = oauth.getAuthorizationUrl(state);
+
+    res.json({ authUrl });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to initiate OAuth' });
+  }
+});
+
+// OAuth callback
+router.get('/callback', async (req, res) => {
+  try {
+    const { code, state } = req.query;
+
+    // Validate state
+    const { data: oauthState } = await supabase
+      .from('instagram_oauth_states')
+      .select('*')
+      .eq('state_token', state)
+      .single();
+
+    if (!oauthState) {
+      return res.redirect(`${process.env.FRONTEND_URL}/instagram/error`);
+    }
+
+    // Exchange code for token
+    const tokenData = await oauth.exchangeCodeForToken(code as string);
+
+    // Get profile
+    const profile = await oauth.getProfile(tokenData.accessToken);
+
+    // Deactivate existing accounts
+    await supabase
+      .from('instagram_accounts')
+      .update({ is_active: false })
+      .eq('product_id', oauthState.product_id)
+      .eq('is_active', true);
+
+    // Create new account
+    await supabase.from('instagram_accounts').insert({
+      user_id: oauthState.user_id,
+      product_id: oauthState.product_id,
+      instagram_user_id: profile.id,
+      username: profile.username,
+      name: profile.name,
+      profile_picture_url: profile.profile_picture_url,
+      followers_count: profile.followers_count,
+      access_token: tokenData.accessToken, // Encrypt in production
+      token_expires_at: tokenData.expiresAt.toISOString(),
+      is_active: true
+    });
+
+    // Clean up state
+    await supabase
+      .from('instagram_oauth_states')
+      .delete()
+      .eq('state_token', state);
+
+    // Redirect to success
+    res.redirect(`${process.env.FRONTEND_URL}/instagram/success`);
+  } catch (error) {
+    console.error('OAuth callback error:', error);
+    res.redirect(`${process.env.FRONTEND_URL}/instagram/error`);
+  }
+});
+
+export default router;
+```
+
+#### **STEP 5: Create Frontend Hook**
+
+```typescript
+// File: frontend/src/hooks/useInstagramAuth.ts
+
+import { useState, useCallback } from 'react';
+import axios from 'axios';
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL;
+
+export const useInstagramAuth = (productId: string) => {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const connectInstagram = useCallback(async (userId: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await axios.post(`${API_BASE}/api/instagram/connect`, {
+        userId,
+        productId
+      });
+
+      // Redirect to Instagram OAuth
+      window.location.href = response.data.authUrl;
+    } catch (err) {
+      setError('Failed to connect Instagram account');
+      setLoading(false);
+    }
+  }, [productId]);
+
+  return { connectInstagram, loading, error };
+};
+```
+
+#### **STEP 6: Create Frontend Component**
+
+```tsx
+// File: frontend/src/components/instagram/InstagramConnect.tsx
+
+import React from 'react';
+import { useInstagramAuth } from '../../hooks/useInstagramAuth';
+
+interface Props {
+  userId: string;
+  productId: string;
+}
+
+export const InstagramConnect: React.FC<Props> = ({ userId, productId }) => {
+  const { connectInstagram, loading, error } = useInstagramAuth(productId);
+
+  return (
+    <div className="instagram-connect-card">
+      <h3>Connect Instagram Account</h3>
+      <p>Connect your Instagram Business or Creator account to enable automation.</p>
+      
+      {error && (
+        <div className="error-message">{error}</div>
+      )}
+      
+      <button
+        onClick={() => connectInstagram(userId)}
+        disabled={loading}
+        className="connect-button"
+      >
+        {loading ? 'Connecting...' : 'Connect Instagram'}
+      </button>
+    </div>
+  );
+};
+```
+
+#### **STEP 7: Setup Token Refresh Job**
+
+```typescript
+// File: backend/src/jobs/tokenRefreshJob.ts
+
+import cron from 'node-cron';
+import { InstagramOAuthService } from '../services/InstagramOAuthService';
+import { supabase } from '../config/supabase';
+
+const oauth = new InstagramOAuthService();
+
+// Run daily at 2 AM
+export const tokenRefreshJob = cron.schedule('0 2 * * *', async () => {
+  console.log('Running token refresh job...');
+
+  // Get accounts expiring in next 7 days
+  const sevenDaysFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+  const { data: accounts } = await supabase
+    .from('instagram_accounts')
+    .select('*')
+    .eq('is_active', true)
+    .lte('token_expires_at', sevenDaysFromNow.toISOString());
+
+  for (const account of accounts || []) {
+    try {
+      const newTokenData = await oauth.refreshToken(account.access_token);
+
+      if (newTokenData) {
+        await supabase
+          .from('instagram_accounts')
+          .update({
+            access_token: newTokenData.accessToken,
+            token_expires_at: newTokenData.expiresAt.toISOString(),
+            last_token_refresh: new Date().toISOString()
+          })
+          .eq('id', account.id);
+
+        console.log(`✓ Refreshed token for ${account.username}`);
+      }
+    } catch (error) {
+      console.error(`✗ Failed to refresh ${account.username}:`, error);
+    }
+
+    // Rate limiting
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+});
+```
+
+---
+
+## 5. Security & Best Practices {#security-best-practices}
+
+### 5.1 Token Encryption
+
+```typescript
+// File: backend/src/utils/encryption.ts
+
+import crypto from 'crypto';
+
+const ALGORITHM = 'aes-256-cbc';
+const ENCRYPTION_KEY = Buffer.from(process.env.ENCRYPTION_KEY!, 'hex'); // 32 bytes
+const IV_LENGTH = 16;
+
+export function encrypt(text: string): string {
+  const iv = crypto.randomBytes(IV_LENGTH);
+  const cipher = crypto.createCipheriv(ALGORITHM, ENCRYPTION_KEY, iv);
+  
+  let encrypted = cipher.update(text, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  
+  return iv.toString('hex') + ':' + encrypted;
+}
+
+export function decrypt(text: string): string {
+  const parts = text.split(':');
+  const iv = Buffer.from(parts[0], 'hex');
+  const encryptedText = parts[1];
+  
+  const decipher = crypto.createDecipheriv(ALGORITHM, ENCRYPTION_KEY, iv);
+  
+  let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
+  decrypted += decipher.final('utf8');
+  
+  return decrypted;
+}
+
+// Generate encryption key (run once)
+export function generateEncryptionKey(): string {
+  return crypto.randomBytes(32).toString('hex');
+}
+```
+
+### 5.2 CSRF Protection
+
+```typescript
+// File: backend/src/middleware/csrfProtection.ts
+
+import crypto from 'crypto';
+
+export function generateState(): string {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+export async function validateState(
+  stateToken: string,
+  maxAge: number = 600000 // 10 minutes
+): Promise<boolean> {
+  // Check if state exists in database
+  const { data } = await supabase
+    .from('instagram_oauth_states')
+    .select('*')
+    .eq('state_token', stateToken)
+    .single();
+
+  if (!data) return false;
+
+  // Check if expired
+  const expiresAt = new Date(data.expires_at);
+  if (expiresAt < new Date()) {
+    // Clean up expired state
+    await supabase
+      .from('instagram_oauth_states')
+      .delete()
+      .eq('state_token', stateToken);
+    return false;
+  }
+
+  return true;
+}
+```
+
+### 5.3 Rate Limiting
+
+```typescript
+// File: backend/src/middleware/rateLimiter.ts
+
+import rateLimit from 'express-rate-limit';
+
+export const oauthRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // Limit each IP to 5 requests per windowMs
+  message: 'Too many OAuth requests, please try again later',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+export const apiRateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 200, // Instagram API limit
+  message: 'Rate limit exceeded',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+```
+
+### 5.4 Input Validation
+
+```typescript
+// File: backend/src/middleware/validation.ts
+
+import { body, validationResult } from 'express-validator';
+import { Request, Response, NextFunction } from 'express';
+
+export const validateOAuthConnect = [
+  body('userId').isString().notEmpty().withMessage('User ID is required'),
+  body('productId').isUUID().withMessage('Valid product ID is required'),
+  
+  (req: Request, res: Response, next: NextFunction) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    next();
+  }
+];
+
+export const validatePublishPost = [
+  body('caption').isString().isLength({ max: 2200 })
+    .withMessage('Caption must be 2200 characters or less'),
+  body('imageUrl').isURL().withMessage('Valid image URL is required'),
+  body('hashtags').optional().isArray({ max: 30 })
+    .withMessage('Maximum 30 hashtags allowed'),
+  
+  (req: Request, res: Response, next: NextFunction) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    next();
+  }
+];
+```
+
+---
+
+## 6. Testing & Debugging {#testing-debugging}
+
+### 6.1 Testing OAuth Flow Locally
+
+```typescript
+// File: backend/tests/oauth.test.ts
+
+import { InstagramOAuthService } from '../src/services/InstagramOAuthService';
+
+describe('Instagram OAuth Service', () => {
+  const oauth = new InstagramOAuthService();
+
+  test('should generate valid authorization URL', () => {
+    const state = 'test_state_token';
+    const url = oauth.getAuthorizationUrl(state);
+
+    expect(url).toContain('https://api.instagram.com/oauth/authorize');
+    expect(url).toContain(`client_id=${process.env.INSTAGRAM_APP_ID}`);
+    expect(url).toContain(`state=${state}`);
+    expect(url).toContain('response_type=code');
+  });
+
+  test('should include correct scopes', () => {
+    const url = oauth.getAuthorizationUrl('test');
+    
+    expect(url).toContain('instagram_business_basic');
+    expect(url).toContain('instagram_business_content_publish');
+  });
+
+  // Add more tests for token exchange, refresh, etc.
+});
+```
+
+### 6.2 Debug Logging
+
+```typescript
+// File: backend/src/utils/logger.ts
+
+import winston from 'winston';
+
+export const logger = winston.createLogger({
+  level: process.env.LOG_LEVEL || 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.json()
+  ),
+  transports: [
+    new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
+    new winston.transports.File({ filename: 'logs/combined.log' }),
+    new winston.transports.Console({
+      format: winston.format.simple()
+    })
+  ]
+});
+
+// Usage in OAuth service
+logger.info('OAuth initiated', { userId, productId });
+logger.error('Token exchange failed', { error: error.message });
+```
+
+---
+
+## 7. Troubleshooting Common Issues {#troubleshooting}
+
+### Issue 1: "Invalid OAuth access token"
+
+**Cause**: Using Facebook Graph API endpoints with Instagram Platform tokens
+
+**Solution**:
+```typescript
+// ❌ Wrong
+const url = 'https://graph.facebook.com/me';
+
+// ✅ Correct
+const url = 'https://graph.instagram.com/me';
+```
+
+### Issue 2: "Invalid platform app"
+
+**Cause**: Wrong app type or missing permissions
+
+**Solution**:
+1. Verify you created an **Instagram App**, not Facebook App
+2. Check scopes in authorization URL
+3. Ensure app is in development or live mode
+
+### Issue 3: Token expires too quickly
+
+**Cause**: Not exchanging short-lived for long-lived token
+
+**Solution**:
+```typescript
+// Always exchange immediately after OAuth
+const tokenData = await oauth.exchangeCodeForToken(code);
+// tokenData now contains long-lived token (60 days)
+```
+
+### Issue 4: "Invalid redirect URI"
+
+**Cause**: Mismatch between configured and actual redirect URI
+
+**Solution**:
+1. Check Meta Developer Dashboard: Products > Instagram > Settings
+2. Ensure exact match including protocol (https://)
+3. No trailing slashes
+
+---
+
+## Final Notes for AI Coding Agent
+
+### Implementation Checklist:
+
+- [ ] Database schema applied to Supabase
+- [ ] Environment variables configured
+- [ ] Backend OAuth service created
+- [ ] API routes implemented
+- [ ] Token encryption setup
+- [ ] CSRF protection added
+- [ ] Rate limiting configured
+- [ ] Frontend hooks created
+- [ ] Frontend components built
+- [ ] Token refresh job scheduled
+- [ ] Error logging setup
+- [ ] Testing suite created
+
+### Key Principles:
+
+1. **Security First**: Always encrypt tokens, validate state, rate limit
+2. **Error Handling**: Graceful failures with user-friendly messages
+3. **Token Management**: Automated refresh 7 days before expiry
+4. **Clean Architecture**: Separation of concerns (service → repository → route)
+5. **Type Safety**: Use TypeScript interfaces throughout
+
+### Next Steps After OAuth:
+
+1. Implement publishing service
+2. Add webhook handlers for real-time events
+3. Build automation workflows
+4. Create analytics dashboard
+5. Add webhook signature validation
+
+This guide provides everything needed to integrate Instagram OAuth into 888 Intelligence Automation. Follow the patterns from the reference repositories and adapt them to your specific tech stack.

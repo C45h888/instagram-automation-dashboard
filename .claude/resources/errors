@@ -1,38 +1,12 @@
-GET http://localhost:3000/src/components/permissions/shared/index.ts net::ERR_ABORTED 500 (Internal Server Error)
-2chunk-BG45W2ER.js?v=72539263:903 Uncaught TypeError: Failed to fetch dynamically imported module: http://localhost:3000/src/pages/Dashboard.tsx
-chunk-UPELNCPK.js?v=72539263:14032 The above error occurred in one of your React components:
-
-    at Lazy
-    at RenderedRoute (http://localhost:3000/node_modules/.vite/deps/react-router-dom.js?v=72539263:5525:26)
-    at Outlet (http://localhost:3000/node_modules/.vite/deps/react-router-dom.js?v=72539263:6195:26)
-    at div
-    at main
-    at div
-    at Layout (http://localhost:3000/src/components/layout/Layout.tsx:41:20)
-    at RequireAuth (http://localhost:3000/src/components/layout/RequireAuth.tsx:21:24)
-    at RenderedRoute (http://localhost:3000/node_modules/.vite/deps/react-router-dom.js?v=72539263:5525:26)
-    at Routes (http://localhost:3000/node_modules/.vite/deps/react-router-dom.js?v=72539263:6261:3)
-    at Suspense
-    at Router (http://localhost:3000/node_modules/.vite/deps/react-router-dom.js?v=72539263:6204:13)
-    at BrowserRouter (http://localhost:3000/node_modules/.vite/deps/react-router-dom.js?v=72539263:9273:3)
-    at QueryClientProvider (http://localhost:3000/node_modules/.vite/deps/@tanstack_react-query.js?v=72539263:2939:3)
-    at App
-
-Consider adding an error boundary to your tree to customize error handling behavior.
-Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries.
-logCapturedError @ chunk-UPELNCPK.js?v=72539263:14032
-update.callback @ chunk-UPELNCPK.js?v=72539263:14052
-callCallback @ chunk-UPELNCPK.js?v=72539263:11248
-commitUpdateQueue @ chunk-UPELNCPK.js?v=72539263:11265
-commitLayoutEffectOnFiber @ chunk-UPELNCPK.js?v=72539263:17093
-commitLayoutMountEffects_complete @ chunk-UPELNCPK.js?v=72539263:17980
-commitLayoutEffects_begin @ chunk-UPELNCPK.js?v=72539263:17969
-commitLayoutEffects @ chunk-UPELNCPK.js?v=72539263:17920
-commitRootImpl @ chunk-UPELNCPK.js?v=72539263:19353
-commitRoot @ chunk-UPELNCPK.js?v=72539263:19277
-finishConcurrentRender @ chunk-UPELNCPK.js?v=72539263:18760
-performConcurrentWorkOnRoot @ chunk-UPELNCPK.js?v=72539263:18718
-workLoop @ chunk-UPELNCPK.js?v=72539263:197
-flushWork @ chunk-UPELNCPK.js?v=72539263:176
-performWorkUntilDeadline @ chunk-UPELNCPK.js?v=72539263:384
-chunk-UPELNCPK.js?v=72539263:19413 Uncaught TypeError: Failed to fetch dynamically imported module: http://localhost:3000/src/pages/Dashboard.tsx
+sdk.js?hash=43f560a6…9ce1470814210c31:49 The method FB.login can no longer be called from http pages. https://developers.facebook.com/blog/post/2018/06/08/enforce-https-facebook-login/
+s	@	sdk.js?hash=43f560a6…9ce1470814210c31:49
+u	@	sdk.js?hash=43f560a6…ce1470814210c31:136
+login	@	sdk.js?hash=43f560a6…ce1470814210c31:153
+(anonymous)	@	sdk.js?hash=43f560a6…9ce1470814210c31:78
+(anonymous)	@	sdk.js?hash=43f560a6…9ce1470814210c31:68
+(anonymous)	@	useFacebookSDK.ts:142
+facebookLogin	@	useFacebookSDK.ts:136
+handleFacebookLogin	@	Login.tsx:459
+Login.tsx:558 ❌ Facebook OAuth Error: 
+t {message: 'init not called with valid version', innerError: undefined}
+handleFacebookLogin	@	Login.tsx:558

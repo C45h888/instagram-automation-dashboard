@@ -28,10 +28,10 @@ export interface TokenRefreshResult {
 
 export interface TokenInfo {
   userId: string;
-  businessAccountId: string;
+  businessAccountId: string | null;
   accessToken: string;
-  expiresAt: string;
-  createdAt: string;
+  expiresAt: string | null;
+  createdAt: string | null;
 }
 
 // =============================================================================
@@ -142,9 +142,9 @@ export async function getTokensNeedingRefresh(): Promise<TokenInfo[]> {
     // Query database for tokens expiring before threshold
     const { data, error } = await supabase
       .from('instagram_credentials')
-      .select('user_id, business_account_id, page_access_token, token_expires_at, created_at')
-      .lt('token_expires_at', thresholdDate.toISOString())
-      .order('token_expires_at', { ascending: true });
+      .select('user_id, business_account_id, access_token_encrypted, expires_at, created_at')
+      .lt('expires_at', thresholdDate.toISOString())
+      .order('expires_at', { ascending: true });
 
     if (error) {
       console.error('❌ Error fetching tokens:', error);
@@ -154,8 +154,8 @@ export async function getTokensNeedingRefresh(): Promise<TokenInfo[]> {
     return (data || []).map(row => ({
       userId: row.user_id,
       businessAccountId: row.business_account_id,
-      accessToken: row.page_access_token,
-      expiresAt: row.token_expires_at,
+      accessToken: row.access_token_encrypted,
+      expiresAt: row.expires_at,
       createdAt: row.created_at
     }));
 
@@ -188,6 +188,13 @@ export async function refreshAllExpiringTokens(): Promise<{
   let failed = 0;
 
   for (const tokenInfo of tokensToRefresh) {
+    // Skip tokens without business account ID
+    if (!tokenInfo.businessAccountId) {
+      console.warn(`⚠️ Skipping token refresh - missing business account ID for user ${tokenInfo.userId}`);
+      failed++;
+      continue;
+    }
+
     const result = await refreshAccessToken(
       tokenInfo.userId,
       tokenInfo.businessAccountId

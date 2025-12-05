@@ -96,7 +96,13 @@ const Login: React.FC = () => {
   }
 
   /**
-   * Log user consent to database for GDPR/CCPA compliance
+   * Store user consent in session storage for later persistence
+   *
+   * UPDATED: Session-based approach to fix RLS policy violation
+   *
+   * This function stores consent metadata in sessionStorage during OAuth flow.
+   * The consent is persisted to database AFTER authentication completes,
+   * ensuring we have a valid user_id and authenticated session.
    *
    * Records comprehensive consent metadata including:
    * - Timestamp (ISO 8601 format)
@@ -105,13 +111,9 @@ const Login: React.FC = () => {
    * - Policy versions (for version control)
    * - Consent type (OAuth-specific)
    *
-   * This function is called immediately before OAuth redirect to ensure
-   * consent is logged before any data access occurs.
-   *
    * @returns {Promise<void>}
    *
    * @throws {Error} If IP fetch fails (logged but doesn't block OAuth)
-   * @throws {Error} If database insert fails (logged but doesn't block OAuth)
    *
    * @compliance
    * - GDPR Article 7: Conditions for consent
@@ -119,16 +121,7 @@ const Login: React.FC = () => {
    * - CCPA Section 1798.100: Consumer's right to know
    * - Meta Platform Terms (February 2025)
    *
-   * @example
-   * try {
-   *   await logConsent();
-   *   // Proceed with OAuth
-   * } catch (error) {
-   *   // Log error but don't block user
-   *   console.error('Consent logging failed:', error);
-   * }
-   *
-   * @see {@link https://supabase.com/docs/reference/javascript/insert}
+   * @see persistStoredConsent() - Called after authentication to save to DB
    */
   const logConsent = async (): Promise<void> => {
     try {
@@ -184,36 +177,21 @@ const Login: React.FC = () => {
 
         // Timestamp (ISO 8601 format)
         consented_at: new Date().toISOString(),
-
-        // Optional: Add user ID if available at this stage
-        // user_id: currentUser?.id || null,
-
-        // Optional: Add session ID for tracking
-        // session_id: sessionStorage.getItem('session_id') || null,
       };
 
       // ============================================
-      // STEP 3: Insert Consent Record to Database
+      // STEP 3: Store in Session Storage
       // ============================================
+      // Store temporarily until authentication completes
+      // Will be persisted to database by persistStoredConsent()
 
-      const { data, error } = await supabase
-        .from('user_consents')
-        .insert([consentData])
-        .select(); // Return inserted record for confirmation
+      sessionStorage.setItem('pending_consent', JSON.stringify(consentData));
 
-      if (error) {
-        throw new Error(`Database insert failed: ${error.message}`);
-      }
-
-      console.log('✅ User consent logged successfully');
+      console.log('✅ Consent metadata stored in session');
       console.log('   Timestamp:', consentData.consented_at);
       console.log('   IP Address:', ipAddress);
       console.log('   Policy Versions: Privacy v2.0, Terms v2.0');
-
-      // Optional: Store consent ID in session for reference
-      if (data && data[0] && data[0].id) {
-        sessionStorage.setItem('consent_id', data[0].id);
-      }
+      console.log('   ⏳ Will be persisted to database after authentication');
 
     } catch (error) {
       // ============================================
@@ -222,18 +200,94 @@ const Login: React.FC = () => {
       // Log error but DON'T block OAuth flow
       // Consent logging is important but shouldn't prevent authentication
 
-      console.error('❌ Failed to log consent:', error);
-      console.warn('⚠️ Continuing with OAuth despite logging failure');
-
-      // Optional: Send error to monitoring service
-      // if (window.Sentry) {
-      //   Sentry.captureException(error, {
-      //     tags: { component: 'consent-logging' }
-      //   });
-      // }
+      console.error('❌ Failed to store consent metadata:', error);
+      console.warn('⚠️ Continuing with OAuth despite storage failure');
 
       // DON'T throw - allow OAuth to proceed
-      // Consent was given in UI, logging failure is operational issue
+      // Consent was given in UI, storage failure is operational issue
+    }
+  };
+
+  /**
+   * Persist stored consent to database after authentication
+   *
+   * This function retrieves consent metadata from sessionStorage and
+   * persists it to the database using the authenticated user's credentials.
+   *
+   * Called immediately after successful authentication to ensure:
+   * - User has valid authenticated session
+   * - user_id is available from auth.uid()
+   * - RLS policies allow the insert
+   *
+   * @param userId - The authenticated user's ID from OAuth response
+   * @returns {Promise<void>}
+   *
+   * @example
+   * // After successful login
+   * login(userData, token);
+   * await persistStoredConsent(userData.id);
+   */
+  const persistStoredConsent = async (userId: string): Promise<void> => {
+    try {
+      // ============================================
+      // STEP 1: Retrieve Consent from Session Storage
+      // ============================================
+      const storedConsent = sessionStorage.getItem('pending_consent');
+
+      if (!storedConsent) {
+        console.warn('⚠️ No pending consent found in session storage');
+        return;
+      }
+
+      const consentData = JSON.parse(storedConsent);
+
+      // ============================================
+      // STEP 2: Add user_id to Consent Data
+      // ============================================
+      // Now we have authenticated user, add user_id
+      const completeConsentData = {
+        ...consentData,
+        user_id: userId,
+      };
+
+      // ============================================
+      // STEP 3: Insert to Database (Now Authenticated)
+      // ============================================
+      // User is now authenticated, RLS policy will allow this insert
+      const { data, error } = await supabase
+        .from('user_consents')
+        .insert([completeConsentData])
+        .select();
+
+      if (error) {
+        throw new Error(`Database insert failed: ${error.message}`);
+      }
+
+      console.log('✅ User consent persisted to database successfully');
+      console.log('   User ID:', userId);
+      console.log('   Consent ID:', data?.[0]?.id);
+      console.log('   Timestamp:', consentData.consented_at);
+
+      // ============================================
+      // STEP 4: Cleanup Session Storage
+      // ============================================
+      sessionStorage.removeItem('pending_consent');
+
+      // Optional: Store consent ID for reference
+      if (data && data[0] && data[0].id) {
+        sessionStorage.setItem('consent_id', data[0].id);
+      }
+
+    } catch (error) {
+      console.error('❌ Failed to persist consent to database:', error);
+      console.warn('⚠️ Consent metadata was captured but database insert failed');
+
+      // Optional: Retry logic or send to monitoring service
+      // if (window.Sentry) {
+      //   Sentry.captureException(error, {
+      //     tags: { component: 'consent-persistence' }
+      //   });
+      // }
     }
   };
 
@@ -300,6 +354,9 @@ const Login: React.FC = () => {
           avatarUrl: '',
           permissions: ['dashboard', 'content', 'engagement', 'analytics', 'settings'],
         }, 'mock_token');
+
+        // Persist consent to database (now authenticated)
+        await persistStoredConsent('1');
 
         setMessage({
           type: 'success',
@@ -454,6 +511,12 @@ const Login: React.FC = () => {
             permissions: ['dashboard', 'content', 'engagement', 'analytics', 'settings'],
           }, shortLivedToken); // Using short token temporarily, long token stored in DB
 
+          // ============================================
+          // STEP 8: PERSIST CONSENT TO DATABASE
+          // ============================================
+          // Now that user is authenticated, save consent with user_id
+          await persistStoredConsent(userID);
+
           setMessage({
             type: 'success',
             text: '✅ Instagram Business account connected! Redirecting...'
@@ -476,6 +539,9 @@ const Login: React.FC = () => {
             avatarUrl: '',
             permissions: ['dashboard', 'content', 'engagement', 'analytics', 'settings'],
           }, shortLivedToken);
+
+          // Persist consent even in fallback scenario
+          await persistStoredConsent(userID);
 
           setMessage({
             type: 'success',

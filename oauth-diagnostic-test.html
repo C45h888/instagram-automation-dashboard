@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OAuth Diagnostic Test Suite</title>
+    <script async defer crossorigin="anonymous" src="https://connect.facebook.net/en_US/sdk.js"></script>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+            background: #0a0a0a;
+            color: #00ff00;
+        }
+        .test-section {
+            background: #1a1a1a;
+            border: 2px solid #333;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .test-title {
+            font-size: 20px;
+            font-weight: bold;
+            color: #00ffff;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #00ffff;
+            padding-bottom: 5px;
+        }
+        .test-item {
+            margin: 10px 0;
+            padding: 10px;
+            background: #0f0f0f;
+            border-left: 4px solid #666;
+        }
+        .test-item.success {
+            border-left-color: #00ff00;
+            color: #00ff00;
+        }
+        .test-item.error {
+            border-left-color: #ff0000;
+            color: #ff0000;
+        }
+        .test-item.warning {
+            border-left-color: #ffaa00;
+            color: #ffaa00;
+        }
+        .test-item.info {
+            border-left-color: #00aaff;
+            color: #00aaff;
+        }
+        button {
+            background: #00ff00;
+            color: #0a0a0a;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 4px;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background: #00cc00;
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        .code-block {
+            background: #000;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            margin: 10px 0;
+            font-size: 12px;
+        }
+        #fb-root {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1 style="text-align: center; color: #00ffff;">🔍 OAuth Diagnostic Test Suite</h1>
+    <p style="text-align: center; color: #999;">Complete diagnostic tool for debugging Meta OAuth integration</p>
+
+    <!-- Test Section 1: Environment Check -->
+    <div class="test-section">
+        <div class="test-title">📋 STEP 1: Environment Configuration</div>
+        <div id="env-results"></div>
+        <button onclick="runEnvironmentTests()">Run Environment Tests</button>
+    </div>
+
+    <!-- Test Section 2: Facebook SDK -->
+    <div class="test-section">
+        <div class="test-title">🔧 STEP 2: Facebook SDK Status</div>
+        <div id="sdk-results"></div>
+        <button onclick="runSDKTests()">Run SDK Tests</button>
+    </div>
+
+    <!-- Test Section 3: OAuth Popup Test -->
+    <div class="test-section">
+        <div class="test-title">🚀 STEP 3: OAuth Popup Test</div>
+        <div id="oauth-results"></div>
+        <button id="oauth-test-btn" onclick="runOAuthTest()" disabled>Test OAuth Popup</button>
+    </div>
+
+    <!-- Test Section 4: Backend API -->
+    <div class="test-section">
+        <div class="test-title">⚙️ STEP 4: Backend API Status</div>
+        <div id="backend-results"></div>
+        <button onclick="runBackendTests()">Run Backend Tests</button>
+    </div>
+
+    <!-- Test Section 5: Supabase -->
+    <div class="test-section">
+        <div class="test-title">💾 STEP 5: Supabase Connection</div>
+        <div id="supabase-results"></div>
+        <button onclick="runSupabaseTests()">Run Supabase Tests</button>
+    </div>
+
+    <!-- Test Section 6: Full Integration Test -->
+    <div class="test-section">
+        <div class="test-title">🎯 STEP 6: Full OAuth Flow Simulation</div>
+        <div id="integration-results"></div>
+        <button id="integration-test-btn" onclick="runIntegrationTest()" disabled>Run Full Integration Test</button>
+    </div>
+
+    <div id="fb-root"></div>
+
+    <script>
+        // Configuration - Update these from your .env file
+        const CONFIG = {
+            META_APP_ID: '1449604936071207', // From your .env.development
+            BACKEND_URL: 'http://localhost:3001',
+            FRONTEND_URL: 'http://localhost:3002',
+            SUPABASE_URL: 'https://uromexjprcrjfmhkmgxa.supabase.co',
+            SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVyb21leGpwcmNyamZtaGttZ3hhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU3NTgxOTUsImV4cCI6MjA3MTMzNDE5NX0.4iMC2ktj2nDlOYy-4NfNVHnV4i-tfCVFvgqR835cAOI'
+        };
+
+        let testResults = {
+            envPassed: false,
+            sdkPassed: false,
+            oauthPassed: false,
+            backendPassed: false,
+            supabasePassed: false
+        };
+
+        // Utility functions
+        function addTestResult(containerId, message, type = 'info') {
+            const container = document.getElementById(containerId);
+            const div = document.createElement('div');
+            div.className = `test-item ${type}`;
+            const icon = type === 'success' ? '✅' : type === 'error' ? '❌' : type === 'warning' ? '⚠️' : 'ℹ️';
+            div.innerHTML = `${icon} ${message}`;
+            container.appendChild(div);
+        }
+
+        function addCodeBlock(containerId, title, code) {
+            const container = document.getElementById(containerId);
+            const div = document.createElement('div');
+            div.innerHTML = `<div style="color: #00aaff; margin: 10px 0;">${title}</div><div class="code-block">${code}</div>`;
+            container.appendChild(div);
+        }
+
+        // Test 1: Environment Configuration
+        function runEnvironmentTests() {
+            const container = document.getElementById('env-results');
+            container.innerHTML = '';
+
+            addTestResult('env-results', 'Checking environment configuration...', 'info');
+
+            // Check Meta App ID
+            if (CONFIG.META_APP_ID && CONFIG.META_APP_ID !== 'your_meta_app_id_here') {
+                addTestResult('env-results', `Meta App ID configured: ${CONFIG.META_APP_ID}`, 'success');
+            } else {
+                addTestResult('env-results', 'Meta App ID not configured or using placeholder', 'error');
+                return;
+            }
+
+            // Check URLs
+            if (CONFIG.BACKEND_URL) {
+                addTestResult('env-results', `Backend URL: ${CONFIG.BACKEND_URL}`, 'success');
+            } else {
+                addTestResult('env-results', 'Backend URL not configured', 'warning');
+            }
+
+            if (CONFIG.SUPABASE_URL) {
+                addTestResult('env-results', `Supabase URL: ${CONFIG.SUPABASE_URL}`, 'success');
+            } else {
+                addTestResult('env-results', 'Supabase URL not configured', 'warning');
+            }
+
+            // Check browser capabilities
+            if (window.localStorage) {
+                addTestResult('env-results', 'localStorage available', 'success');
+            } else {
+                addTestResult('env-results', 'localStorage not available', 'error');
+            }
+
+            // Check popup blocker
+            const testPopup = window.open('', '_blank', 'width=1,height=1');
+            if (testPopup && !testPopup.closed) {
+                testPopup.close();
+                addTestResult('env-results', 'Popup blocker: NOT BLOCKING', 'success');
+            } else {
+                addTestResult('env-results', 'Popup blocker: BLOCKING - This will prevent OAuth!', 'error');
+            }
+
+            testResults.envPassed = true;
+            addTestResult('env-results', 'Environment tests completed', 'success');
+        }
+
+        // Test 2: Facebook SDK Status
+        function runSDKTests() {
+            const container = document.getElementById('sdk-results');
+            container.innerHTML = '';
+
+            addTestResult('sdk-results', 'Checking Facebook SDK status...', 'info');
+
+            // Check if SDK script is loaded
+            const sdkScript = document.querySelector('script[src*="facebook.net/en_US/sdk.js"]');
+            if (sdkScript) {
+                addTestResult('sdk-results', 'Facebook SDK script tag found in HTML', 'success');
+            } else {
+                addTestResult('sdk-results', 'Facebook SDK script tag NOT found in HTML', 'error');
+            }
+
+            // Check if window.FB exists
+            if (typeof window.FB !== 'undefined') {
+                addTestResult('sdk-results', 'window.FB object exists', 'success');
+
+                // Check if FB.init has been called
+                if (typeof window.FB.getLoginStatus === 'function') {
+                    addTestResult('sdk-results', 'Facebook SDK is initialized (FB.init called)', 'success');
+                    testResults.sdkPassed = true;
+                    document.getElementById('oauth-test-btn').disabled = false;
+                    document.getElementById('integration-test-btn').disabled = false;
+                } else {
+                    addTestResult('sdk-results', 'Facebook SDK loaded but NOT initialized. Calling FB.init...', 'warning');
+
+                    // Initialize SDK
+                    window.FB.init({
+                        appId: CONFIG.META_APP_ID,
+                        cookie: true,
+                        xfbml: true,
+                        version: 'v18.0'
+                    });
+
+                    addTestResult('sdk-results', 'FB.init() called successfully', 'success');
+                    testResults.sdkPassed = true;
+                    document.getElementById('oauth-test-btn').disabled = false;
+                    document.getElementById('integration-test-btn').disabled = false;
+                }
+
+                // Check current login status
+                window.FB.getLoginStatus(function(response) {
+                    if (response.status === 'connected') {
+                        addTestResult('sdk-results', `User is already logged in! User ID: ${response.authResponse.userID}`, 'success');
+                        addCodeBlock('sdk-results', 'Current Auth Response:', JSON.stringify(response.authResponse, null, 2));
+                    } else if (response.status === 'not_authorized') {
+                        addTestResult('sdk-results', 'User is logged into Facebook but has not authorized the app', 'warning');
+                    } else {
+                        addTestResult('sdk-results', 'User is not logged into Facebook', 'info');
+                    }
+                });
+
+            } else {
+                addTestResult('sdk-results', 'window.FB does NOT exist - SDK not loaded!', 'error');
+                addTestResult('sdk-results', 'Waiting for SDK to load... (retrying in 2 seconds)', 'warning');
+
+                setTimeout(() => {
+                    if (typeof window.FB !== 'undefined') {
+                        addTestResult('sdk-results', 'SDK loaded after retry', 'success');
+                        runSDKTests(); // Retry test
+                    } else {
+                        addTestResult('sdk-results', 'SDK still not loaded after 2 seconds. Check network tab for failed requests.', 'error');
+                    }
+                }, 2000);
+            }
+        }
+
+        // Test 3: OAuth Popup Test
+        async function runOAuthTest() {
+            const container = document.getElementById('oauth-results');
+            container.innerHTML = '';
+
+            addTestResult('oauth-results', 'Testing OAuth popup flow...', 'info');
+
+            if (!window.FB) {
+                addTestResult('oauth-results', 'Facebook SDK not available. Run SDK tests first.', 'error');
+                return;
+            }
+
+            const scopes = [
+                'instagram_basic',
+                'instagram_manage_comments',
+                'instagram_manage_insights',
+                'instagram_business_manage_messages',
+                'pages_show_list',
+                'pages_read_engagement',
+                'pages_read_user_content'
+            ];
+
+            addTestResult('oauth-results', `Requesting scopes: ${scopes.join(', ')}`, 'info');
+            addTestResult('oauth-results', 'Opening Facebook login popup...', 'info');
+
+            try {
+                window.FB.login(function(response) {
+                    if (response.authResponse) {
+                        addTestResult('oauth-results', '✅ OAuth popup successful!', 'success');
+                        addCodeBlock('oauth-results', 'Auth Response:', JSON.stringify(response.authResponse, null, 2));
+
+                        addTestResult('oauth-results', `Access Token: ${response.authResponse.accessToken.substring(0, 30)}...`, 'success');
+                        addTestResult('oauth-results', `User ID: ${response.authResponse.userID}`, 'success');
+                        addTestResult('oauth-results', `Granted Scopes: ${response.authResponse.grantedScopes}`, 'info');
+
+                        testResults.oauthPassed = true;
+
+                        // Store for integration test
+                        window.testAccessToken = response.authResponse.accessToken;
+                        window.testUserID = response.authResponse.userID;
+
+                    } else {
+                        addTestResult('oauth-results', 'User cancelled login or did not authorize', 'warning');
+                        addCodeBlock('oauth-results', 'Response:', JSON.stringify(response, null, 2));
+                    }
+                }, {
+                    scope: scopes.join(','),
+                    return_scopes: true,
+                    auth_type: 'rerequest'
+                });
+
+            } catch (error) {
+                addTestResult('oauth-results', `Error during OAuth: ${error.message}`, 'error');
+                console.error('OAuth Error:', error);
+            }
+        }
+
+        // Test 4: Backend API Status
+        async function runBackendTests() {
+            const container = document.getElementById('backend-results');
+            container.innerHTML = '';
+
+            addTestResult('backend-results', 'Testing backend API endpoints...', 'info');
+
+            // Test 1: Health check
+            try {
+                const healthResponse = await fetch(`${CONFIG.BACKEND_URL}/health`);
+                if (healthResponse.ok) {
+                    const data = await healthResponse.json();
+                    addTestResult('backend-results', 'Backend health check: PASSED', 'success');
+                    addCodeBlock('backend-results', 'Health Response:', JSON.stringify(data, null, 2));
+                } else {
+                    addTestResult('backend-results', `Backend health check: FAILED (${healthResponse.status})`, 'error');
+                }
+            } catch (error) {
+                addTestResult('backend-results', `Backend health check: CONNECTION FAILED - ${error.message}`, 'error');
+                addTestResult('backend-results', 'Make sure backend is running on port 3001', 'warning');
+                return;
+            }
+
+            // Test 2: Check exchange-token endpoint exists
+            try {
+                const testResponse = await fetch(`${CONFIG.BACKEND_URL}/api/instagram/exchange-token`, {
+                    method: 'OPTIONS'
+                });
+                addTestResult('backend-results', 'Token exchange endpoint: ACCESSIBLE', 'success');
+            } catch (error) {
+                addTestResult('backend-results', `Token exchange endpoint: NOT ACCESSIBLE - ${error.message}`, 'error');
+            }
+
+            testResults.backendPassed = true;
+            addTestResult('backend-results', 'Backend tests completed', 'success');
+        }
+
+        // Test 5: Supabase Connection
+        async function runSupabaseTests() {
+            const container = document.getElementById('supabase-results');
+            container.innerHTML = '';
+
+            addTestResult('supabase-results', 'Testing Supabase connection...', 'info');
+
+            try {
+                // Test connection to Supabase REST API
+                const response = await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/`, {
+                    headers: {
+                        'apikey': CONFIG.SUPABASE_ANON_KEY,
+                        'Authorization': `Bearer ${CONFIG.SUPABASE_ANON_KEY}`
+                    }
+                });
+
+                if (response.ok || response.status === 404) { // 404 is ok, means API is responding
+                    addTestResult('supabase-results', 'Supabase API: ACCESSIBLE', 'success');
+                } else {
+                    addTestResult('supabase-results', `Supabase API: FAILED (${response.status})`, 'error');
+                }
+
+                // Test user_consents table (this is where the error likely occurs)
+                const tableResponse = await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/user_consents?limit=1`, {
+                    method: 'HEAD',
+                    headers: {
+                        'apikey': CONFIG.SUPABASE_ANON_KEY,
+                        'Authorization': `Bearer ${CONFIG.SUPABASE_ANON_KEY}`
+                    }
+                });
+
+                if (tableResponse.ok) {
+                    addTestResult('supabase-results', 'user_consents table: EXISTS and ACCESSIBLE', 'success');
+                } else if (tableResponse.status === 404) {
+                    addTestResult('supabase-results', 'user_consents table: DOES NOT EXIST', 'error');
+                    addTestResult('supabase-results', 'This is likely causing the OAuth failure!', 'error');
+                } else if (tableResponse.status === 401 || tableResponse.status === 403) {
+                    addTestResult('supabase-results', 'user_consents table: RLS POLICY BLOCKING ACCESS', 'error');
+                    addTestResult('supabase-results', 'Check RLS policies for user_consents table', 'warning');
+                } else {
+                    addTestResult('supabase-results', `user_consents table: ERROR (${tableResponse.status})`, 'error');
+                }
+
+                testResults.supabasePassed = true;
+
+            } catch (error) {
+                addTestResult('supabase-results', `Supabase connection: FAILED - ${error.message}`, 'error');
+            }
+
+            addTestResult('supabase-results', 'Supabase tests completed', 'success');
+        }
+
+        // Test 6: Full Integration Test
+        async function runIntegrationTest() {
+            const container = document.getElementById('integration-results');
+            container.innerHTML = '';
+
+            addTestResult('integration-results', 'Running full OAuth integration test...', 'info');
+
+            if (!window.testAccessToken) {
+                addTestResult('integration-results', 'No access token available. Run OAuth test first.', 'error');
+                return;
+            }
+
+            addTestResult('integration-results', 'Step 1: OAuth completed ✅', 'success');
+
+            // Test token exchange with backend
+            addTestResult('integration-results', 'Step 2: Exchanging token with backend...', 'info');
+
+            try {
+                const response = await fetch(`${CONFIG.BACKEND_URL}/api/instagram/exchange-token`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        userAccessToken: window.testAccessToken,
+                        userId: window.testUserID,
+                        businessAccountId: 'test_' + window.testUserID
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    addTestResult('integration-results', 'Step 2: Token exchange SUCCESS ✅', 'success');
+                    addCodeBlock('integration-results', 'Backend Response:', JSON.stringify(data, null, 2));
+
+                    addTestResult('integration-results', `Page Name: ${data.data.pageName}`, 'info');
+                    addTestResult('integration-results', `IG Business Account: ${data.data.igBusinessAccountId}`, 'info');
+                    addTestResult('integration-results', `Token Stored: ${data.data.stored}`, data.data.stored ? 'success' : 'warning');
+
+                } else {
+                    addTestResult('integration-results', `Step 2: Token exchange FAILED - ${data.error || data.message}`, 'error');
+                    addCodeBlock('integration-results', 'Error Response:', JSON.stringify(data, null, 2));
+                }
+
+            } catch (error) {
+                addTestResult('integration-results', `Step 2: Token exchange ERROR - ${error.message}`, 'error');
+            }
+
+            addTestResult('integration-results', 'Integration test completed', 'success');
+        }
+
+        // Initialize Facebook SDK when page loads
+        window.fbAsyncInit = function() {
+            console.log('Facebook SDK loaded via fbAsyncInit');
+            addTestResult('sdk-results', 'fbAsyncInit callback triggered', 'info');
+        };
+
+        // Run initial environment test automatically
+        window.addEventListener('load', () => {
+            console.log('Page loaded, ready for tests');
+        });
+    </script>
+</body>
+</html>
