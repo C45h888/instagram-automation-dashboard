@@ -8,7 +8,6 @@
 import React, { useState } from 'react';
 import { useVisitorPosts } from '../hooks/useVisitorPosts';
 import { VisitorPostInbox, PermissionRequestModal } from '../components/permissions/UGCManagement';
-import { DemoModeToggle } from '../components/permissions/shared';
 import AsyncWrapper from '../components/ui/AsyncWrapper';
 import { useToast } from '../hooks/useToast';
 import type { VisitorPost, PermissionRequestForm } from '../types/ugc';
@@ -67,9 +66,6 @@ const UGCManagement: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* EVIDENCE: Demo Mode Toggle */}
-      <DemoModeToggle />
-
       {/* Page Header */}
       <div className="glass-morphism-card p-6 rounded-2xl">
         <h1 className="text-3xl font-bold text-white mb-2">

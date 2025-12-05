@@ -1,6 +1,6 @@
 import React from 'react';
 import { TrendingUp, TrendingDown, Minus, Users, Heart, Image, DollarSign } from 'lucide-react';
-import type { MetricData } from '../../data/mockData';
+import type { MetricData } from '../../types/dashboard';
 
 interface MetricCardProps extends MetricData {
   isLoading?: boolean;

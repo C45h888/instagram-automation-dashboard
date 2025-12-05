@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { TrendingUp, TrendingDown, Minus, Users, Heart, Image, DollarSign } from 'lucide-react';
 import CountUpAnimation from '../ui/CountUpAnimation';
 import AnimatedCard from '../ui/AnimatedCard';
-import type { MetricData } from '../../data/mockData';
+import type { MetricData } from '../../types/dashboard';
 
 interface AnimatedMetricCardProps extends MetricData {
   index: number;

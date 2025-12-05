@@ -1,12 +1,12 @@
 // =====================================
-// USE CONTENT ANALYTICS HOOK
-// Fetches and manages Instagram media/content data
+// USE CONTENT ANALYTICS HOOK - PRODUCTION
+// Fetches REAL Instagram media/content data from Meta Graph API
+// NO MOCK DATA, NO FALLBACKS
 // Calculates engagement rates and performance tiers
 // =====================================
 
-import { useState, useEffect } from 'react';
-import { usePermissionDemoStore } from '../stores/permissionDemoStore';
-import PermissionDemoService from '../services/permissionDemoService';
+import { useState, useEffect, useCallback } from 'react';
+import { useAuthStore } from '../stores/authStore';
 import type { MediaData } from '../types/permissions';
 
 interface ContentAnalytics {
@@ -26,50 +26,65 @@ interface UseContentAnalyticsResult {
   refetch: () => void;
 }
 
-export const useContentAnalytics = (): UseContentAnalyticsResult => {
-  const { demoMode } = usePermissionDemoStore();
+/**
+ * Hook to fetch and analyze Instagram media content
+ * @param businessAccountId - Instagram Business Account ID (optional)
+ */
+export const useContentAnalytics = (businessAccountId?: string): UseContentAnalyticsResult => {
+  const { user, token } = useAuthStore();
   const [media, setMedia] = useState<MediaData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchMedia = async () => {
+  const fetchMedia = useCallback(async () => {
+    // ❌ NO DEMO MODE CHECK - Always fetch real data
+
+    if (!businessAccountId) {
+      setError('No Instagram Business Account connected. Please reconnect your account.');
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
     try {
-      setIsLoading(true);
-      setError(null);
+      // ✅ REAL API CALL - No fallback
+      const response = await fetch(
+        `/api/instagram/media/${businessAccountId}?limit=50`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
 
-      if (demoMode) {
-        // Use demo data generator
-        await new Promise((resolve) => setTimeout(resolve, 500)); // Simulate API delay
-        const demoData = PermissionDemoService.generateDemoData({
-          realistic: true,
-          volume: 'medium',
-          includeEdgeCases: true,
-          timeRange: 'month'
-        });
-        setMedia(demoData.media);
-      } else {
-        // Fetch real data from Supabase
-        // TODO: Implement real data fetching from instagram_media table
-        // const { data, error } = await supabase
-        //   .from('instagram_media')
-        //   .select('*')
-        //   .order('published_at', { ascending: false });
-
-        // For now, fallback to demo data
-        const demoData = PermissionDemoService.generateDemoData({
-          realistic: true,
-          volume: 'medium',
-          includeEdgeCases: true,
-          timeRange: 'month'
-        });
-        setMedia(demoData.media);
+      if (!response.ok) {
+        const errorData = await response.json();
+        // ✅ FAIL LOUDLY - Show the actual error
+        throw new Error(errorData.error || `API Error: ${response.status}`);
       }
+
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to fetch media');
+      }
+
+      setMedia(result.data || []);
+
+      console.log('✅ Media fetched successfully:', result.data?.length || 0, 'items');
+
     } catch (err: any) {
-      setError(err.message || 'Failed to fetch content analytics');
+      console.error('❌ Media fetch failed:', err);
+      // ✅ FAIL LOUDLY - Display error, don't fallback to mock data
+      setError(err.message || 'Failed to fetch media. Check console for details.');
+      setMedia([]);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [businessAccountId, token]);
 
   // Calculate analytics from media data
   const calculateAnalytics = (mediaData: MediaData[]): ContentAnalytics => {
@@ -102,7 +117,7 @@ export const useContentAnalytics = (): UseContentAnalyticsResult => {
 
   useEffect(() => {
     fetchMedia();
-  }, [demoMode]);
+  }, [fetchMedia]);
 
   return {
     media,

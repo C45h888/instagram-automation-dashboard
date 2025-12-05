@@ -1,12 +1,12 @@
 // =====================================
-// USE VISITOR POSTS HOOK
+// USE VISITOR POSTS HOOK - PRODUCTION
+// Fetches REAL UGC/tagged posts from Meta Graph API
+// NO MOCK DATA, NO FALLBACKS
 // Manages UGC data fetching, filtering, and mutations
-// Follows useComments.ts pattern
 // =====================================
 
-import { useState, useEffect } from 'react';
-import { usePermissionDemoStore } from '../stores/permissionDemoStore';
-import PermissionDemoService from '../services/permissionDemoService';
+import { useState, useEffect, useCallback } from 'react';
+import { useAuthStore } from '../stores/authStore';
 import type { VisitorPost, UGCStats, UGCFilterState, PermissionRequestForm } from '../types/ugc';
 import { DEFAULT_UGC_FILTERS } from '../types/ugc';
 
@@ -22,177 +22,171 @@ interface UseVisitorPostsResult {
   refetch: () => void;
 }
 
-export const useVisitorPosts = (): UseVisitorPostsResult => {
-  const { demoMode } = usePermissionDemoStore();
+/**
+ * Hook to fetch and manage visitor posts (UGC)
+ * @param businessAccountId - Instagram Business Account ID (optional)
+ */
+export const useVisitorPosts = (businessAccountId?: string): UseVisitorPostsResult => {
+  const { user, token } = useAuthStore();
   const [visitorPosts, setVisitorPosts] = useState<VisitorPost[]>([]);
   const [stats, setStats] = useState<UGCStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<UGCFilterState>(DEFAULT_UGC_FILTERS);
 
-  const fetchVisitorPosts = async () => {
+  const fetchVisitorPosts = useCallback(async () => {
+    if (!businessAccountId) {
+      setError('No Instagram Business Account connected.');
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
     try {
-      setIsLoading(true);
-      setError(null);
+      // ✅ REAL API CALL
+      const response = await fetch(
+        `/api/instagram/visitor-posts?businessAccountId=${businessAccountId}&limit=50`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
 
-      if (demoMode) {
-        // Use demo data generator
-        await new Promise((resolve) => setTimeout(resolve, 500)); // Simulate API delay
-        const demoData = PermissionDemoService.generateUGCDemoData();
-        setVisitorPosts(demoData.data);
-        setStats(demoData.stats);
-      } else {
-        // Fetch real data from backend API
-        // TODO: Implement real data fetching from /api/instagram/visitor-posts
-        // const response = await fetch('/api/instagram/visitor-posts?businessAccountId=...', {
-        //   headers: {
-        //     'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-        //   }
-        // });
-        // const result = await response.json();
-        // if (result.success) {
-        //   setVisitorPosts(result.data);
-        //   setStats(result.stats);
-        // }
-
-        // For now, fallback to demo data
-        const demoData = PermissionDemoService.generateUGCDemoData();
-        setVisitorPosts(demoData.data);
-        setStats(demoData.stats);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `API Error: ${response.status}`);
       }
+
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to fetch visitor posts');
+      }
+
+      // ✅ Set REAL data
+      setVisitorPosts(result.data || []);
+      setStats(result.stats || null);
+
+      console.log('✅ Visitor posts fetched:', result.data?.length || 0, 'posts');
+
     } catch (err: any) {
+      console.error('❌ Visitor posts fetch failed:', err);
+      // ✅ FAIL LOUDLY
       setError(err.message || 'Failed to fetch visitor posts');
+      setVisitorPosts([]);
+      setStats(null);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [businessAccountId, token]);
 
   const toggleFeatured = async (postId: string, featured: boolean): Promise<void> => {
     try {
-      if (demoMode) {
-        // Simulate API delay
-        await new Promise((resolve) => setTimeout(resolve, 300));
+      // ✅ REAL API CALL to update featured status
+      const response = await fetch(`/api/instagram/ugc/${postId}/feature`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ featured })
+      });
 
-        // Update post in local state
-        setVisitorPosts((prevPosts) =>
-          prevPosts.map((post) =>
-            post.id === postId
-              ? {
-                  ...post,
-                  featured,
-                  featured_at: featured ? new Date().toISOString() : null,
-                  updated_at: new Date().toISOString()
-                }
-              : post
-          )
-        );
-
-        // Update stats if needed
-        if (stats) {
-          setStats({
-            ...stats,
-            featuredCount: featured
-              ? stats.featuredCount + 1
-              : Math.max(0, stats.featuredCount - 1)
-          });
-        }
-      } else {
-        // Send real request to backend
-        // TODO: Implement real feature toggle
-        // const response = await fetch(`/api/instagram/ugc/${postId}/feature`, {
-        //   method: 'PATCH',
-        //   headers: {
-        //     'Content-Type': 'application/json',
-        //     'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-        //   },
-        //   body: JSON.stringify({ featured })
-        // });
-        // const result = await response.json();
-        // if (!result.success) {
-        //   throw new Error(result.error || 'Failed to update featured status');
-        // }
-
-        // For now, simulate success
-        await new Promise((resolve) => setTimeout(resolve, 300));
-        setVisitorPosts((prevPosts) =>
-          prevPosts.map((post) =>
-            post.id === postId
-              ? {
-                  ...post,
-                  featured,
-                  featured_at: featured ? new Date().toISOString() : null,
-                  updated_at: new Date().toISOString()
-                }
-              : post
-          )
-        );
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to update featured status');
       }
+
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to update featured status');
+      }
+
+      // Update local state
+      setVisitorPosts(prev =>
+        prev.map(post =>
+          post.id === postId
+            ? {
+                ...post,
+                featured,
+                featured_at: featured ? new Date().toISOString() : null,
+                updated_at: new Date().toISOString()
+              }
+            : post
+        )
+      );
+
+      // Update stats if needed
+      if (stats) {
+        setStats({
+          ...stats,
+          featuredCount: featured
+            ? stats.featuredCount + 1
+            : Math.max(0, stats.featuredCount - 1)
+        });
+      }
+
+      console.log('✅ Featured status updated:', postId, featured);
     } catch (err: any) {
       throw new Error(err.message || 'Failed to update featured status');
     }
   };
 
   const requestPermission = async (form: PermissionRequestForm): Promise<void> => {
+    // Validate form
+    if (!form.requestMessage.trim()) {
+      throw new Error('Request message cannot be empty');
+    }
+
     try {
-      // Validate form
-      if (!form.requestMessage.trim()) {
-        throw new Error('Request message cannot be empty');
+      // ✅ REAL API CALL to request permission
+      const response = await fetch('/api/instagram/ugc/request-permission', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(form)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to request permission');
       }
 
-      if (demoMode) {
-        // Simulate API delay
-        await new Promise((resolve) => setTimeout(resolve, 500));
+      const result = await response.json();
 
-        // Update post in local state to show permission was requested
-        setVisitorPosts((prevPosts) =>
-          prevPosts.map((post) =>
-            post.id === form.ugcContentId
-              ? {
-                  ...post,
-                  repost_permission_requested: true,
-                  updated_at: new Date().toISOString()
-                }
-              : post
-          )
-        );
-
-        // Update stats if needed
-        if (stats) {
-          setStats({
-            ...stats,
-            permissionsPending: stats.permissionsPending + 1
-          });
-        }
-      } else {
-        // Send real permission request to backend
-        // TODO: Implement real permission request
-        // const response = await fetch('/api/instagram/ugc/request-permission', {
-        //   method: 'POST',
-        //   headers: {
-        //     'Content-Type': 'application/json',
-        //     'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-        //   },
-        //   body: JSON.stringify(form)
-        // });
-        // const result = await response.json();
-        // if (!result.success) {
-        //   throw new Error(result.error || 'Failed to request permission');
-        // }
-
-        // For now, simulate success
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        setVisitorPosts((prevPosts) =>
-          prevPosts.map((post) =>
-            post.id === form.ugcContentId
-              ? {
-                  ...post,
-                  repost_permission_requested: true,
-                  updated_at: new Date().toISOString()
-                }
-              : post
-          )
-        );
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to request permission');
       }
+
+      // Update post in local state
+      setVisitorPosts(prev =>
+        prev.map(post =>
+          post.id === form.ugcContentId
+            ? {
+                ...post,
+                repost_permission_requested: true,
+                updated_at: new Date().toISOString()
+              }
+            : post
+        )
+      );
+
+      // Update stats if needed
+      if (stats) {
+        setStats({
+          ...stats,
+          permissionsPending: stats.permissionsPending + 1
+        });
+      }
+
+      console.log('✅ Permission requested for:', form.ugcContentId);
     } catch (err: any) {
       throw new Error(err.message || 'Failed to request permission');
     }
@@ -200,7 +194,7 @@ export const useVisitorPosts = (): UseVisitorPostsResult => {
 
   useEffect(() => {
     fetchVisitorPosts();
-  }, [demoMode]);
+  }, [fetchVisitorPosts]);
 
   return {
     visitorPosts,

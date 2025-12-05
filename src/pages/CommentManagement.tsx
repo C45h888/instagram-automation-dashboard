@@ -7,7 +7,6 @@
 import React from 'react';
 import { useComments } from '../hooks/useComments';
 import { CommentInbox } from '../components/permissions/CommentManagement';
-import { DemoModeToggle } from '../components/permissions/shared';
 import AsyncWrapper from '../components/ui/AsyncWrapper';
 import { useToast } from '../hooks/useToast';
 
@@ -34,7 +33,6 @@ const CommentManagement: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Demo Mode Toggle */}
-      <DemoModeToggle />
 
       {/* Comment Inbox with Loading States */}
       <AsyncWrapper

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
-import type { ChartDataPoint } from '../../data/mockData';
+import type { ChartDataPoint } from '../../types/dashboard';
 
 interface PerformanceChartProps {
   data: ChartDataPoint[];

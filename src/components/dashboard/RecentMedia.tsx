@@ -1,6 +1,6 @@
 import React from 'react';
 import { Heart, MessageCircle, Play, Eye } from 'lucide-react';
-import type { MediaItem } from '../../data/mockData';
+import type { MediaItem } from '../../types/dashboard';
 
 interface RecentMediaProps {
   media: MediaItem[];

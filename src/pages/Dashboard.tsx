@@ -18,7 +18,6 @@ import { useToast } from '../hooks/useToast';
 import { useRealtimeUpdates } from '../services/realtimeService';
 import { InstagramProfileCard } from '../components/permissions/InstagramProfile';
 import { useInstagramProfile } from '../hooks/useInstagramProfile';
-import { DemoModeToggle } from '../components/permissions/shared';
 
 // Real-time Test Panel Component
 const RealtimeTestPanel: React.FC = () => {
@@ -135,9 +134,6 @@ const Dashboard: React.FC = () => {
       >
         {() => <DashboardHeader />}
       </AsyncWrapper>
-
-      {/* Demo Mode Toggle */}
-      <DemoModeToggle />
 
       {/* Instagram Profile Section */}
       <div className="mb-8">

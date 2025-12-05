@@ -377,15 +377,23 @@ const Login: React.FC = () => {
       // ============================================
       // STEP 5: DEFINE INSTAGRAM BUSINESS SCOPES
       // ============================================
+      /**
+       * Required OAuth permissions for 888 Intelligence Automation
+       * ✅ pages_manage_metadata REMOVED - Not needed for IG account linking
+       *
+       * @see https://developers.facebook.com/docs/permissions/reference
+       */
       const scopes = [
+        // Core Instagram permissions
         'instagram_basic',
         'instagram_manage_comments',
         'instagram_manage_insights',
         'instagram_business_manage_messages',
-        'pages_show_list',
-        'pages_read_engagement',
-        'pages_manage_metadata',
-        'pages_read_user_content'  // For UGC feature
+
+        // Page permissions
+        'pages_show_list',           // ✅ Gets Pages + instagram_business_account
+        'pages_read_engagement',     // ✅ Read comments
+        'pages_read_user_content'    // ✅ UGC/visitor posts
       ];
 
       // ============================================

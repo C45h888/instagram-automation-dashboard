@@ -1,12 +1,12 @@
 // =====================================
-// USE COMMENTS HOOK
-// Fetches and manages Instagram comment data
+// USE COMMENTS HOOK - PRODUCTION
+// Fetches REAL Instagram comment data from Meta Graph API
+// NO MOCK DATA, NO FALLBACKS
 // Handles filtering, reply submission, and data refresh
 // =====================================
 
-import { useState, useEffect } from 'react';
-import { usePermissionDemoStore } from '../stores/permissionDemoStore';
-import PermissionDemoService from '../services/permissionDemoService';
+import { useState, useEffect, useCallback } from 'react';
+import { useAuthStore } from '../stores/authStore';
 import type { CommentData } from '../types/permissions';
 import type { CommentFilterState } from '../components/permissions/CommentManagement';
 
@@ -20,8 +20,13 @@ interface UseCommentsResult {
   refetch: () => void;
 }
 
-export const useComments = (): UseCommentsResult => {
-  const { demoMode } = usePermissionDemoStore();
+/**
+ * Hook to fetch and manage Instagram comments
+ * @param businessAccountId - Instagram Business Account ID (optional)
+ * @param mediaId - Specific media ID to filter comments (optional)
+ */
+export const useComments = (businessAccountId?: string, mediaId?: string): UseCommentsResult => {
+  const { user, token } = useAuthStore();
   const [comments, setComments] = useState<CommentData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,101 +37,88 @@ export const useComments = (): UseCommentsResult => {
     search: ''
   });
 
-  const fetchComments = async () => {
+  const fetchComments = useCallback(async () => {
+    if (!businessAccountId) {
+      setError('No Instagram Business Account connected.');
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
     try {
-      setIsLoading(true);
-      setError(null);
+      // ✅ REAL API CALL
+      const endpoint = mediaId
+        ? `/api/instagram/comments/${mediaId}`
+        : `/api/instagram/comments?businessAccountId=${businessAccountId}`;
 
-      if (demoMode) {
-        // Use demo data generator
-        await new Promise((resolve) => setTimeout(resolve, 500)); // Simulate API delay
-        const demoData = PermissionDemoService.generateDemoData({
-          realistic: true,
-          volume: 'medium',
-          includeEdgeCases: true,
-          timeRange: 'week'
-        });
-        setComments(demoData.comments);
-      } else {
-        // Fetch real data from Supabase
-        // TODO: Implement real data fetching from instagram_comments table
-        // const { data, error } = await supabase
-        //   .from('instagram_comments')
-        //   .select('*')
-        //   .order('published_at', { ascending: false });
+      const response = await fetch(endpoint, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
 
-        // For now, fallback to demo data
-        const demoData = PermissionDemoService.generateDemoData({
-          realistic: true,
-          volume: 'medium',
-          includeEdgeCases: true,
-          timeRange: 'week'
-        });
-        setComments(demoData.comments);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `API Error: ${response.status}`);
       }
+
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to fetch comments');
+      }
+
+      setComments(result.data || []);
+      console.log('✅ Comments fetched:', result.data?.length || 0, 'comments');
+
     } catch (err: any) {
+      console.error('❌ Comments fetch failed:', err);
       setError(err.message || 'Failed to fetch comments');
+      setComments([]);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [businessAccountId, token, mediaId]);
 
   const replyToComment = async (commentId: string, replyText: string): Promise<void> => {
+    // Validate reply
+    if (!replyText.trim()) {
+      throw new Error('Reply cannot be empty');
+    }
+
+    if (replyText.length > 2200) {
+      throw new Error('Reply exceeds 2,200 character limit');
+    }
+
     try {
-      // Validate reply
-      if (!replyText.trim()) {
-        throw new Error('Reply cannot be empty');
+      // ✅ REAL API CALL to send reply
+      const response = await fetch(`/api/instagram/comments/${commentId}/reply`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ message: replyText })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to send reply');
       }
 
-      if (replyText.length > 2200) {
-        throw new Error('Reply exceeds 2,200 character limit');
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.error || 'Reply failed');
       }
 
-      if (demoMode) {
-        // Simulate API delay
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Refetch comments to show the new reply
+      await fetchComments();
 
-        // Update comment in local state to show reply was sent
-        setComments((prevComments) =>
-          prevComments.map((comment) =>
-            comment.id === commentId
-              ? {
-                  ...comment,
-                  reply_count: (comment.reply_count || 0) + 1,
-                  processed_by_automation: false,
-                  automated_response_sent: true,
-                  response_text: replyText,
-                  response_sent_at: new Date().toISOString()
-                }
-              : comment
-          )
-        );
-
-        // Show success toast (handled by component)
-      } else {
-        // Send real reply to Instagram via Supabase function
-        // TODO: Implement real reply submission
-        // const { error } = await supabase.rpc('send_comment_reply', {
-        //   comment_id: commentId,
-        //   reply_text: replyText
-        // });
-
-        // For now, simulate success
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        setComments((prevComments) =>
-          prevComments.map((comment) =>
-            comment.id === commentId
-              ? {
-                  ...comment,
-                  reply_count: (comment.reply_count || 0) + 1,
-                  automated_response_sent: true,
-                  response_text: replyText,
-                  response_sent_at: new Date().toISOString()
-                }
-              : comment
-          )
-        );
-      }
+      console.log('✅ Reply sent successfully:', result.data?.replyId);
     } catch (err: any) {
       throw new Error(err.message || 'Failed to send reply');
     }
@@ -134,7 +126,7 @@ export const useComments = (): UseCommentsResult => {
 
   useEffect(() => {
     fetchComments();
-  }, [demoMode]);
+  }, [fetchComments]);
 
   return {
     comments,

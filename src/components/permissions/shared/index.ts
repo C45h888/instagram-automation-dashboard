@@ -4,6 +4,6 @@
 // =====================================
 
 export { PermissionBadge } from './PermissionBadge';
-export { DemoModeToggle } from './DemoModeToggle';
+// DemoModeToggle removed in Phase -1 (mock data purge)
 export { PolicyComplianceIndicator } from './PolicyComplianceIndicator';
 export { FeatureHighlight } from './FeatureHighlight';

@@ -50,6 +50,7 @@ async function exchangeForPageToken(userAccessToken) {
       `${GRAPH_API_BASE}/me/accounts`,
       {
         params: {
+          fields: 'instagram_business_account',
           access_token: userAccessToken
         },
         timeout: 10000 // 10 second timeout
@@ -83,21 +84,11 @@ async function exchangeForPageToken(userAccessToken) {
     console.log(`✅ Selected Facebook page: "${page.name}" (ID: ${page.id})`);
     console.log(`   Page token length: ${page.access_token?.length || 0}`);
 
-    // ===== STEP 4: Get Instagram Business account connected to page =====
-    console.log('📱 Step 2: Fetching Instagram Business account...');
+    // ===== STEP 4: Get Instagram Business account from page data =====
+    // ✅ NO SECOND API CALL NEEDED - already included in /me/accounts response
+    console.log('📱 Step 2: Extracting Instagram Business account from page data...');
 
-    const igBusinessResponse = await axios.get(
-      `${GRAPH_API_BASE}/${page.id}`,
-      {
-        params: {
-          fields: 'instagram_business_account',
-          access_token: page.access_token
-        },
-        timeout: 10000
-      }
-    );
-
-    const igBusinessAccount = igBusinessResponse.data.instagram_business_account;
+    const igBusinessAccount = page.instagram_business_account;
 
     // ===== STEP 5: Validate Instagram Business account exists =====
     if (!igBusinessAccount) {

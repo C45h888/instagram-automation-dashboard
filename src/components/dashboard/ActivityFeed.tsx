@@ -1,6 +1,6 @@
 import React from 'react';
 import { CheckCircle, AlertCircle, MessageSquare, Camera, Calendar, TrendingUp, Clock } from 'lucide-react';
-import type { ActivityItem } from '../../data/mockData';
+import type { ActivityItem } from '../../types/dashboard';
 import { useToast } from '../../hooks/useToast';
 import { useModal } from '../../hooks/useModal';
 

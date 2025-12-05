@@ -1,12 +1,11 @@
 // =====================================
-// USE INSTAGRAM PROFILE HOOK
-// Fetches Instagram profile data
-// Follows existing useDashboardData pattern
+// USE INSTAGRAM PROFILE HOOK - PRODUCTION
+// Fetches REAL Instagram profile data from Meta Graph API
+// NO MOCK DATA, NO FALLBACKS
 // =====================================
 
-import { useState, useEffect } from 'react';
-import { usePermissionDemoStore } from '../stores/permissionDemoStore';
-import PermissionDemoService from '../services/permissionDemoService';
+import { useState, useEffect, useCallback } from 'react';
+import { useAuthStore } from '../stores/authStore';
 import type { InstagramProfileData } from '../types/permissions';
 
 interface UseInstagramProfileResult {
@@ -16,54 +15,64 @@ interface UseInstagramProfileResult {
   refetch: () => void;
 }
 
-export const useInstagramProfile = (): UseInstagramProfileResult => {
-  const { demoMode } = usePermissionDemoStore();
+/**
+ * Hook to fetch Instagram profile data
+ * @param businessAccountId - Instagram Business Account ID (optional)
+ */
+export const useInstagramProfile = (businessAccountId?: string): UseInstagramProfileResult => {
+  const { user, token } = useAuthStore();
   const [profile, setProfile] = useState<InstagramProfileData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchProfile = async () => {
+  const fetchProfile = useCallback(async () => {
+    if (!businessAccountId) {
+      setError('No Instagram Business Account connected. Please reconnect your account.');
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
     try {
-      setIsLoading(true);
-      setError(null);
+      // ✅ REAL API CALL - No fallback
+      const response = await fetch(
+        `/api/instagram/profile/${businessAccountId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
 
-      if (demoMode) {
-        // Use demo data generator
-        await new Promise(resolve => setTimeout(resolve, 500)); // Simulate API delay
-        const demoData = PermissionDemoService.generateDemoData({
-          realistic: true,
-          volume: 'medium',
-          includeEdgeCases: false,
-          timeRange: 'week'
-        });
-        setProfile(demoData.profiles[0]);
-      } else {
-        // Fetch real data from Supabase
-        // TODO: Implement real data fetching from instagram_business_accounts table
-        // const { data, error } = await supabase
-        //   .from('instagram_business_accounts')
-        //   .select('*')
-        //   .single();
-
-        // For now, fallback to demo data
-        const demoData = PermissionDemoService.generateDemoData({
-          realistic: true,
-          volume: 'medium',
-          includeEdgeCases: false,
-          timeRange: 'week'
-        });
-        setProfile(demoData.profiles[0]);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `API Error: ${response.status}`);
       }
+
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to fetch profile');
+      }
+
+      setProfile(result.data);
+      console.log('✅ Profile fetched:', result.data?.username);
+
     } catch (err: any) {
-      setError(err.message || 'Failed to fetch profile data');
+      console.error('❌ Profile fetch failed:', err);
+      setError(err.message || 'Failed to fetch profile. Check console for details.');
+      setProfile(null);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [businessAccountId, token]);
 
   useEffect(() => {
     fetchProfile();
-  }, [demoMode]);
+  }, [fetchProfile]);
 
   return {
     profile,
@@ -72,3 +81,5 @@ export const useInstagramProfile = (): UseInstagramProfileResult => {
     refetch: fetchProfile
   };
 };
+
+export default useInstagramProfile;

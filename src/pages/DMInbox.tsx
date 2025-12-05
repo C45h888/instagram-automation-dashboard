@@ -11,7 +11,6 @@ import {
   MessageThread,
   WindowStatusIndicator
 } from '../components/permissions/DMInbox';
-import { DemoModeToggle } from '../components/permissions/shared/DemoModeToggle';
 import { PermissionBadge } from '../components/permissions/shared/PermissionBadge';
 import { FeatureHighlight } from '../components/permissions/shared/FeatureHighlight';
 import AsyncWrapper from '../components/ui/AsyncWrapper';
@@ -67,7 +66,6 @@ const DMInbox: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Demo Mode Toggle */}
-      <DemoModeToggle />
 
       {/* Header */}
       <div className="mb-6">
