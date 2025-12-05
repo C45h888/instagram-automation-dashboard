@@ -1,12 +1,30 @@
-sdk.js?hash=43f560a6…9ce1470814210c31:49 The method FB.login can no longer be called from http pages. https://developers.facebook.com/blog/post/2018/06/08/enforce-https-facebook-login/
-s	@	sdk.js?hash=43f560a6…9ce1470814210c31:49
-u	@	sdk.js?hash=43f560a6…ce1470814210c31:136
-login	@	sdk.js?hash=43f560a6…ce1470814210c31:153
-(anonymous)	@	sdk.js?hash=43f560a6…9ce1470814210c31:78
-(anonymous)	@	sdk.js?hash=43f560a6…9ce1470814210c31:68
-(anonymous)	@	useFacebookSDK.ts:142
-facebookLogin	@	useFacebookSDK.ts:136
-handleFacebookLogin	@	Login.tsx:459
-Login.tsx:558 ❌ Facebook OAuth Error: 
-t {message: 'init not called with valid version', innerError: undefined}
-handleFacebookLogin	@	Login.tsx:558
+ Facebook OAuth Error: t {message: 'init not called with valid version', innerError: undefined}innerError: undefinedmessage: "init not called with valid version"[[Prototype]]: r
+(anonymous) @ Login.tsx:558
+u @ auth-Blxsmv8K.js:1
+Promise.then
+d @ auth-Blxsmv8K.js:1
+i @ auth-Blxsmv8K.js:1
+Promise.then
+d @ auth-Blxsmv8K.js:1
+(anonymous) @ auth-Blxsmv8K.js:1
+h @ auth-Blxsmv8K.js:1
+H @ Login.tsx:395
+Zf @ react-dom.production.min.js:54
+qf @ react-dom.production.min.js:54
+bf @ react-dom.production.min.js:55
+Si @ react-dom.production.min.js:105
+ia @ react-dom.production.min.js:106
+(anonymous) @ react-dom.production.min.js:117
+Io @ react-dom.production.min.js:273
+Rs @ react-dom.production.min.js:52
+Wl @ react-dom.production.min.js:109
+so @ react-dom.production.min.js:74
+vc @ react-dom.production.min.js:73
+Login.tsx:190 ✅ Consent metadata stored in session
+Login.tsx:191    Timestamp: 2025-12-05T10:37:36.808Z
+Login.tsx:192    IP Address: 49.36.8.199
+Login.tsx:193    Policy Versions: Privacy v2.0, Terms v2.0
+Login.tsx:194    ⏳ Will be persisted to database after authentication
+Login.tsx:431 🔵 Initiating Facebook OAuth via official SDK...
+Login.tsx:432    ✅ User consent verified and logged
+Login.tsx:558 ❌ Facebook OAuth Error: t {message: 'init not called with valid version', innerError: undefined}
