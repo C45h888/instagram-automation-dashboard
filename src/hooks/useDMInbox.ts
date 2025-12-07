@@ -1,12 +1,18 @@
 // =====================================
 // USE DM INBOX HOOK - PRODUCTION
-// Fetches REAL Instagram DM conversations from Meta Graph API
+// Fetches REAL Instagram DM conversations from Meta Graph API v23.0
 // NO MOCK DATA, NO FALLBACKS
 // Handles 24-hour window validation and message sending
+//
+// ✅ UPDATED: Uses useInstagramAccount hook
+// ✅ UPDATED: Passes userId + businessAccountId query params
+// ✅ UPDATED: No Authorization header (backend handles tokens)
+// ✅ UPDATED: Uses VITE_API_BASE_URL
 // =====================================
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../stores/authStore';
+import { useInstagramAccount } from './useInstagramAccount';
 import type { ConversationData } from '../types/permissions';
 import type { Database } from '../lib/database.types';
 
@@ -25,10 +31,15 @@ interface UseDMInboxResult {
 
 /**
  * Hook to fetch and manage DM conversations
- * @param businessAccountId - Instagram Business Account ID (optional)
+ * ✅ UPDATED: No longer takes businessAccountId parameter (gets from useInstagramAccount)
  */
-export const useDMInbox = (businessAccountId?: string): UseDMInboxResult => {
-  const { user, token } = useAuthStore();
+export const useDMInbox = (): UseDMInboxResult => {
+  // ✅ NEW: Get user ID from auth store (no token needed)
+  const { user } = useAuthStore();
+
+  // ✅ NEW: Get Instagram account IDs from useInstagramAccount hook
+  const { businessAccountId, instagramBusinessId } = useInstagramAccount();
+
   const [conversations, setConversations] = useState<ConversationData[]>([]);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<DMMessage[]>([]);
@@ -36,7 +47,8 @@ export const useDMInbox = (businessAccountId?: string): UseDMInboxResult => {
   const [error, setError] = useState<string | null>(null);
 
   const fetchConversations = useCallback(async () => {
-    if (!businessAccountId) {
+    // ✅ UPDATED: Validate user ID and business account ID
+    if (!user?.id || !businessAccountId || !instagramBusinessId) {
       setError('No Instagram Business Account connected.');
       setIsLoading(false);
       return;
@@ -46,12 +58,15 @@ export const useDMInbox = (businessAccountId?: string): UseDMInboxResult => {
     setError(null);
 
     try {
-      // ✅ REAL API CALL
+      // ✅ UPDATED: Use VITE_API_BASE_URL from environment
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+
+      // ✅ UPDATED: Build URL with full base URL and required query parameters
       const response = await fetch(
-        `/api/instagram/conversations?businessAccountId=${businessAccountId}`,
+        `${apiBaseUrl}/api/instagram/conversations/${instagramBusinessId}?userId=${user.id}&businessAccountId=${businessAccountId}`,
         {
           headers: {
-            'Authorization': `Bearer ${token}`,
+            // ✅ REMOVED: Authorization header (backend retrieves token internally)
             'Content-Type': 'application/json'
           }
         }
@@ -84,16 +99,23 @@ export const useDMInbox = (businessAccountId?: string): UseDMInboxResult => {
     } finally {
       setIsLoading(false);
     }
-  }, [businessAccountId, token, selectedConversationId]);
+  }, [user?.id, businessAccountId, instagramBusinessId, selectedConversationId]); // ✅ UPDATED: Removed token, added user.id and instagramBusinessId
 
   const fetchMessages = useCallback(async (conversationId: string) => {
+    // ✅ UPDATED: Validate authentication
+    if (!user?.id || !businessAccountId) {
+      console.error('❌ Cannot fetch messages: No authentication');
+      return;
+    }
+
     try {
-      // ✅ REAL API CALL
+      // ✅ UPDATED: Use VITE_API_BASE_URL and add required query parameters
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
       const response = await fetch(
-        `/api/instagram/conversations/${conversationId}/messages`,
+        `${apiBaseUrl}/api/instagram/conversations/${conversationId}/messages?userId=${user.id}&businessAccountId=${businessAccountId}`,
         {
           headers: {
-            'Authorization': `Bearer ${token}`,
+            // ✅ REMOVED: Authorization header (backend retrieves token internally)
             'Content-Type': 'application/json'
           }
         }
@@ -107,7 +129,7 @@ export const useDMInbox = (businessAccountId?: string): UseDMInboxResult => {
     } catch (err: any) {
       console.error('❌ Failed to fetch messages:', err);
     }
-  }, [token]);
+  }, [user?.id, businessAccountId]); // ✅ UPDATED: Removed token, added user.id and businessAccountId
 
   const selectConversation = (conversationId: string) => {
     setSelectedConversationId(conversationId);
@@ -115,6 +137,11 @@ export const useDMInbox = (businessAccountId?: string): UseDMInboxResult => {
   };
 
   const sendMessage = async (messageText: string): Promise<void> => {
+    // ✅ UPDATED: Validate authentication
+    if (!user?.id || !businessAccountId) {
+      throw new Error('No Instagram Business Account connected');
+    }
+
     if (!selectedConversationId) {
       throw new Error('No conversation selected');
     }
@@ -137,13 +164,14 @@ export const useDMInbox = (businessAccountId?: string): UseDMInboxResult => {
     }
 
     try {
-      // ✅ REAL API CALL to send message
+      // ✅ UPDATED: Use VITE_API_BASE_URL and add required query parameters
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
       const response = await fetch(
-        `/api/instagram/conversations/${selectedConversationId}/send`,
+        `${apiBaseUrl}/api/instagram/conversations/${selectedConversationId}/send?userId=${user.id}&businessAccountId=${businessAccountId}`,
         {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${token}`,
+            // ✅ REMOVED: Authorization header (backend retrieves token internally)
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({ message: messageText })

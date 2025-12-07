@@ -1,12 +1,18 @@
 // =====================================
 // USE COMMENTS HOOK - PRODUCTION
-// Fetches REAL Instagram comment data from Meta Graph API
+// Fetches REAL Instagram comment data from Meta Graph API v23.0
 // NO MOCK DATA, NO FALLBACKS
 // Handles filtering, reply submission, and data refresh
+//
+// ✅ UPDATED: Uses useInstagramAccount hook
+// ✅ UPDATED: Passes userId + businessAccountId query params
+// ✅ UPDATED: No Authorization header (backend handles tokens)
+// ✅ UPDATED: Uses VITE_API_BASE_URL
 // =====================================
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../stores/authStore';
+import { useInstagramAccount } from './useInstagramAccount';
 import type { CommentData } from '../types/permissions';
 import type { CommentFilterState } from '../components/permissions/CommentManagement';
 
@@ -22,11 +28,16 @@ interface UseCommentsResult {
 
 /**
  * Hook to fetch and manage Instagram comments
- * @param businessAccountId - Instagram Business Account ID (optional)
+ * ✅ UPDATED: No longer takes businessAccountId parameter (gets from useInstagramAccount)
  * @param mediaId - Specific media ID to filter comments (optional)
  */
-export const useComments = (businessAccountId?: string, mediaId?: string): UseCommentsResult => {
-  const { user, token } = useAuthStore();
+export const useComments = (mediaId?: string): UseCommentsResult => {
+  // ✅ NEW: Get user ID from auth store (no token needed)
+  const { user } = useAuthStore();
+
+  // ✅ NEW: Get Instagram account IDs from useInstagramAccount hook
+  const { businessAccountId, instagramBusinessId } = useInstagramAccount();
+
   const [comments, setComments] = useState<CommentData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +49,8 @@ export const useComments = (businessAccountId?: string, mediaId?: string): UseCo
   });
 
   const fetchComments = useCallback(async () => {
-    if (!businessAccountId) {
+    // ✅ UPDATED: Validate user ID and business account ID
+    if (!user?.id || !businessAccountId || !instagramBusinessId) {
       setError('No Instagram Business Account connected.');
       setIsLoading(false);
       return;
@@ -48,14 +60,17 @@ export const useComments = (businessAccountId?: string, mediaId?: string): UseCo
     setError(null);
 
     try {
-      // ✅ REAL API CALL
+      // ✅ UPDATED: Use VITE_API_BASE_URL from environment
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+
+      // ✅ UPDATED: Build endpoint with full URL and required query parameters
       const endpoint = mediaId
-        ? `/api/instagram/comments/${mediaId}`
-        : `/api/instagram/comments?businessAccountId=${businessAccountId}`;
+        ? `${apiBaseUrl}/api/instagram/comments/${mediaId}?userId=${user.id}&businessAccountId=${businessAccountId}`
+        : `${apiBaseUrl}/api/instagram/comments/${instagramBusinessId}?userId=${user.id}&businessAccountId=${businessAccountId}`;
 
       const response = await fetch(endpoint, {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          // ✅ REMOVED: Authorization header (backend retrieves token internally)
           'Content-Type': 'application/json'
         }
       });
@@ -81,9 +96,14 @@ export const useComments = (businessAccountId?: string, mediaId?: string): UseCo
     } finally {
       setIsLoading(false);
     }
-  }, [businessAccountId, token, mediaId]);
+  }, [user?.id, businessAccountId, instagramBusinessId, mediaId]); // ✅ UPDATED: Removed token, added user.id and instagramBusinessId
 
   const replyToComment = async (commentId: string, replyText: string): Promise<void> => {
+    // Validate authentication
+    if (!user?.id || !businessAccountId) {
+      throw new Error('No Instagram Business Account connected');
+    }
+
     // Validate reply
     if (!replyText.trim()) {
       throw new Error('Reply cannot be empty');
@@ -94,15 +114,19 @@ export const useComments = (businessAccountId?: string, mediaId?: string): UseCo
     }
 
     try {
-      // ✅ REAL API CALL to send reply
-      const response = await fetch(`/api/instagram/comments/${commentId}/reply`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ message: replyText })
-      });
+      // ✅ UPDATED: Use VITE_API_BASE_URL and add required query parameters
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+      const response = await fetch(
+        `${apiBaseUrl}/api/instagram/comments/${commentId}/reply?userId=${user.id}&businessAccountId=${businessAccountId}`,
+        {
+          method: 'POST',
+          headers: {
+            // ✅ REMOVED: Authorization header (backend retrieves token internally)
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ message: replyText })
+        }
+      );
 
       if (!response.ok) {
         const errorData = await response.json();

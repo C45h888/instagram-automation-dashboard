@@ -13,7 +13,7 @@ import type { DashboardData } from '../types/dashboard';
  * @param businessAccountId - Instagram Business Account ID (optional)
  */
 export const useDashboardData = (businessAccountId?: string): DashboardData => {
-  const { user, token } = useAuthStore();
+  const { token } = useAuthStore();
   const [data, setData] = useState<DashboardData>({
     metrics: [],
     activities: [],

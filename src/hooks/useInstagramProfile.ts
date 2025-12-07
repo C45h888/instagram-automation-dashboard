@@ -1,11 +1,17 @@
 // =====================================
 // USE INSTAGRAM PROFILE HOOK - PRODUCTION
-// Fetches REAL Instagram profile data from Meta Graph API
+// Fetches REAL Instagram profile data from Meta Graph API v23.0
 // NO MOCK DATA, NO FALLBACKS
+//
+// ✅ UPDATED: Uses useInstagramAccount hook
+// ✅ UPDATED: Passes userId + businessAccountId query params
+// ✅ UPDATED: No Authorization header (backend handles tokens)
+// ✅ UPDATED: Uses VITE_API_BASE_URL
 // =====================================
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../stores/authStore';
+import { useInstagramAccount } from './useInstagramAccount';
 import type { InstagramProfileData } from '../types/permissions';
 
 interface UseInstagramProfileResult {
@@ -17,16 +23,22 @@ interface UseInstagramProfileResult {
 
 /**
  * Hook to fetch Instagram profile data
- * @param businessAccountId - Instagram Business Account ID (optional)
+ * ✅ UPDATED: No longer takes businessAccountId parameter (gets from useInstagramAccount)
  */
-export const useInstagramProfile = (businessAccountId?: string): UseInstagramProfileResult => {
-  const { user, token } = useAuthStore();
+export const useInstagramProfile = (): UseInstagramProfileResult => {
+  // ✅ NEW: Get user ID from auth store (no token needed)
+  const { user } = useAuthStore();
+
+  // ✅ NEW: Get Instagram account IDs from useInstagramAccount hook
+  const { businessAccountId, instagramBusinessId } = useInstagramAccount();
+
   const [profile, setProfile] = useState<InstagramProfileData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchProfile = useCallback(async () => {
-    if (!businessAccountId) {
+    // ✅ UPDATED: Validate user ID and business account ID
+    if (!user?.id || !businessAccountId || !instagramBusinessId) {
       setError('No Instagram Business Account connected. Please reconnect your account.');
       setIsLoading(false);
       return;
@@ -36,12 +48,15 @@ export const useInstagramProfile = (businessAccountId?: string): UseInstagramPro
     setError(null);
 
     try {
-      // ✅ REAL API CALL - No fallback
+      // ✅ UPDATED: Use VITE_API_BASE_URL from environment
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+
+      // ✅ UPDATED: Build URL with full base URL and required query parameters
       const response = await fetch(
-        `/api/instagram/profile/${businessAccountId}`,
+        `${apiBaseUrl}/api/instagram/profile/${instagramBusinessId}?userId=${user.id}&businessAccountId=${businessAccountId}`,
         {
           headers: {
-            'Authorization': `Bearer ${token}`,
+            // ✅ REMOVED: Authorization header (backend retrieves token internally)
             'Content-Type': 'application/json'
           }
         }
@@ -68,7 +83,7 @@ export const useInstagramProfile = (businessAccountId?: string): UseInstagramPro
     } finally {
       setIsLoading(false);
     }
-  }, [businessAccountId, token]);
+  }, [user?.id, businessAccountId, instagramBusinessId]); // ✅ UPDATED: Removed token, added user.id and instagramBusinessId
 
   useEffect(() => {
     fetchProfile();

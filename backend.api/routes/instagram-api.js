@@ -306,7 +306,7 @@ router.get('/media/:accountId', async (req, res) => {
 
     // ===== GRAPH API CALL =====
     const fields = 'id,media_type,media_url,thumbnail_url,caption,permalink,timestamp,like_count,comments_count';
-    const graphApiUrl = `https://graph.facebook.com/v18.0/${igAccountId}/media`;
+    const graphApiUrl = `https://graph.facebook.com/v23.0/${igAccountId}/media`;
 
     try {
       const response = await axios.get(graphApiUrl, {
@@ -539,7 +539,7 @@ router.post('/create-post', async (req, res) => {
     let creationId;
 
     try {
-      const containerUrl = `https://graph.facebook.com/v18.0/${igUserId}/media`;
+      const containerUrl = `https://graph.facebook.com/v23.0/${igUserId}/media`;
       const containerResponse = await axios.post(containerUrl, null, {
         params: {
           image_url: image_url,
@@ -585,7 +585,7 @@ router.post('/create-post', async (req, res) => {
     let mediaId;
 
     try {
-      const publishUrl = `https://graph.facebook.com/v18.0/${igUserId}/media_publish`;
+      const publishUrl = `https://graph.facebook.com/v23.0/${igUserId}/media_publish`;
       const publishResponse = await axios.post(publishUrl, null, {
         params: {
           creation_id: creationId,

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
  * Facebook SDK Hook - PRODUCTION FIXED VERSION
  *
  * Fixes "init not called with valid version" error by:
- * 1. Using v21.0 (v18.0 is deprecated)
+ * 1. Using v23.0 (Meta Dashboard version)
  * 2. Always calling FB.init() explicitly (no shortcuts)
  * 3. Verifying initialization with FB.getLoginStatus test
  * 4. Adding proper error handling
@@ -49,13 +49,13 @@ export const useFacebookSDK = () => {
       // ⚠️ CRITICAL FIX: Always call FB.init() explicitly
       // Never trust that window.FB existing means it's initialized with OUR config
       try {
-        console.log('🔄 Calling FB.init() with v21.0...');
+        console.log('🔄 Calling FB.init() with v23.0...');
 
         window.FB.init({
           appId: appId,
           cookie: true,           // Enable cookies for session
           xfbml: true,            // Parse social plugins on this page
-          version: 'v21.0'        // ⚠️ CRITICAL: Updated from v18.0 to v21.0
+          version: 'v23.0'        // ⚠️ CRITICAL: Updated to v23.0 (Meta Dashboard version)
         });
 
         // Mark that we initialized
@@ -68,7 +68,7 @@ export const useFacebookSDK = () => {
 
         console.log('✅ FB.init() called successfully');
         console.log('   App ID:', appId);
-        console.log('   SDK Version: v21.0');
+        console.log('   SDK Version: v23.0');
 
         // ⚠️ CRITICAL FIX: Verify initialization by testing FB.getLoginStatus
         // This confirms FB.init() actually worked

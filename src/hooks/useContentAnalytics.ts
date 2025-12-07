@@ -1,12 +1,13 @@
 // =====================================
 // USE CONTENT ANALYTICS HOOK - PRODUCTION
-// Fetches REAL Instagram media/content data from Meta Graph API
+// Fetches REAL Instagram media/content data from Meta Graph API v23.0
 // NO MOCK DATA, NO FALLBACKS
 // Calculates engagement rates and performance tiers
 // =====================================
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../stores/authStore';
+import { useInstagramAccount } from './useInstagramAccount';
 import type { MediaData } from '../types/permissions';
 
 interface ContentAnalytics {
@@ -28,10 +29,11 @@ interface UseContentAnalyticsResult {
 
 /**
  * Hook to fetch and analyze Instagram media content
- * @param businessAccountId - Instagram Business Account ID (optional)
+ * Uses Meta Graph API v23.0 with proper authentication
  */
-export const useContentAnalytics = (businessAccountId?: string): UseContentAnalyticsResult => {
-  const { user, token } = useAuthStore();
+export const useContentAnalytics = (): UseContentAnalyticsResult => {
+  const { user } = useAuthStore();
+  const { businessAccountId, instagramBusinessId } = useInstagramAccount();
   const [media, setMedia] = useState<MediaData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -39,7 +41,13 @@ export const useContentAnalytics = (businessAccountId?: string): UseContentAnaly
   const fetchMedia = useCallback(async () => {
     // ❌ NO DEMO MODE CHECK - Always fetch real data
 
-    if (!businessAccountId) {
+    if (!user?.id) {
+      setError('User not authenticated. Please log in.');
+      setIsLoading(false);
+      return;
+    }
+
+    if (!businessAccountId || !instagramBusinessId) {
       setError('No Instagram Business Account connected. Please reconnect your account.');
       setIsLoading(false);
       return;
@@ -49,12 +57,12 @@ export const useContentAnalytics = (businessAccountId?: string): UseContentAnaly
     setError(null);
 
     try {
-      // ✅ REAL API CALL - No fallback
+      // ✅ REAL API CALL - Meta Graph API v23.0
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
       const response = await fetch(
-        `/api/instagram/media/${businessAccountId}?limit=50`,
+        `${apiBaseUrl}/api/instagram/media/${instagramBusinessId}?userId=${user.id}&businessAccountId=${businessAccountId}&limit=50`,
         {
           headers: {
-            'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           }
         }
@@ -84,7 +92,7 @@ export const useContentAnalytics = (businessAccountId?: string): UseContentAnaly
     } finally {
       setIsLoading(false);
     }
-  }, [businessAccountId, token]);
+  }, [user?.id, businessAccountId, instagramBusinessId]);
 
   // Calculate analytics from media data
   const calculateAnalytics = (mediaData: MediaData[]): ContentAnalytics => {

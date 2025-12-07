@@ -1,12 +1,13 @@
 // =====================================
 // USE VISITOR POSTS HOOK - PRODUCTION
-// Fetches REAL UGC/tagged posts from Meta Graph API
+// Fetches REAL UGC/tagged posts from Meta Graph API v23.0
 // NO MOCK DATA, NO FALLBACKS
 // Manages UGC data fetching, filtering, and mutations
 // =====================================
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../stores/authStore';
+import { useInstagramAccount } from './useInstagramAccount';
 import type { VisitorPost, UGCStats, UGCFilterState, PermissionRequestForm } from '../types/ugc';
 import { DEFAULT_UGC_FILTERS } from '../types/ugc';
 
@@ -24,10 +25,11 @@ interface UseVisitorPostsResult {
 
 /**
  * Hook to fetch and manage visitor posts (UGC)
- * @param businessAccountId - Instagram Business Account ID (optional)
+ * Uses Meta Graph API v23.0 with proper authentication
  */
-export const useVisitorPosts = (businessAccountId?: string): UseVisitorPostsResult => {
-  const { user, token } = useAuthStore();
+export const useVisitorPosts = (): UseVisitorPostsResult => {
+  const { user } = useAuthStore();
+  const { businessAccountId } = useInstagramAccount();
   const [visitorPosts, setVisitorPosts] = useState<VisitorPost[]>([]);
   const [stats, setStats] = useState<UGCStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -35,6 +37,12 @@ export const useVisitorPosts = (businessAccountId?: string): UseVisitorPostsResu
   const [filters, setFilters] = useState<UGCFilterState>(DEFAULT_UGC_FILTERS);
 
   const fetchVisitorPosts = useCallback(async () => {
+    if (!user?.id) {
+      setError('User not authenticated.');
+      setIsLoading(false);
+      return;
+    }
+
     if (!businessAccountId) {
       setError('No Instagram Business Account connected.');
       setIsLoading(false);
@@ -45,12 +53,12 @@ export const useVisitorPosts = (businessAccountId?: string): UseVisitorPostsResu
     setError(null);
 
     try {
-      // ✅ REAL API CALL
+      // ✅ REAL API CALL - Meta Graph API v23.0
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
       const response = await fetch(
-        `/api/instagram/visitor-posts?businessAccountId=${businessAccountId}&limit=50`,
+        `${apiBaseUrl}/api/instagram/visitor-posts?businessAccountId=${businessAccountId}&limit=50`,
         {
           headers: {
-            'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           }
         }
@@ -82,15 +90,15 @@ export const useVisitorPosts = (businessAccountId?: string): UseVisitorPostsResu
     } finally {
       setIsLoading(false);
     }
-  }, [businessAccountId, token]);
+  }, [user?.id, businessAccountId]);
 
   const toggleFeatured = async (postId: string, featured: boolean): Promise<void> => {
     try {
       // ✅ REAL API CALL to update featured status
-      const response = await fetch(`/api/instagram/ugc/${postId}/feature`, {
-        method: 'POST',
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+      const response = await fetch(`${apiBaseUrl}/api/instagram/ugc/${postId}/feature`, {
+        method: 'PATCH',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ featured })
@@ -145,10 +153,10 @@ export const useVisitorPosts = (businessAccountId?: string): UseVisitorPostsResu
 
     try {
       // ✅ REAL API CALL to request permission
-      const response = await fetch('/api/instagram/ugc/request-permission', {
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+      const response = await fetch(`${apiBaseUrl}/api/instagram/ugc/request-permission`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(form)
