@@ -2342,6 +2342,245 @@ router.post('/ugc/repost', async (req, res) => {
 });
 
 // ==========================================
+// TOKEN VALIDATION ENDPOINT
+// ==========================================
+
+/**
+ * POST /api/instagram/validate-token
+ * Validates if the stored Instagram access token is still active
+ *
+ * Strategy: "Lazy Validation" - Check token validity on-demand when user loads dashboard
+ * instead of using background cron jobs or auto-refresh mechanisms.
+ *
+ * Flow:
+ * 1. Retrieve page_access_token from instagram_credentials table
+ * 2. Call Meta's /me endpoint as a lightweight "ping" to validate the token
+ * 3. Return status: 'active' if successful, 'expired' if authentication fails
+ *
+ * Error Handling:
+ * - Error Code 190: OAuthException - Token is expired, invalid, or malformed
+ *   - Subcode 460: Password changed
+ *   - Subcode 463: Token expired
+ *   - Subcode 467: User logged out, deauthorized app, or changed password
+ * - Error Code 401: Unauthorized - Token is invalid
+ *
+ * @route POST /api/instagram/validate-token
+ * @body {string} userId - User UUID
+ * @body {string} businessAccountId - Instagram Business account UUID
+ * @returns {Object} { success: true, status: 'active'|'expired' }
+ */
+router.post('/validate-token', async (req, res) => {
+  const requestStartTime = Date.now();
+
+  try {
+    const { userId, businessAccountId } = req.body;
+
+    console.log('[Token Validation] Validating token for user:', userId);
+
+    // ===== VALIDATION =====
+    if (!userId || !businessAccountId) {
+      return res.status(400).json({
+        success: false,
+        status: 'error',
+        error: 'Missing required fields: userId and businessAccountId',
+        code: 'MISSING_PARAMETERS'
+      });
+    }
+
+    // ===== STEP 1: Fetch credentials from database =====
+    const { data: credentials, error: fetchError } = await supabase
+      .from('instagram_credentials')
+      .select('page_access_token, instagram_business_id')
+      .eq('user_id', userId)
+      .eq('business_account_id', businessAccountId)
+      .single();
+
+    if (fetchError || !credentials) {
+      console.error('[Token Validation] ❌ Credentials not found:', fetchError?.message);
+      return res.status(404).json({
+        success: false,
+        status: 'not_found',
+        error: 'Credentials not found for this user',
+        code: 'CREDENTIALS_NOT_FOUND'
+      });
+    }
+
+    // ===== STEP 2: Validate token by calling Meta's /me endpoint =====
+    // This is a lightweight "ping" to check if the token is still valid
+    const graphUrl = `https://graph.facebook.com/v23.0/${credentials.instagram_business_id}`;
+
+    try {
+      const response = await axios.get(graphUrl, {
+        params: {
+          fields: 'id', // Minimal fields - we just need to confirm the token works
+          access_token: credentials.page_access_token
+        },
+        timeout: 5000 // Fast timeout for quick validation
+      });
+
+      const responseTime = Date.now() - requestStartTime;
+
+      console.log(`[Token Validation] ✅ Token is active (${responseTime}ms)`);
+
+      // ===== SUCCESS: Token is valid =====
+      return res.json({
+        success: true,
+        status: 'active',
+        data: {
+          instagram_business_id: response.data.id,
+          validated_at: new Date().toISOString()
+        },
+        meta: {
+          response_time_ms: responseTime
+        }
+      });
+
+    } catch (validationError) {
+      const responseTime = Date.now() - requestStartTime;
+
+      // ===== STEP 3: Analyze the error to distinguish between temporary issues and auth failures =====
+
+      if (validationError.response) {
+        const { status, data } = validationError.response;
+        const errorCode = data?.error?.code;
+        const errorSubcode = data?.error?.error_subcode;
+        const errorType = data?.error?.type;
+        const errorMessage = data?.error?.message;
+
+        // Log the specific error details for debugging
+        console.error('[Token Validation] ❌ Meta API Error:', {
+          status,
+          code: errorCode,
+          subcode: errorSubcode,
+          type: errorType,
+          message: errorMessage
+        });
+
+        /**
+         * Error Code 190: OAuthException - Hard authentication failure
+         * This is the primary indicator that the token is expired or invalid.
+         *
+         * Common subcodes:
+         * - 460: Password Changed - User changed their Instagram/Facebook password
+         * - 463: Token Expired - Token has exceeded its 60-day lifetime
+         * - 467: User Deauthorized - User logged out, revoked app access, or changed password
+         * - 490: User Not Confirmed - User hasn't confirmed their account
+         */
+        if (errorCode === 190 || status === 401 || errorType === 'OAuthException') {
+          let reason = 'Token expired or invalid';
+
+          // Provide more specific reason based on subcode
+          if (errorSubcode === 460) {
+            reason = 'Password changed - user must reconnect';
+          } else if (errorSubcode === 463) {
+            reason = 'Token expired (60-day limit exceeded)';
+          } else if (errorSubcode === 467) {
+            reason = 'User deauthorized app or logged out';
+          } else if (errorSubcode === 490) {
+            reason = 'User account not confirmed';
+          }
+
+          console.log(`[Token Validation] ⚠️  Token expired (Code: ${errorCode}, Subcode: ${errorSubcode}) - ${reason}`);
+
+          // Log audit event for token expiration
+          await logAudit('token_validation_expired', userId, {
+            action: 'validate_token',
+            business_account_id: businessAccountId,
+            error_code: errorCode,
+            error_subcode: errorSubcode,
+            reason: reason,
+            response_time_ms: responseTime
+          });
+
+          // ===== RETURN: Token is expired - User must reconnect =====
+          return res.json({
+            success: true,
+            status: 'expired',
+            error: errorMessage || reason,
+            details: {
+              error_code: errorCode,
+              error_subcode: errorSubcode,
+              reason: reason,
+              requires_reconnect: true
+            },
+            meta: {
+              response_time_ms: responseTime
+            }
+          });
+        }
+
+        /**
+         * Error Code 4: API Too Many Calls
+         * This is a temporary rate limit issue, NOT an auth failure.
+         * We should return this as an 'error' status, not 'expired'.
+         */
+        if (errorCode === 4) {
+          console.warn('[Token Validation] ⚠️  Rate limit hit during validation');
+
+          return res.status(429).json({
+            success: false,
+            status: 'rate_limited',
+            error: 'Rate limit exceeded during token validation',
+            code: 'RATE_LIMIT_EXCEEDED',
+            details: {
+              retry_after: validationError.response.headers['retry-after'] || 60
+            }
+          });
+        }
+
+        /**
+         * Other API Errors (e.g., network issues, temporary Meta outages)
+         * These are system errors, not auth failures.
+         */
+        console.error('[Token Validation] ❌ Unexpected Meta API error:', errorMessage);
+
+        return res.status(status || 500).json({
+          success: false,
+          status: 'error',
+          error: errorMessage || 'Failed to validate token',
+          code: 'VALIDATION_FAILED',
+          details: {
+            error_code: errorCode,
+            error_type: errorType
+          }
+        });
+      }
+
+      // ===== Network error or timeout (no response from Meta) =====
+      console.error('[Token Validation] ❌ Network error:', validationError.message);
+
+      return res.status(500).json({
+        success: false,
+        status: 'error',
+        error: 'Network error during token validation',
+        code: 'NETWORK_ERROR',
+        details: validationError.message
+      });
+    }
+
+  } catch (error) {
+    const responseTime = Date.now() - requestStartTime;
+
+    console.error('[Token Validation] ❌ Unexpected error:', error.message);
+
+    await logAudit('token_validation_error', req.body.userId, {
+      action: 'validate_token',
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+      response_time_ms: responseTime
+    });
+
+    res.status(500).json({
+      success: false,
+      status: 'error',
+      error: 'Internal server error during token validation',
+      code: 'INTERNAL_ERROR',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// ==========================================
 // EXPORTS
 // ==========================================
 

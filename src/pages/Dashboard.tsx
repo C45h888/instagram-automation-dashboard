@@ -1,6 +1,7 @@
 // src/pages/Dashboard.tsx
-// BUG-FREE + VIEWPORT OPTIMIZED VERSION
+// BUG-FREE + VIEWPORT OPTIMIZED VERSION + TOKEN VALIDATION
 // Fixes TypeScript errors while maintaining spacing optimizations
+// ✅ UPDATED: Added token validation with lazy validation strategy
 import React from 'react';
 import { useDashboardData } from '../hooks/useDashboardData';
 import DashboardHeader from '../components/dashboard/DashboardHeader';
@@ -18,6 +19,9 @@ import { useToast } from '../hooks/useToast';
 import { useRealtimeUpdates } from '../services/realtimeService';
 import { InstagramProfileCard } from '../components/permissions/InstagramProfile';
 import { useInstagramProfile } from '../hooks/useInstagramProfile';
+// ✅ NEW: Token validation imports
+import { useTokenValidation } from '../hooks/useTokenValidation';
+import TokenExpiredBanner from '../components/dashboard/TokenExpiredBanner';
 
 // Real-time Test Panel Component
 const RealtimeTestPanel: React.FC = () => {
@@ -103,6 +107,18 @@ const Dashboard: React.FC = () => {
   const { profile, isLoading: profileLoading, error: profileError } = useInstagramProfile();
   const toast = useToast();
 
+  // ✅ NEW: Token validation - Lazy validation on dashboard load
+  const { isExpired, expirationDetails } = useTokenValidation();
+
+  // ✅ NEW: Handle reconnect button click - Redirect to OAuth flow
+  const handleReconnect = () => {
+    console.log('🔄 Redirecting to Instagram OAuth flow...');
+    // Get API base URL from environment
+    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+    // Redirect to OAuth endpoint to get a new token
+    window.location.href = `${apiBaseUrl}/api/auth/instagram`;
+  };
+
   const handleActivityClick = (activity: any) => {
     toast.info(`Viewing details for: ${activity.title}`, {
       title: 'Activity Details',
@@ -114,14 +130,23 @@ const Dashboard: React.FC = () => {
   };
 
   return (
-    /* 
+    /*
       VIEWPORT OPTIMIZATION:
       Changed from: space-y-8 (32px gaps)
       Changed to: space-y-4 lg:space-y-6 (16px mobile, 24px desktop)
       Saves: 48-96px of vertical space with optimized section spacing
     */
     <div className="space-y-4 lg:space-y-6">
-      
+
+      {/* ✅ NEW: Token Expired Banner - Shows when Instagram token is invalid */}
+      {/* This banner takes visual precedence but doesn't block the rest of the dashboard */}
+      {isExpired && (
+        <TokenExpiredBanner
+          onReconnect={handleReconnect}
+          expirationDetails={expirationDetails}
+        />
+      )}
+
       {/* Real-time Test Panel - BUG-FREE VERSION */}
       <RealtimeTestPanel />
 
