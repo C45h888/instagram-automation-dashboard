@@ -58,6 +58,8 @@ export interface ActivityItem {
 export interface MediaItem {
   id: string;
   imageUrl: string;
+  thumbnailUrl?: string;  // ✅ Added for VIDEO support
+  mediaType?: 'IMAGE' | 'VIDEO' | 'CAROUSEL_ALBUM';  // ✅ Added Instagram media type
   likes: number;
   comments: number;
   engagement: string;

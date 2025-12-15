@@ -36,6 +36,30 @@ export const useVisitorPosts = (): UseVisitorPostsResult => {
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<UGCFilterState>(DEFAULT_UGC_FILTERS);
 
+  // Trigger background sync from Instagram to database
+  const triggerSync = useCallback(async () => {
+    if (!businessAccountId) return;
+
+    try {
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+
+      // Trigger sync in background (don't wait for response)
+      fetch(`${apiBaseUrl}/api/instagram/sync/ugc`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ businessAccountId })
+      }).catch(err => {
+        console.warn('⚠️ Background sync failed (non-critical):', err.message);
+      });
+
+      console.log('🔄 Background UGC sync triggered');
+    } catch (err: any) {
+      console.warn('⚠️ Failed to trigger sync:', err.message);
+    }
+  }, [businessAccountId]);
+
   const fetchVisitorPosts = useCallback(async () => {
     if (!user?.id) {
       setError('User not authenticated.');
@@ -53,7 +77,7 @@ export const useVisitorPosts = (): UseVisitorPostsResult => {
     setError(null);
 
     try {
-      // ✅ REAL API CALL - Meta Graph API v23.0
+      // ✅ REFACTORED: Now queries database (data synced via /sync/ugc)
       const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
       const response = await fetch(
         `${apiBaseUrl}/api/instagram/visitor-posts?businessAccountId=${businessAccountId}&limit=50`,
@@ -75,15 +99,14 @@ export const useVisitorPosts = (): UseVisitorPostsResult => {
         throw new Error(result.error || 'Failed to fetch visitor posts');
       }
 
-      // ✅ Set REAL data
+      // ✅ Set data from database
       setVisitorPosts(result.data || []);
       setStats(result.stats || null);
 
-      console.log('✅ Visitor posts fetched:', result.data?.length || 0, 'posts');
+      console.log(`✅ Visitor posts loaded from ${result.source || 'database'}:`, result.data?.length || 0, 'posts');
 
     } catch (err: any) {
       console.error('❌ Visitor posts fetch failed:', err);
-      // ✅ FAIL LOUDLY
       setError(err.message || 'Failed to fetch visitor posts');
       setVisitorPosts([]);
       setStats(null);
@@ -201,8 +224,11 @@ export const useVisitorPosts = (): UseVisitorPostsResult => {
   };
 
   useEffect(() => {
+    // Trigger background sync on mount
+    triggerSync();
+    // Fetch data from database
     fetchVisitorPosts();
-  }, [fetchVisitorPosts]);
+  }, [fetchVisitorPosts, triggerSync]);
 
   return {
     visitorPosts,

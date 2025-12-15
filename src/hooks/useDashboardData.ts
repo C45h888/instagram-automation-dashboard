@@ -24,6 +24,30 @@ export const useDashboardData = (businessAccountId?: string): DashboardData => {
     lastUpdated: null
   });
 
+  // Trigger background sync from Instagram to database
+  const triggerSync = useCallback(async () => {
+    if (!businessAccountId) return;
+
+    try {
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+
+      // Trigger sync in background (don't wait for response)
+      fetch(`${apiBaseUrl}/api/instagram/sync/posts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ businessAccountId })
+      }).catch(err => {
+        console.warn('⚠️ Background sync failed (non-critical):', err.message);
+      });
+
+      console.log('🔄 Background business posts sync triggered');
+    } catch (err: any) {
+      console.warn('⚠️ Failed to trigger sync:', err.message);
+    }
+  }, [businessAccountId]);
+
   const fetchDashboardData = useCallback(async () => {
     if (!businessAccountId) {
       setData(prev => ({
@@ -37,7 +61,7 @@ export const useDashboardData = (businessAccountId?: string): DashboardData => {
     setData(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
-      // ✅ REAL API CALL - No fallback
+      // ✅ REFACTORED: Now queries database (data synced via /sync/posts)
       const response = await fetch(
         `/api/instagram/dashboard-stats/${businessAccountId}`,
         {
@@ -69,7 +93,7 @@ export const useDashboardData = (businessAccountId?: string): DashboardData => {
         lastUpdated: new Date()
       });
 
-      console.log('✅ Dashboard data fetched successfully');
+      console.log(`✅ Dashboard data loaded from ${result.source || 'database'}`);
 
     } catch (err: any) {
       console.error('❌ Dashboard data fetch failed:', err);
@@ -83,8 +107,11 @@ export const useDashboardData = (businessAccountId?: string): DashboardData => {
   }, [businessAccountId, token]);
 
   useEffect(() => {
+    // Trigger background sync on mount
+    triggerSync();
+    // Fetch data from database
     fetchDashboardData();
-  }, [fetchDashboardData]);
+  }, [fetchDashboardData, triggerSync]);
 
   return data;
 };

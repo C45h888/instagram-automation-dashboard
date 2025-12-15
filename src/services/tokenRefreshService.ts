@@ -10,6 +10,10 @@
  * - Error handling and retry logic
  * - Notification on refresh failure
  *
+ * Security Best Practice:
+ * - Backend does NOT return the new token (stored securely server-side)
+ * - Frontend only needs to know if refresh succeeded
+ *
  * @see https://developers.facebook.com/docs/instagram-basic-display-api/guides/long-lived-access-tokens
  */
 
@@ -21,9 +25,11 @@ import { supabase } from '../lib/supabase';
 
 export interface TokenRefreshResult {
   success: boolean;
-  newToken?: string;
-  expiresIn?: number;
+  expiresIn?: number; // Seconds until expiration
+  expiresAt?: string; // ISO timestamp
   error?: string;
+  code?: string; // Error code from backend
+  requiresReconnect?: boolean; // If true, user must re-authenticate
 }
 
 export interface TokenInfo {
@@ -49,12 +55,14 @@ const MAX_RETRY_ATTEMPTS = 3;
 /**
  * Refreshes a long-lived access token
  *
- * Makes API call to Meta to exchange current token for a new one
- * Updates token in database with new expiration date
+ * Makes API call to backend which calls Meta to exchange current token for a new one
+ * Backend updates token in database with new expiration date
+ *
+ * Security Note: Backend does NOT return the new token (security best practice)
  *
  * @param userId - User UUID
  * @param businessAccountId - Instagram Business account ID
- * @returns TokenRefreshResult with new token or error
+ * @returns TokenRefreshResult with success status and expiration info
  */
 export async function refreshAccessToken(
   userId: string,
@@ -78,20 +86,40 @@ export async function refreshAccessToken(
       })
     });
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || 'Token refresh failed');
-    }
-
     const data = await response.json();
 
+    // Handle different response status codes
+    if (!response.ok) {
+      console.error('❌ Token refresh failed:', data);
+
+      // Token expired - user must reconnect
+      if (data.code === 'TOKEN_EXPIRED_REQUIRE_LOGIN') {
+        console.error('   Token has expired - user must reconnect Instagram account');
+        return {
+          success: false,
+          error: data.error || 'Token has expired',
+          code: data.code,
+          requiresReconnect: true
+        };
+      }
+
+      // Other errors
+      return {
+        success: false,
+        error: data.error || data.message || 'Token refresh failed',
+        code: data.code || 'UNKNOWN_ERROR'
+      };
+    }
+
+    // Success response
     console.log('✅ Token refreshed successfully!');
-    console.log('   New expiration:', data.expiresIn, 'seconds');
+    console.log('   New expiration:', data.data.expires_at);
+    console.log('   Expires in:', data.data.expires_in_seconds, 'seconds');
 
     return {
       success: true,
-      newToken: data.accessToken,
-      expiresIn: data.expiresIn
+      expiresIn: data.data.expires_in_seconds,
+      expiresAt: data.data.expires_at
     };
 
   } catch (error) {
@@ -99,7 +127,8 @@ export async function refreshAccessToken(
 
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : 'Unknown error',
+      code: 'NETWORK_ERROR'
     };
   }
 }
@@ -140,9 +169,10 @@ export async function getTokensNeedingRefresh(): Promise<TokenInfo[]> {
     thresholdDate.setDate(thresholdDate.getDate() + REFRESH_THRESHOLD_DAYS);
 
     // Query database for tokens expiring before threshold
+    // NOTE: We don't select page_access_token here (security best practice)
     const { data, error } = await supabase
       .from('instagram_credentials')
-      .select('user_id, business_account_id, access_token_encrypted, expires_at, created_at')
+      .select('user_id, business_account_id, expires_at, created_at')
       .lt('expires_at', thresholdDate.toISOString())
       .order('expires_at', { ascending: true });
 
@@ -154,7 +184,7 @@ export async function getTokensNeedingRefresh(): Promise<TokenInfo[]> {
     return (data || []).map(row => ({
       userId: row.user_id,
       businessAccountId: row.business_account_id,
-      accessToken: row.access_token_encrypted,
+      accessToken: '', // Not retrieved for security reasons
       expiresAt: row.expires_at,
       createdAt: row.created_at
     }));
@@ -177,6 +207,7 @@ export async function refreshAllExpiringTokens(): Promise<{
   total: number;
   succeeded: number;
   failed: number;
+  requireReconnect: number;
 }> {
   console.log('🔄 Starting automatic token refresh job...');
 
@@ -186,6 +217,7 @@ export async function refreshAllExpiringTokens(): Promise<{
 
   let succeeded = 0;
   let failed = 0;
+  let requireReconnect = 0;
 
   for (const tokenInfo of tokensToRefresh) {
     // Skip tokens without business account ID
@@ -202,12 +234,14 @@ export async function refreshAllExpiringTokens(): Promise<{
 
     if (result.success) {
       succeeded++;
+    } else if (result.requiresReconnect) {
+      requireReconnect++;
+      // TODO: Send notification to user about needing to reconnect
+      console.error(`❌ User ${tokenInfo.userId} needs to reconnect Instagram account`);
     } else {
       failed++;
-
       // TODO: Send notification to user about token refresh failure
-      // Could use email, in-app notification, or log to admin dashboard
-      console.error(`❌ Failed to refresh token for user ${tokenInfo.userId}`);
+      console.error(`❌ Failed to refresh token for user ${tokenInfo.userId}: ${result.error}`);
     }
 
     // Add delay between requests to avoid rate limiting
@@ -217,11 +251,13 @@ export async function refreshAllExpiringTokens(): Promise<{
   console.log('✅ Token refresh job complete');
   console.log(`   Succeeded: ${succeeded}`);
   console.log(`   Failed: ${failed}`);
+  console.log(`   Require Reconnect: ${requireReconnect}`);
 
   return {
     total: tokensToRefresh.length,
     succeeded,
-    failed
+    failed,
+    requireReconnect
   };
 }
 
@@ -266,6 +302,8 @@ export async function manualTokenRefresh(
 
   let attempts = 0;
   let lastError: string | undefined;
+  let lastCode: string | undefined;
+  let requiresReconnect = false;
 
   // Retry up to MAX_RETRY_ATTEMPTS times
   while (attempts < MAX_RETRY_ATTEMPTS) {
@@ -279,7 +317,14 @@ export async function manualTokenRefresh(
       return result;
     }
 
+    // If token expired, don't retry - user must reconnect
+    if (result.requiresReconnect) {
+      console.error('   Token expired - user must reconnect, skipping retries');
+      return result;
+    }
+
     lastError = result.error;
+    lastCode = result.code;
 
     // Wait before retrying (exponential backoff)
     if (attempts < MAX_RETRY_ATTEMPTS) {
@@ -293,7 +338,9 @@ export async function manualTokenRefresh(
 
   return {
     success: false,
-    error: lastError || 'Max retry attempts exceeded'
+    error: lastError || 'Max retry attempts exceeded',
+    code: lastCode || 'MAX_RETRIES_EXCEEDED',
+    requiresReconnect
   };
 }
 

@@ -9,7 +9,14 @@ const {
   storePageToken,
   retrievePageToken
 } = require('../services/instagram-tokens');
-const { logAudit, supabase } = require('../config/supabase'); // ADDED: Audit logging + DB client
+const { logAudit, getSupabaseAdmin } = require('../config/supabase'); // ADDED: Audit logging + DB client
+
+// ==========================================
+// CONSTANTS
+// ==========================================
+
+// Meta Graph API Version - Updated to v23.0 as of December 2025
+const GRAPH_API_VERSION = 'v23.0';
 
 // ==========================================
 // HELPER FUNCTIONS
@@ -259,142 +266,104 @@ router.get('/insights/:accountId', async (req, res) => {
  *
  * Returns: Array of media objects with metadata
  */
+/**
+ * GET /api/instagram/media/:accountId
+ * REFACTORED: Now queries Supabase instagram_media table instead of Instagram API
+ *
+ * OLD BEHAVIOR: Called Instagram API directly (Live Wire)
+ * NEW BEHAVIOR: Reads from database (Sync & Store)
+ *
+ * NOTE: Data is populated via POST /sync/posts endpoint
+ */
 router.get('/media/:accountId', async (req, res) => {
   const requestStartTime = Date.now();
 
   try {
     const { accountId } = req.params;
-    const { limit = 25, userId, businessAccountId } = req.query;
+    const { limit = 25, offset = 0, businessAccountId } = req.query;
+
+    console.log(`🖼️  Fetching media from database for account: ${accountId}`);
 
     // ===== VALIDATION =====
-    if (!userId || !businessAccountId) {
-      console.error('❌ Missing required query parameters for media fetch');
+    if (!businessAccountId) {
+      console.error('❌ Missing businessAccountId parameter');
       return res.status(400).json({
         success: false,
-        error: 'userId and businessAccountId are required',
+        error: 'businessAccountId is required',
         code: 'MISSING_PARAMETERS'
       });
     }
 
-    // Validate limit parameter
+    // Validate limit and offset parameters
     const mediaLimit = Math.min(Math.max(parseInt(limit) || 25, 1), 100);
+    const mediaOffset = Math.max(parseInt(offset) || 0, 0);
 
-    console.log(`🖼️  Fetching media for account: ${accountId} (limit: ${mediaLimit})`);
+    // Get Supabase client
+    const supabase = getSupabaseAdmin();
 
-    // ===== TOKEN RETRIEVAL =====
-    let pageToken;
-    try {
-      pageToken = await retrievePageToken(userId, businessAccountId);
-    } catch (tokenError) {
-      console.error('❌ Token retrieval failed:', tokenError.message);
+    // ✅ NEW: Query database instead of Instagram API
+    const { data: posts, error, count } = await supabase
+      .from('instagram_media')
+      .select('*', { count: 'exact' })
+      .eq('business_account_id', businessAccountId)
+      .order('published_at', { ascending: false })
+      .range(mediaOffset, mediaOffset + mediaLimit - 1);
 
-      // Log audit trail for failed token retrieval
-      await logAudit('token_retrieval_failed', userId, {
+    if (error) {
+      console.error('[Media] Database query error:', error);
+
+      await logAudit('media_fetch_error', null, {
         action: 'fetch_media',
         business_account_id: businessAccountId,
-        error: tokenError.message
+        error: error.message,
+        source: 'database',
+        response_time_ms: Date.now() - requestStartTime
       });
 
-      return res.status(401).json({
+      return res.status(500).json({
         success: false,
-        error: 'Authentication failed. Please reconnect your Instagram account.',
-        code: 'TOKEN_RETRIEVAL_FAILED'
+        error: 'Failed to fetch media from database',
+        code: 'DATABASE_ERROR'
       });
     }
 
-    const igAccountId = accountId;
+    const responseTime = Date.now() - requestStartTime;
 
-    // ===== GRAPH API CALL =====
-    const fields = 'id,media_type,media_url,thumbnail_url,caption,permalink,timestamp,like_count,comments_count';
-    const graphApiUrl = `https://graph.facebook.com/v23.0/${igAccountId}/media`;
+    // Log successful database query
+    await logAudit('instagram_media_fetched', null, {
+      action: 'fetch_media',
+      business_account_id: businessAccountId,
+      media_count: posts?.length || 0,
+      source: 'database',
+      response_time_ms: responseTime
+    });
 
-    try {
-      const response = await axios.get(graphApiUrl, {
-        params: {
-          fields,
-          access_token: pageToken,
-          limit: mediaLimit
-        },
-        timeout: 10000 // 10 second timeout
-      });
-
-      const responseTime = Date.now() - requestStartTime;
-
-      // Log successful API call
-      await logAudit('instagram_media_fetched', userId, {
-        action: 'fetch_media',
-        business_account_id: businessAccountId,
-        media_count: response.data.data?.length || 0,
-        response_time_ms: responseTime
-      });
-
-      // ===== SUCCESS RESPONSE =====
-      res.json({
-        success: true,
-        data: response.data.data || [],
-        paging: response.data.paging || {},
-        rate_limit: {
-          remaining: req.rateLimitRemaining || 'unknown',
-          limit: 200,
-          window: '1 hour'
-        },
-        meta: {
-          count: response.data.data?.length || 0,
-          response_time_ms: responseTime
-        }
-      });
-
-    } catch (apiError) {
-      // Handle Graph API errors specifically
-      if (apiError.response) {
-        const { status, data } = apiError.response;
-        console.error(`❌ Graph API error (${status}):`, data);
-
-        // Log specific error types
-        await logAudit('instagram_api_error', userId, {
-          action: 'fetch_media',
-          business_account_id: businessAccountId,
-          status_code: status,
-          error_type: data.error?.type,
-          error_message: data.error?.message
-        });
-
-        // Handle specific error codes
-        if (status === 429) {
-          return res.status(429).json({
-            success: false,
-            error: 'Rate limit exceeded. Please try again later.',
-            code: 'RATE_LIMIT_EXCEEDED',
-            retry_after: apiError.response.headers['retry-after'] || 3600
-          });
-        }
-
-        if (status === 401 || status === 403) {
-          return res.status(401).json({
-            success: false,
-            error: 'Instagram access token expired or revoked. Please reconnect your account.',
-            code: 'TOKEN_INVALID'
-          });
-        }
-
-        return res.status(status).json({
-          success: false,
-          error: data.error?.message || 'Instagram API error',
-          code: data.error?.code || 'GRAPH_API_ERROR',
-          details: data.error
-        });
+    // ===== SUCCESS RESPONSE =====
+    res.json({
+      success: true,
+      data: posts || [],
+      pagination: {
+        total: count,
+        limit: mediaLimit,
+        offset: mediaOffset,
+        hasMore: (mediaOffset + mediaLimit) < (count || 0)
+      },
+      source: 'database',  // ✅ Indicates data source
+      meta: {
+        count: posts?.length || 0,
+        response_time_ms: responseTime,
+        note: 'Data synced from Instagram via /sync/posts endpoint'
       }
+    });
 
-      throw apiError; // Re-throw for general error handler
-    }
+    console.log(`[Media] ✅ Returned ${posts?.length || 0} posts from database (cached, ${responseTime}ms)`);
 
   } catch (error) {
     const responseTime = Date.now() - requestStartTime;
 
     console.error('❌ Media fetch error:', error.message);
 
-    // Log unexpected errors
-    await logAudit('media_fetch_error', req.query.userId, {
+    await logAudit('media_fetch_error', null, {
       action: 'fetch_media',
       error: error.message,
       response_time_ms: responseTime
@@ -460,7 +429,7 @@ router.get('/profile/:id', async (req, res) => {
 
     // ===== GRAPH API CALL =====
     const fields = 'id,username,name,profile_picture_url,followers_count,follows_count,media_count,biography,website';
-    const graphApiUrl = `https://graph.facebook.com/v23.0/${id}`;
+    const graphApiUrl = `https://graph.facebook.com/${GRAPH_API_VERSION}/${id}`;
 
     try {
       const response = await axios.get(graphApiUrl, {
@@ -586,7 +555,7 @@ router.get('/comments/:mediaId', async (req, res) => {
 
     // ===== GRAPH API CALL =====
     const fields = 'id,text,username,timestamp,like_count,replies{id,text,username,timestamp}';
-    const graphApiUrl = `https://graph.facebook.com/v23.0/${mediaId}/comments`;
+    const graphApiUrl = `https://graph.facebook.com/${GRAPH_API_VERSION}/${mediaId}/comments`;
 
     try {
       const response = await axios.get(graphApiUrl, {
@@ -733,7 +702,7 @@ router.post('/comments/:commentId/reply', async (req, res) => {
     }
 
     // ===== GRAPH API CALL =====
-    const graphApiUrl = `https://graph.facebook.com/v23.0/${commentId}/replies`;
+    const graphApiUrl = `https://graph.facebook.com/${GRAPH_API_VERSION}/${commentId}/replies`;
 
     try {
       const response = await axios.post(graphApiUrl, null, {
@@ -967,7 +936,7 @@ router.post('/create-post', async (req, res) => {
     let creationId;
 
     try {
-      const containerUrl = `https://graph.facebook.com/v23.0/${igUserId}/media`;
+      const containerUrl = `https://graph.facebook.com/${GRAPH_API_VERSION}/${igUserId}/media`;
       const containerResponse = await axios.post(containerUrl, null, {
         params: {
           image_url: image_url,
@@ -1013,7 +982,7 @@ router.post('/create-post', async (req, res) => {
     let mediaId;
 
     try {
-      const publishUrl = `https://graph.facebook.com/v23.0/${igUserId}/media_publish`;
+      const publishUrl = `https://graph.facebook.com/${GRAPH_API_VERSION}/${igUserId}/media_publish`;
       const publishResponse = await axios.post(publishUrl, null, {
         params: {
           creation_id: creationId,
@@ -1143,27 +1112,40 @@ router.get('/health', (req, res) => {
 // ==========================================
 // UGC MANAGEMENT ENDPOINTS
 // ==========================================
-// Permission Required: pages_read_user_content
-// Purpose: Monitor visitor posts (brand mentions) and manage permissions
 
 /**
+ * ==========================================
+ * LAYER B: VIEW (READ)
+ * Split-Brain Architecture - Data Retrieval Layer
+ * ==========================================
+ *
  * GET /api/instagram/visitor-posts
- * Fetches visitor posts (UGC) for the business account
+ * Fetches visitor posts (UGC) from database cache
+ *
+ * Architecture Evolution:
+ *   - OLD: Direct Instagram API calls (Live Wire - Rate limits, wrong permissions)
+ *   - NEW: Database-only reads (Sync & Store - Fast, scalable, correct permissions)
+ *
+ * Responsibilities:
+ *   - ONLY reads from Supabase database (NO Instagram API calls)
+ *   - Supports pagination (limit/offset with range queries)
+ *   - Returns cached data synced by Layer A (syncTaggedPosts)
  *
  * Query Parameters:
  *   - businessAccountId: Instagram business account UUID (required)
  *   - limit: Number of posts to fetch (default: 20, max: 100)
- *   - after: Pagination cursor (optional)
+ *   - offset: Pagination offset (default: 0)
  *
- * Returns: Array of visitor posts with stats
+ * Data Source: ugc_content table (populated by backend.api/services/instagram-sync.js)
+ * Permission: None required (reads from own database)
  */
 router.get('/visitor-posts', async (req, res) => {
   const requestStartTime = Date.now();
 
   try {
-    const { businessAccountId, limit = 20, after } = req.query;
+    const { businessAccountId, limit = 20, offset = 0 } = req.query;
 
-    console.log('[UGC] Fetching visitor posts for account:', businessAccountId);
+    console.log('[UGC] Fetching visitor posts from database for account:', businessAccountId);
 
     // ===== VALIDATION =====
     if (!businessAccountId) {
@@ -1175,134 +1157,51 @@ router.get('/visitor-posts', async (req, res) => {
       });
     }
 
-    // Validate limit parameter
+    // Validate limit and offset parameters
     const postsLimit = Math.min(Math.max(parseInt(limit) || 20, 1), 100);
+    const postsOffset = Math.max(parseInt(offset) || 0, 0);
 
-    // ===== STEP 1: Get credentials from database =====
-    const { data: credentials, error: credError } = await supabase
-      .from('instagram_credentials')
-      .select('page_access_token, facebook_page_id')
+    // Get Supabase client
+    const supabase = getSupabaseAdmin();
+
+    // ✅ NEW: Query database instead of Instagram API
+    const { data: posts, error, count } = await supabase
+      .from('ugc_content')
+      .select('*', { count: 'exact' })
       .eq('business_account_id', businessAccountId)
-      .single();
+      .order('timestamp', { ascending: false })
+      .range(postsOffset, postsOffset + postsLimit - 1);
 
-    if (credError || !credentials) {
-      console.error('[UGC] Credentials not found:', credError?.message);
-      return res.status(404).json({
-        success: false,
-        error: 'Credentials not found for this business account',
-        code: 'CREDENTIALS_NOT_FOUND'
-      });
-    }
+    if (error) {
+      console.error('[UGC] Database query error:', error);
 
-    // ===== STEP 2: Call Meta Graph API =====
-    const pageId = credentials.facebook_page_id;
-    const accessToken = credentials.page_access_token;
-
-    const metaUrl = new URL(`https://graph.facebook.com/v20.0/${pageId}/visitor_posts`);
-    metaUrl.searchParams.append('access_token', accessToken);
-    metaUrl.searchParams.append('fields', 'id,message,from,created_time,permalink_url,attachments,likes.summary(true),comments.summary(true)');
-    metaUrl.searchParams.append('limit', postsLimit.toString());
-    if (after) {
-      metaUrl.searchParams.append('after', after);
-    }
-
-    const metaResponse = await fetch(metaUrl.toString());
-
-    if (!metaResponse.ok) {
-      const errorData = await metaResponse.json();
-      console.error('[UGC] Meta API error:', errorData);
-
-      await logAudit('instagram_visitor_posts_error', null, {
+      await logAudit('visitor_posts_error', null, {
         action: 'fetch_visitor_posts',
-        business_account_id: businessAccountId,
-        status_code: metaResponse.status,
-        error: errorData.error?.message
+        error: error.message,
+        source: 'database',
+        response_time_ms: Date.now() - requestStartTime
       });
 
-      return res.status(metaResponse.status).json({
+      return res.status(500).json({
         success: false,
-        error: errorData.error?.message || 'Failed to fetch visitor posts',
-        code: 'META_API_ERROR'
+        error: 'Failed to fetch UGC posts from database',
+        code: 'DATABASE_ERROR'
       });
     }
 
-    const metaData = await metaResponse.json();
-
-    // ===== STEP 3: Transform and store in database =====
-    const visitorPosts = await Promise.all(
-      (metaData.data || []).map(async (post) => {
-        // Extract media info
-        let mediaType = 'TEXT';
-        let mediaUrl = null;
-        let thumbnailUrl = null;
-
-        if (post.attachments?.data?.[0]) {
-          const attachment = post.attachments.data[0];
-          mediaType = attachment.type === 'photo' ? 'IMAGE' :
-                      attachment.type === 'video' ? 'VIDEO' :
-                      attachment.type === 'album' ? 'CAROUSEL_ALBUM' : 'TEXT';
-
-          if (attachment.media?.image?.src) {
-            mediaUrl = attachment.media.image.src;
-            thumbnailUrl = attachment.media.image.src;
-          } else if (attachment.media?.source) {
-            mediaUrl = attachment.media.source;
-          }
-        }
-
-        const likeCount = post.likes?.summary?.total_count || 0;
-        const commentCount = post.comments?.summary?.total_count || 0;
-
-        // Upsert into database
-        const { data: ugcRecord, error: upsertError } = await supabase
-          .from('ugc_content')
-          .upsert({
-            business_account_id: businessAccountId,
-            visitor_post_id: post.id,
-            message: post.message || null,
-            author_id: post.from?.id || 'unknown',
-            author_name: post.from?.name || null,
-            author_username: post.from?.username || null,
-            author_profile_picture_url: post.from?.picture?.data?.url || null,
-            created_time: post.created_time,
-            permalink_url: post.permalink_url,
-            media_type: mediaType,
-            media_url: mediaUrl,
-            thumbnail_url: thumbnailUrl,
-            like_count: likeCount,
-            comment_count: commentCount,
-            share_count: 0,
-            sentiment: 'unknown',
-            priority: 'medium',
-            fetched_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          }, {
-            onConflict: 'business_account_id,visitor_post_id'
-          })
-          .select()
-          .single();
-
-        if (upsertError) {
-          console.error('[UGC] Error upserting post:', upsertError);
-        }
-
-        return ugcRecord;
-      })
-    );
-
-    // ===== STEP 4: Calculate stats =====
+    // Calculate stats from database
     const { data: statsData } = await supabase
       .from('ugc_content')
-      .select('sentiment, featured, created_time')
+      .select('sentiment, featured, timestamp')
       .eq('business_account_id', businessAccountId);
 
     const weekAgo = new Date();
     weekAgo.setDate(weekAgo.getDate() - 7);
 
     const stats = {
-      totalPosts: statsData?.length || 0,
+      totalPosts: count || 0,
       postsThisWeek: statsData?.filter(p => {
-        return new Date(p.created_time) > weekAgo;
+        return new Date(p.timestamp) > weekAgo;
       }).length || 0,
       sentimentBreakdown: {
         positive: statsData?.filter(p => p.sentiment === 'positive').length || 0,
@@ -1317,25 +1216,30 @@ router.get('/visitor-posts', async (req, res) => {
     await logAudit('instagram_visitor_posts_fetched', null, {
       action: 'fetch_visitor_posts',
       business_account_id: businessAccountId,
-      posts_count: visitorPosts.filter(p => p !== null).length,
+      posts_count: posts?.length || 0,
+      source: 'database',
       response_time_ms: responseTime
     });
 
     // ===== SUCCESS RESPONSE =====
     res.json({
       success: true,
-      data: visitorPosts.filter(p => p !== null),
-      paging: metaData.paging || {},
-      stats,
-      rate_limit: {
-        remaining: req.rateLimitRemaining || 'unknown',
-        limit: 200,
-        window: '1 hour'
+      data: posts || [],
+      pagination: {
+        total: count,
+        limit: postsLimit,
+        offset: postsOffset,
+        hasMore: (postsOffset + postsLimit) < (count || 0)
       },
+      stats,
+      source: 'database',  // ✅ Indicates data source
       meta: {
-        response_time_ms: responseTime
+        response_time_ms: responseTime,
+        note: 'Data synced from Instagram via /sync/ugc endpoint'
       }
     });
+
+    console.log(`[UGC] ✅ Returned ${posts?.length || 0} posts from database (cached, ${responseTime}ms)`);
 
   } catch (error) {
     const responseTime = Date.now() - requestStartTime;
@@ -1594,7 +1498,7 @@ router.get('/conversations/:id', async (req, res) => {
     // ===== GRAPH API CALL =====
     // Include messages in conversation data to check 24-hour window
     const fields = 'id,participants,updated_time,message_count,messages{created_time,from}';
-    const graphApiUrl = `https://graph.facebook.com/v23.0/${id}/conversations`;
+    const graphApiUrl = `https://graph.facebook.com/${GRAPH_API_VERSION}/${id}/conversations`;
 
     try {
       const response = await axios.get(graphApiUrl, {
@@ -1764,7 +1668,7 @@ router.get('/conversations/:conversationId/messages', async (req, res) => {
 
     // ===== GRAPH API CALL =====
     const fields = 'id,message,from,created_time,attachments';
-    const graphApiUrl = `https://graph.facebook.com/v23.0/${conversationId}/messages`;
+    const graphApiUrl = `https://graph.facebook.com/${GRAPH_API_VERSION}/${conversationId}/messages`;
 
     try {
       const response = await axios.get(graphApiUrl, {
@@ -1904,7 +1808,7 @@ router.post('/conversations/:conversationId/send', async (req, res) => {
     }
 
     // ===== GRAPH API CALL =====
-    const graphApiUrl = `https://graph.facebook.com/v23.0/${conversationId}/messages`;
+    const graphApiUrl = `https://graph.facebook.com/${GRAPH_API_VERSION}/${conversationId}/messages`;
 
     try {
       const response = await axios.post(graphApiUrl, null, {
@@ -2176,7 +2080,7 @@ router.post('/ugc/repost', async (req, res) => {
 
     let creationId;
     try {
-      const containerUrl = `https://graph.facebook.com/v23.0/${igUserId}/media`;
+      const containerUrl = `https://graph.facebook.com/${GRAPH_API_VERSION}/${igUserId}/media`;
 
       const containerResponse = await axios.post(containerUrl, null, {
         params: {
@@ -2223,7 +2127,7 @@ router.post('/ugc/repost', async (req, res) => {
 
     let mediaId;
     try {
-      const publishUrl = `https://graph.facebook.com/v23.0/${igUserId}/media_publish`;
+      const publishUrl = `https://graph.facebook.com/${GRAPH_API_VERSION}/${igUserId}/media_publish`;
 
       const publishResponse = await axios.post(publishUrl, null, {
         params: {
@@ -2342,6 +2246,282 @@ router.post('/ugc/repost', async (req, res) => {
 });
 
 // ==========================================
+// TOKEN REFRESH ENDPOINT
+// ==========================================
+
+/**
+ * POST /api/instagram/refresh-token
+ * Manually refresh a user's Instagram access token
+ *
+ * Long-lived Instagram access tokens expire after 60 days.
+ * This endpoint exchanges the current token for a new one with a fresh 60-day expiration.
+ *
+ * Smart Refresh Pattern:
+ * 1. Pre-check: Verify token hasn't already expired (avoid wasting Meta API call)
+ * 2. If expired: Return 401 TOKEN_EXPIRED_REQUIRE_LOGIN
+ * 3. If valid: Call Meta API to refresh
+ * 4. Update database with new token and expiration
+ *
+ * Security Best Practice:
+ * - Does NOT return the new token in the response (security risk)
+ * - Frontend only needs to know if refresh succeeded
+ *
+ * @route POST /api/instagram/refresh-token
+ * @body {string} userId - User UUID
+ * @body {string} businessAccountId - Instagram Business account UUID
+ * @returns {Object} Success response with new expiration info
+ */
+router.post('/refresh-token', async (req, res) => {
+  const requestStartTime = Date.now();
+
+  try {
+    const { userId, businessAccountId } = req.body;
+
+    console.log('[Token] Refresh request received');
+    console.log('   User ID:', userId);
+    console.log('   Business Account ID:', businessAccountId);
+
+    // ===== STEP 1: VALIDATION =====
+    if (!userId || !businessAccountId) {
+      return res.status(400).json({
+        success: false,
+        error: 'userId and businessAccountId are required',
+        code: 'MISSING_PARAMETERS'
+      });
+    }
+
+    // ===== STEP 2: SMART PRE-CHECK - Fetch current expiration =====
+    // Check if token is already expired BEFORE calling Meta API (saves API quota)
+    const supabase = getSupabaseAdmin();
+
+    const { data: credentials, error: fetchError } = await supabase
+      .from('instagram_credentials')
+      .select('expires_at')
+      .eq('user_id', userId)
+      .eq('business_account_id', businessAccountId)
+      .single();
+
+    if (fetchError || !credentials) {
+      console.error('[Token] ❌ Credentials not found:', fetchError?.message);
+
+      await logAudit('token_refresh_failed', userId, {
+        action: 'refresh_token',
+        business_account_id: businessAccountId,
+        error: 'credentials_not_found',
+        response_time_ms: Date.now() - requestStartTime
+      });
+
+      return res.status(404).json({
+        success: false,
+        error: 'Credentials not found',
+        code: 'CREDENTIALS_NOT_FOUND'
+      });
+    }
+
+    // Check if token is already expired
+    const expiresAt = new Date(credentials.expires_at);
+    const now = new Date();
+
+    console.log('[Token] Current expiration:', expiresAt.toISOString());
+    console.log('[Token] Current time:', now.toISOString());
+
+    if (expiresAt < now) {
+      console.error('[Token] ❌ Token already expired');
+      console.error('   Expired at:', expiresAt.toISOString());
+      console.error('   Time now:', now.toISOString());
+
+      await logAudit('token_refresh_already_expired', userId, {
+        action: 'refresh_token',
+        business_account_id: businessAccountId,
+        expired_at: expiresAt.toISOString(),
+        error: 'token_already_expired',
+        response_time_ms: Date.now() - requestStartTime
+      });
+
+      return res.status(401).json({
+        success: false,
+        error: 'Token has already expired. Please reconnect your Instagram account.',
+        code: 'TOKEN_EXPIRED_REQUIRE_LOGIN',
+        details: {
+          expired_at: expiresAt.toISOString(),
+          requires_reconnect: true
+        }
+      });
+    }
+
+    console.log('[Token] ✅ Token not yet expired - proceeding with refresh');
+
+    // ===== STEP 3: Retrieve decrypted page token =====
+    let pageToken;
+    try {
+      pageToken = await retrievePageToken(userId, businessAccountId);
+      console.log('[Token] ✅ Retrieved and decrypted page token');
+    } catch (tokenError) {
+      console.error('[Token] ❌ Token retrieval failed:', tokenError.message);
+
+      await logAudit('token_retrieval_failed', userId, {
+        action: 'refresh_token',
+        business_account_id: businessAccountId,
+        error: tokenError.message,
+        response_time_ms: Date.now() - requestStartTime
+      });
+
+      return res.status(401).json({
+        success: false,
+        error: 'Failed to retrieve access token. Please reconnect your Instagram account.',
+        code: 'TOKEN_RETRIEVAL_FAILED'
+      });
+    }
+
+    // ===== STEP 4: Call Meta Graph API to refresh token =====
+    const refreshUrl = `https://graph.facebook.com/${GRAPH_API_VERSION}/oauth/access_token`;
+
+    console.log('[Token] Calling Meta Graph API to refresh token...');
+
+    try {
+      const response = await axios.get(refreshUrl, {
+        params: {
+          grant_type: 'fb_exchange_token',
+          client_id: process.env.FACEBOOK_APP_ID,
+          client_secret: process.env.FACEBOOK_APP_SECRET,
+          fb_exchange_token: pageToken
+        },
+        timeout: 10000
+      });
+
+      const { access_token, expires_in } = response.data;
+
+      console.log('[Token] ✅ Token refreshed successfully from Meta');
+      console.log('   New token expires in:', expires_in, 'seconds');
+
+      // ===== STEP 5: Calculate new expiration =====
+      const newExpiresAt = new Date();
+      newExpiresAt.setSeconds(newExpiresAt.getSeconds() + expires_in);
+
+      console.log('[Token] New expiration date:', newExpiresAt.toISOString());
+
+      // ===== STEP 6: Update database with new token =====
+      const { error: updateError } = await supabase
+        .from('instagram_credentials')
+        .update({
+          page_access_token: access_token,
+          expires_at: newExpiresAt.toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', userId)
+        .eq('business_account_id', businessAccountId);
+
+      if (updateError) {
+        console.error('[Token] ❌ Database update failed:', updateError.message);
+        throw updateError;
+      }
+
+      console.log('[Token] ✅ Database updated with new token and expiration');
+
+      // ===== STEP 7: Log audit trail =====
+      const responseTime = Date.now() - requestStartTime;
+
+      await logAudit('token_refreshed', userId, {
+        action: 'refresh_token',
+        business_account_id: businessAccountId,
+        new_expiration: newExpiresAt.toISOString(),
+        expires_in_seconds: expires_in,
+        response_time_ms: responseTime
+      });
+
+      // ===== SUCCESS RESPONSE =====
+      // Security Best Practice: Do NOT return the new token
+      res.json({
+        success: true,
+        message: 'Token refreshed successfully',
+        data: {
+          expires_at: newExpiresAt.toISOString(),
+          expires_in_seconds: expires_in
+        },
+        meta: {
+          response_time_ms: responseTime
+        }
+      });
+
+      console.log(`[Token] ✅ Refresh completed successfully (${responseTime}ms)`);
+
+    } catch (refreshError) {
+      // Handle Meta Graph API errors
+      if (refreshError.response) {
+        const { status, data } = refreshError.response;
+        const errorCode = data?.error?.code;
+        const errorMessage = data?.error?.message || 'Token refresh failed';
+
+        console.error(`[Token] ❌ Meta API error (${status}):`, data);
+
+        // Error Code 190: OAuthException - Token is invalid/expired
+        if (errorCode === 190) {
+          console.error('[Token] ❌ Meta returned error 190 - Token invalid/expired');
+
+          await logAudit('token_refresh_expired_by_meta', userId, {
+            action: 'refresh_token',
+            business_account_id: businessAccountId,
+            error_code: errorCode,
+            error_message: errorMessage,
+            response_time_ms: Date.now() - requestStartTime
+          });
+
+          return res.status(401).json({
+            success: false,
+            error: 'Token has expired or is invalid. Please reconnect your Instagram account.',
+            code: 'TOKEN_EXPIRED_REQUIRE_LOGIN',
+            details: {
+              meta_error_code: errorCode,
+              meta_error_message: errorMessage,
+              requires_reconnect: true
+            }
+          });
+        }
+
+        // Other API errors
+        await logAudit('token_refresh_api_error', userId, {
+          action: 'refresh_token',
+          business_account_id: businessAccountId,
+          status_code: status,
+          error_code: errorCode,
+          error_message: errorMessage,
+          response_time_ms: Date.now() - requestStartTime
+        });
+
+        return res.status(status).json({
+          success: false,
+          error: errorMessage,
+          code: 'META_API_ERROR',
+          details: data.error
+        });
+      }
+
+      // Network error or timeout
+      throw refreshError;
+    }
+
+  } catch (error) {
+    const responseTime = Date.now() - requestStartTime;
+
+    console.error('[Token] ❌ Unexpected error:', error.message);
+
+    await logAudit('token_refresh_error', req.body.userId, {
+      action: 'refresh_token',
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+      response_time_ms: responseTime
+    });
+
+    res.status(500).json({
+      success: false,
+      error: 'Failed to refresh token',
+      code: 'INTERNAL_ERROR',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// ==========================================
 // TOKEN VALIDATION ENDPOINT
 // ==========================================
 
@@ -2407,7 +2587,7 @@ router.post('/validate-token', async (req, res) => {
 
     // ===== STEP 2: Validate token by calling Meta's /me endpoint =====
     // This is a lightweight "ping" to check if the token is still valid
-    const graphUrl = `https://graph.facebook.com/v23.0/${credentials.instagram_business_id}`;
+    const graphUrl = `https://graph.facebook.com/${GRAPH_API_VERSION}/${credentials.instagram_business_id}`;
 
     try {
       const response = await axios.get(graphUrl, {
@@ -2576,6 +2756,122 @@ router.post('/validate-token', async (req, res) => {
       error: 'Internal server error during token validation',
       code: 'INTERNAL_ERROR',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// ==========================================
+// DATA SYNC ENDPOINTS
+// ==========================================
+
+const { syncTaggedPosts, syncBusinessPosts } = require('../services/instagram-sync');
+
+/**
+ * POST /api/instagram/sync/ugc
+ * Triggers background sync of tagged posts from Instagram to database
+ */
+router.post('/sync/ugc', async (req, res) => {
+  try {
+    const { businessAccountId } = req.body;
+
+    if (!businessAccountId) {
+      return res.status(400).json({
+        success: false,
+        error: 'businessAccountId is required'
+      });
+    }
+
+    // Get Supabase client
+    const supabase = getSupabaseAdmin();
+
+    // Get credentials
+    const { data: credentials, error: credError } = await supabase
+      .from('instagram_credentials')
+      .select('instagram_business_id, page_access_token')
+      .eq('business_account_id', businessAccountId)
+      .single();
+
+    if (credError || !credentials) {
+      return res.status(404).json({
+        success: false,
+        error: 'Credentials not found'
+      });
+    }
+
+    // Execute sync
+    const result = await syncTaggedPosts(
+      businessAccountId,
+      credentials.instagram_business_id,
+      credentials.page_access_token
+    );
+
+    res.json(result);
+
+    await logAudit('ugc_sync_completed', null, {
+      business_account_id: businessAccountId,
+      synced_count: result.synced_count
+    });
+
+  } catch (error) {
+    console.error('[Sync] UGC sync error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Sync failed'
+    });
+  }
+});
+
+/**
+ * POST /api/instagram/sync/posts
+ * Triggers background sync of business media from Instagram to database
+ */
+router.post('/sync/posts', async (req, res) => {
+  try {
+    const { businessAccountId } = req.body;
+
+    if (!businessAccountId) {
+      return res.status(400).json({
+        success: false,
+        error: 'businessAccountId is required'
+      });
+    }
+
+    // Get Supabase client
+    const supabase = getSupabaseAdmin();
+
+    // Get credentials
+    const { data: credentials, error: credError } = await supabase
+      .from('instagram_credentials')
+      .select('instagram_business_id, page_access_token')
+      .eq('business_account_id', businessAccountId)
+      .single();
+
+    if (credError || !credentials) {
+      return res.status(404).json({
+        success: false,
+        error: 'Credentials not found'
+      });
+    }
+
+    // Execute sync
+    const result = await syncBusinessPosts(
+      businessAccountId,
+      credentials.instagram_business_id,
+      credentials.page_access_token
+    );
+
+    res.json(result);
+
+    await logAudit('business_posts_sync_completed', null, {
+      business_account_id: businessAccountId,
+      synced_count: result.synced_count
+    });
+
+  } catch (error) {
+    console.error('[Sync] Posts sync error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Sync failed'
     });
   }
 });

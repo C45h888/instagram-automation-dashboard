@@ -6,7 +6,7 @@ const { getSupabaseAdmin } = require('../config/supabase');
 // CONFIGURATION
 // ==========================================
 
-const GRAPH_API_VERSION = 'v18.0';
+const GRAPH_API_VERSION = 'v23.0';
 const GRAPH_API_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
 
 // Default metrics for account insights
