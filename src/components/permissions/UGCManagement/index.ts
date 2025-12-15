@@ -6,3 +6,4 @@
 export { VisitorPostCard } from './VisitorPostCard';
 export { VisitorPostInbox } from './VisitorPostInbox';
 export { PermissionRequestModal } from './PermissionRequestModal';
+export { RepostConfirmationModal } from './RepostConfirmationModal';

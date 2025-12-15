@@ -17,6 +17,7 @@ interface VisitorPostInboxProps {
   onFiltersChange: (filters: UGCFilterState) => void;
   onFeatureToggle: (postId: string, featured: boolean) => void;
   onRequestPermission: (postId: string) => void;
+  onRepost: (postId: string) => void;
   onAddNotes: (postId: string) => void;
 }
 
@@ -27,6 +28,7 @@ export const VisitorPostInbox: React.FC<VisitorPostInboxProps> = ({
   onFiltersChange,
   onFeatureToggle,
   onRequestPermission,
+  onRepost,
   onAddNotes
 }) => {
   // EVIDENCE: Client-side filtering (same as CommentInbox)
@@ -253,6 +255,7 @@ export const VisitorPostInbox: React.FC<VisitorPostInboxProps> = ({
               post={post}
               onFeatureToggle={onFeatureToggle}
               onRequestPermission={onRequestPermission}
+              onRepost={onRepost}
               onAddNotes={onAddNotes}
             />
           ))}

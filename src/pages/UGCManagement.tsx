@@ -7,9 +7,11 @@
 
 import React, { useState } from 'react';
 import { useVisitorPosts } from '../hooks/useVisitorPosts';
-import { VisitorPostInbox, PermissionRequestModal } from '../components/permissions/UGCManagement';
+import { VisitorPostInbox, PermissionRequestModal, RepostConfirmationModal } from '../components/permissions/UGCManagement';
 import AsyncWrapper from '../components/ui/AsyncWrapper';
 import { useToast } from '../hooks/useToast';
+import { useAuthStore } from '../stores/authStore';
+import { useInstagramAccount } from '../hooks/useInstagramAccount';
 import type { VisitorPost, PermissionRequestForm } from '../types/ugc';
 
 const UGCManagement: React.FC = () => {
@@ -22,11 +24,17 @@ const UGCManagement: React.FC = () => {
     filters,
     setFilters,
     toggleFeatured,
-    requestPermission
+    requestPermission,
+    refetch
   } = useVisitorPosts();
 
   const toast = useToast();
+  const { user } = useAuthStore();
+  const { businessAccountId } = useInstagramAccount();
+
   const [selectedPost, setSelectedPost] = useState<VisitorPost | null>(null);
+  const [repostPost, setRepostPost] = useState<VisitorPost | null>(null);
+  const [isReposting, setIsReposting] = useState(false);
 
   // Feature toggle handler
   const handleFeatureToggle = async (postId: string, featured: boolean) => {
@@ -64,6 +72,66 @@ const UGCManagement: React.FC = () => {
     }
   };
 
+  // Repost click handler - opens confirmation modal
+  const handleRepostClick = (postId: string) => {
+    const post = visitorPosts.find(p => p.id === postId);
+    if (post) {
+      setRepostPost(post);
+    }
+  };
+
+  // Repost confirmation handler - executes the repost
+  const handleRepostConfirm = async () => {
+    if (!repostPost || !user?.id || !businessAccountId) {
+      toast.error('Missing required information for repost', {
+        title: 'Error',
+        duration: 5000
+      });
+      return;
+    }
+
+    setIsReposting(true);
+
+    try {
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+      const response = await fetch(`${apiBaseUrl}/api/instagram/ugc/repost`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          userId: user.id,
+          businessAccountId,
+          ugcContentId: repostPost.id
+        })
+      });
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to repost content');
+      }
+
+      toast.success('Content reposted successfully to your Instagram!', {
+        title: 'Success',
+        duration: 5000
+      });
+
+      // Close modal and refresh posts
+      setRepostPost(null);
+      await refetch();
+
+    } catch (err: any) {
+      console.error('❌ [Repost Error]:', err);
+      toast.error(err.message || 'Failed to repost content', {
+        title: 'Repost Failed',
+        duration: 5000
+      });
+    } finally {
+      setIsReposting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -98,6 +166,7 @@ const UGCManagement: React.FC = () => {
               const post = data.find(p => p.id === postId);
               setSelectedPost(post || null);
             }}
+            onRepost={handleRepostClick}
             onAddNotes={(postId) => {
               // TODO: Implement notes modal
               console.log('Add notes for post:', postId);
@@ -112,6 +181,15 @@ const UGCManagement: React.FC = () => {
         post={selectedPost}
         onClose={() => setSelectedPost(null)}
         onSubmit={handleRequestPermission}
+      />
+
+      {/* Repost Confirmation Modal */}
+      <RepostConfirmationModal
+        isOpen={repostPost !== null}
+        post={repostPost!}
+        onConfirm={handleRepostConfirm}
+        onCancel={() => setRepostPost(null)}
+        isLoading={isReposting}
       />
     </div>
   );

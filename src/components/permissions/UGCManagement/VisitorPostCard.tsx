@@ -5,7 +5,7 @@
 // =====================================
 
 import React from 'react';
-import { Heart, MessageCircle, ExternalLink, Star, Shield, StickyNote } from 'lucide-react';
+import { Heart, MessageCircle, ExternalLink, Star, Shield, StickyNote, Share2, Clock, X } from 'lucide-react';
 import { SentimentBadge } from '../CommentManagement'; // EVIDENCE: Reuse existing component
 import type { VisitorPost } from '../../../types/ugc';
 import { motion } from 'framer-motion';
@@ -14,6 +14,7 @@ interface VisitorPostCardProps {
   post: VisitorPost;
   onFeatureToggle: (postId: string, featured: boolean) => void;
   onRequestPermission: (postId: string) => void;
+  onRepost: (postId: string) => void; // ✅ NEW: Repost handler
   onAddNotes: (postId: string) => void;
 }
 
@@ -21,9 +22,21 @@ export const VisitorPostCard: React.FC<VisitorPostCardProps> = ({
   post,
   onFeatureToggle,
   onRequestPermission,
+  onRepost,
   onAddNotes
 }) => {
   const timeAgo = getTimeAgo(post.created_time);
+
+  // ===== PERMISSION STATE LOGIC (4 States) =====
+  // State 1: NOT_REQUESTED - Show "Request Permission"
+  // State 2: PENDING - Show "Permission Pending" (disabled)
+  // State 3: GRANTED - Show "Repost to Your Account" (active, green)
+  // State 4: DENIED - Show "Permission Denied" (disabled, red)
+
+  const canRepost = post.repost_permission_granted === true;
+  const permissionRequested = post.repost_permission_requested === true;
+  const permissionDenied = post.repost_permission_granted === false && permissionRequested;
+  const noPermission = !permissionRequested;
 
   return (
     <motion.div
@@ -126,33 +139,72 @@ export const VisitorPostCard: React.FC<VisitorPostCardProps> = ({
         </a>
       </div>
 
-      {/* Action Buttons */}
+      {/* Action Buttons - 4-State Permission Logic */}
       <div className="p-4 flex items-center space-x-2">
-        <button
-          onClick={() => onFeatureToggle(post.id, !post.featured)}
-          className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-            post.featured
-              ? 'bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30'
-              : 'bg-gray-700/50 text-gray-300 hover:bg-gray-700/70'
-          }`}
-        >
-          <Star className="w-4 h-4 inline mr-1" />
-          {post.featured ? 'Featured' : 'Feature'}
-        </button>
-
-        {!post.repost_permission_requested && (
+        {/* STATE 1: No Permission Requested Yet */}
+        {noPermission && (
           <button
             onClick={() => onRequestPermission(post.id)}
             className="flex-1 px-3 py-2 rounded-lg text-sm font-medium bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition-colors"
           >
             <Shield className="w-4 h-4 inline mr-1" />
-            Request Permission
+            Request Permission to Repost
           </button>
         )}
 
+        {/* STATE 2: Permission Requested (Pending) */}
+        {permissionRequested && !canRepost && !permissionDenied && (
+          <button
+            disabled
+            className="flex-1 px-3 py-2 rounded-lg text-sm font-medium bg-gray-700/50 text-gray-400 cursor-not-allowed opacity-50"
+            title="Waiting for content creator approval"
+          >
+            <Clock className="w-4 h-4 inline mr-1" />
+            Permission Requested (Pending)
+          </button>
+        )}
+
+        {/* STATE 3: Permission DENIED */}
+        {permissionDenied && (
+          <button
+            disabled
+            className="flex-1 px-3 py-2 rounded-lg text-sm font-medium bg-red-700/50 text-red-400 cursor-not-allowed opacity-50"
+            title="The content creator denied your repost request"
+          >
+            <X className="w-4 h-4 inline mr-1" />
+            Permission Denied
+          </button>
+        )}
+
+        {/* STATE 4: Permission GRANTED - Show Repost Button */}
+        {canRepost && (
+          <button
+            onClick={() => onRepost(post.id)}
+            className="flex-1 px-3 py-2 rounded-lg text-sm font-medium bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors shadow-lg shadow-green-500/10"
+          >
+            <Share2 className="w-4 h-4 inline mr-1" />
+            Repost to Your Account
+          </button>
+        )}
+
+        {/* Feature Toggle - Always Visible */}
+        <button
+          onClick={() => onFeatureToggle(post.id, !post.featured)}
+          className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+            post.featured
+              ? 'bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30'
+              : 'bg-gray-700/50 text-gray-300 hover:bg-gray-700/70'
+          }`}
+          title={post.featured ? 'Remove from featured' : 'Add to featured'}
+        >
+          <Star className="w-4 h-4" />
+        </button>
+
+        {/* Notes Button - Always Visible */}
         <button
           onClick={() => onAddNotes(post.id)}
           className="px-3 py-2 rounded-lg text-sm font-medium bg-gray-700/50 text-gray-300 hover:bg-gray-700/70 transition-colors"
+          title="Add notes"
         >
           <StickyNote className="w-4 h-4" />
         </button>

@@ -898,7 +898,9 @@ export type Database = {
           permalink: string | null
           published_at: string | null
           reach: number | null
+          scheduled_for: string | null
           shares_count: number | null
+          status: 'draft' | 'scheduled' | 'published'
           thumbnail_url: string | null
           updated_at: string | null
         }
@@ -919,7 +921,9 @@ export type Database = {
           permalink?: string | null
           published_at?: string | null
           reach?: number | null
+          scheduled_for?: string | null
           shares_count?: number | null
+          status?: 'draft' | 'scheduled' | 'published'
           thumbnail_url?: string | null
           updated_at?: string | null
         }
@@ -940,7 +944,9 @@ export type Database = {
           permalink?: string | null
           published_at?: string | null
           reach?: number | null
+          scheduled_for?: string | null
           shares_count?: number | null
+          status?: 'draft' | 'scheduled' | 'published'
           thumbnail_url?: string | null
           updated_at?: string | null
         }
@@ -1095,6 +1101,7 @@ export type Database = {
           repost_permission_requested: boolean | null
           reposted: boolean | null
           reposted_at: string | null
+          reposted_media_id: string | null
           sentiment: string | null
           sentiment_score: number | null
           share_count: number | null
@@ -1128,6 +1135,7 @@ export type Database = {
           repost_permission_requested?: boolean | null
           reposted?: boolean | null
           reposted_at?: string | null
+          reposted_media_id?: string | null
           sentiment?: string | null
           sentiment_score?: number | null
           share_count?: number | null
@@ -1161,6 +1169,7 @@ export type Database = {
           repost_permission_requested?: boolean | null
           reposted?: boolean | null
           reposted_at?: string | null
+          reposted_media_id?: string | null
           sentiment?: string | null
           sentiment_score?: number | null
           share_count?: number | null

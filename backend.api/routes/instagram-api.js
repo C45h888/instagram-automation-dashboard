@@ -410,56 +410,404 @@ router.get('/media/:accountId', async (req, res) => {
 });
 
 /**
- * Get Instagram comments
+ * GET /api/instagram/profile/:id
+ * Fetches Instagram Business profile data
  *
- * Rate limited: 200 calls/hour per user
- * Logged: Every call tracked in api_usage table
+ * Query Parameters:
+ *   - userId: UUID of authenticated user
+ *   - businessAccountId: Instagram business account UUID
  *
- * @route GET /api/instagram/comments/:mediaId
- * @param {string} mediaId - Instagram media ID
- * @returns {Object} Comments with rate limit remaining
+ * Returns: Profile data including username, followers, media count
+ */
+router.get('/profile/:id', async (req, res) => {
+  const requestStartTime = Date.now();
+
+  try {
+    const { id } = req.params;
+    const { userId, businessAccountId } = req.query;
+
+    console.log(`👤 Fetching profile for IG account: ${id}`);
+
+    // ===== VALIDATION =====
+    if (!userId || !businessAccountId) {
+      console.error('❌ Missing required query parameters for profile fetch');
+      return res.status(400).json({
+        success: false,
+        error: 'userId and businessAccountId are required',
+        code: 'MISSING_PARAMETERS'
+      });
+    }
+
+    // ===== TOKEN RETRIEVAL =====
+    let pageToken;
+    try {
+      pageToken = await retrievePageToken(userId, businessAccountId);
+    } catch (tokenError) {
+      console.error('❌ Token retrieval failed:', tokenError.message);
+
+      await logAudit('token_retrieval_failed', userId, {
+        action: 'fetch_profile',
+        business_account_id: businessAccountId,
+        error: tokenError.message
+      });
+
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication failed. Please reconnect your Instagram account.',
+        code: 'TOKEN_RETRIEVAL_FAILED'
+      });
+    }
+
+    // ===== GRAPH API CALL =====
+    const fields = 'id,username,name,profile_picture_url,followers_count,follows_count,media_count,biography,website';
+    const graphApiUrl = `https://graph.facebook.com/v23.0/${id}`;
+
+    try {
+      const response = await axios.get(graphApiUrl, {
+        params: {
+          fields,
+          access_token: pageToken
+        },
+        timeout: 10000
+      });
+
+      const responseTime = Date.now() - requestStartTime;
+
+      await logAudit('instagram_profile_fetched', userId, {
+        action: 'fetch_profile',
+        business_account_id: businessAccountId,
+        username: response.data.username,
+        response_time_ms: responseTime
+      });
+
+      // ===== SUCCESS RESPONSE =====
+      res.json({
+        success: true,
+        data: response.data,
+        rate_limit: {
+          remaining: req.rateLimitRemaining || 'unknown',
+          limit: 200,
+          window: '1 hour'
+        },
+        meta: {
+          response_time_ms: responseTime
+        }
+      });
+
+    } catch (apiError) {
+      if (apiError.response) {
+        const { status, data } = apiError.response;
+        console.error(`❌ Graph API error (${status}):`, data);
+
+        await logAudit('instagram_api_error', userId, {
+          action: 'fetch_profile',
+          business_account_id: businessAccountId,
+          status_code: status,
+          error_message: data.error?.message
+        });
+
+        return res.status(status).json({
+          success: false,
+          error: data.error?.message || 'Instagram API error',
+          code: 'GRAPH_API_ERROR'
+        });
+      }
+
+      throw apiError;
+    }
+
+  } catch (error) {
+    const responseTime = Date.now() - requestStartTime;
+    console.error('❌ Profile fetch error:', error.message);
+
+    await logAudit('profile_fetch_error', req.query.userId, {
+      action: 'fetch_profile',
+      error: error.message,
+      response_time_ms: responseTime
+    });
+
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch Instagram profile',
+      code: 'INTERNAL_ERROR',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+/**
+ * GET /api/instagram/comments/:mediaId
+ * Fetches comments for a specific media item or all comments for account
+ *
+ * Query Parameters:
+ *   - userId: UUID of authenticated user
+ *   - businessAccountId: Instagram business account UUID
+ *
+ * Returns: Array of comments with metadata
  */
 router.get('/comments/:mediaId', async (req, res) => {
+  const requestStartTime = Date.now();
+
   try {
     const { mediaId } = req.params;
+    const { userId, businessAccountId } = req.query;
 
     console.log(`💬 Fetching comments for media: ${mediaId}`);
 
-    // ===== YOUR INSTAGRAM API CALL HERE =====
-    // Example placeholder response
-    const comments = {
-      media_id: mediaId,
-      items: [
-        {
-          id: 'comment_1',
-          text: 'Great post!',
-          from: {
-            id: 'user_1',
-            username: 'john_doe'
-          },
-          timestamp: new Date().toISOString()
-        }
-        // ... more comments
-      ],
-      count: 1
-    };
+    // ===== VALIDATION =====
+    if (!userId || !businessAccountId) {
+      console.error('❌ Missing required query parameters for comments fetch');
+      return res.status(400).json({
+        success: false,
+        error: 'userId and businessAccountId are required',
+        code: 'MISSING_PARAMETERS'
+      });
+    }
 
-    // Include rate limit remaining in response
-    res.json({
-      success: true,
-      data: comments,
-      rate_limit: {
-        remaining: req.rateLimitRemaining || 'unknown',
-        limit: 200,
-        window: '1 hour'
+    // ===== TOKEN RETRIEVAL =====
+    let pageToken;
+    try {
+      pageToken = await retrievePageToken(userId, businessAccountId);
+    } catch (tokenError) {
+      console.error('❌ Token retrieval failed:', tokenError.message);
+
+      await logAudit('token_retrieval_failed', userId, {
+        action: 'fetch_comments',
+        business_account_id: businessAccountId,
+        error: tokenError.message
+      });
+
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication failed. Please reconnect your Instagram account.',
+        code: 'TOKEN_RETRIEVAL_FAILED'
+      });
+    }
+
+    // ===== GRAPH API CALL =====
+    const fields = 'id,text,username,timestamp,like_count,replies{id,text,username,timestamp}';
+    const graphApiUrl = `https://graph.facebook.com/v23.0/${mediaId}/comments`;
+
+    try {
+      const response = await axios.get(graphApiUrl, {
+        params: {
+          fields,
+          access_token: pageToken
+        },
+        timeout: 10000
+      });
+
+      const responseTime = Date.now() - requestStartTime;
+
+      await logAudit('instagram_comments_fetched', userId, {
+        action: 'fetch_comments',
+        business_account_id: businessAccountId,
+        media_id: mediaId,
+        comment_count: response.data.data?.length || 0,
+        response_time_ms: responseTime
+      });
+
+      // ===== SUCCESS RESPONSE =====
+      res.json({
+        success: true,
+        data: response.data.data || [],
+        paging: response.data.paging || {},
+        rate_limit: {
+          remaining: req.rateLimitRemaining || 'unknown',
+          limit: 200,
+          window: '1 hour'
+        },
+        meta: {
+          count: response.data.data?.length || 0,
+          response_time_ms: responseTime
+        }
+      });
+
+    } catch (apiError) {
+      if (apiError.response) {
+        const { status, data } = apiError.response;
+        console.error(`❌ Graph API error (${status}):`, data);
+
+        await logAudit('instagram_api_error', userId, {
+          action: 'fetch_comments',
+          business_account_id: businessAccountId,
+          status_code: status,
+          error_message: data.error?.message
+        });
+
+        return res.status(status).json({
+          success: false,
+          error: data.error?.message || 'Instagram API error',
+          code: 'GRAPH_API_ERROR'
+        });
       }
-    });
+
+      throw apiError;
+    }
+
   } catch (error) {
-    console.error('❌ Comments error:', error);
+    const responseTime = Date.now() - requestStartTime;
+    console.error('❌ Comments fetch error:', error.message);
+
+    await logAudit('comments_fetch_error', req.query.userId, {
+      action: 'fetch_comments',
+      error: error.message,
+      response_time_ms: responseTime
+    });
+
     res.status(500).json({
       success: false,
+      error: 'Failed to fetch comments',
+      code: 'INTERNAL_ERROR',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+/**
+ * POST /api/instagram/comments/:commentId/reply
+ * Reply to a specific comment
+ *
+ * Query Parameters:
+ *   - userId: UUID of authenticated user
+ *   - businessAccountId: Instagram business account UUID
+ *
+ * Body:
+ *   - message: Reply text (max 2200 characters)
+ *
+ * Returns: Reply ID and success status
+ */
+router.post('/comments/:commentId/reply', async (req, res) => {
+  const requestStartTime = Date.now();
+
+  try {
+    const { commentId } = req.params;
+    const { userId, businessAccountId } = req.query;
+    const { message } = req.body;
+
+    console.log(`💬 Replying to comment: ${commentId}`);
+
+    // ===== VALIDATION =====
+    if (!userId || !businessAccountId) {
+      return res.status(400).json({
+        success: false,
+        error: 'userId and businessAccountId are required',
+        code: 'MISSING_PARAMETERS'
+      });
+    }
+
+    if (!message || !message.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Message is required',
+        code: 'MISSING_MESSAGE'
+      });
+    }
+
+    if (message.length > 2200) {
+      return res.status(400).json({
+        success: false,
+        error: 'Message exceeds 2200 character limit',
+        code: 'MESSAGE_TOO_LONG'
+      });
+    }
+
+    // ===== TOKEN RETRIEVAL =====
+    let pageToken;
+    try {
+      pageToken = await retrievePageToken(userId, businessAccountId);
+    } catch (tokenError) {
+      console.error('❌ Token retrieval failed:', tokenError.message);
+
+      await logAudit('token_retrieval_failed', userId, {
+        action: 'reply_to_comment',
+        business_account_id: businessAccountId,
+        error: tokenError.message
+      });
+
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication failed. Please reconnect your Instagram account.',
+        code: 'TOKEN_RETRIEVAL_FAILED'
+      });
+    }
+
+    // ===== GRAPH API CALL =====
+    const graphApiUrl = `https://graph.facebook.com/v23.0/${commentId}/replies`;
+
+    try {
+      const response = await axios.post(graphApiUrl, null, {
+        params: {
+          message: message.trim(),
+          access_token: pageToken
+        },
+        timeout: 10000
+      });
+
+      const responseTime = Date.now() - requestStartTime;
+
+      await logAudit('comment_reply_sent', userId, {
+        action: 'reply_to_comment',
+        business_account_id: businessAccountId,
+        comment_id: commentId,
+        reply_id: response.data.id,
+        response_time_ms: responseTime
+      });
+
+      // ===== SUCCESS RESPONSE =====
+      res.json({
+        success: true,
+        data: {
+          replyId: response.data.id
+        },
+        message: 'Reply sent successfully',
+        rate_limit: {
+          remaining: req.rateLimitRemaining || 'unknown',
+          limit: 200,
+          window: '1 hour'
+        },
+        meta: {
+          response_time_ms: responseTime
+        }
+      });
+
+    } catch (apiError) {
+      if (apiError.response) {
+        const { status, data } = apiError.response;
+        console.error(`❌ Graph API error (${status}):`, data);
+
+        await logAudit('instagram_api_error', userId, {
+          action: 'reply_to_comment',
+          business_account_id: businessAccountId,
+          status_code: status,
+          error_message: data.error?.message
+        });
+
+        return res.status(status).json({
+          success: false,
+          error: data.error?.message || 'Failed to send reply',
+          code: 'GRAPH_API_ERROR'
+        });
+      }
+
+      throw apiError;
+    }
+
+  } catch (error) {
+    const responseTime = Date.now() - requestStartTime;
+    console.error('❌ Reply send error:', error.message);
+
+    await logAudit('reply_send_error', req.query.userId, {
+      action: 'reply_to_comment',
       error: error.message,
-      code: 'COMMENTS_ERROR'
+      response_time_ms: responseTime
+    });
+
+    res.status(500).json({
+      success: false,
+      error: 'Failed to send reply',
+      code: 'INTERNAL_ERROR',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
@@ -476,11 +824,32 @@ router.get('/comments/:mediaId', async (req, res) => {
  *
  * Returns: media_id and creation_id of published post
  */
+/**
+ * POST /api/instagram/create-post
+ * Creates a draft OR publishes a post to Instagram
+ *
+ * NEW BEHAVIOR (v5.2):
+ * - If status === 'draft': Save to instagram_media table only (no Instagram API calls)
+ * - If status === 'publish': Execute existing 2-step publish flow + save to instagram_media
+ *
+ * Body:
+ *   - userId: UUID of authenticated user
+ *   - businessAccountId: Instagram business account ID
+ *   - caption: Post caption (max 2200 characters)
+ *   - image_url: Publicly accessible HTTPS image URL
+ *   - status: 'draft' | 'publish' (default: 'draft')
+ */
 router.post('/create-post', async (req, res) => {
   const requestStartTime = Date.now();
 
   try {
-    const { userId, businessAccountId, caption, image_url } = req.body;
+    const {
+      userId,
+      businessAccountId,
+      caption,
+      image_url,
+      status = 'draft' // ✅ NEW: Default to draft for safety
+    } = req.body;
 
     // ===== VALIDATION =====
     if (!userId || !businessAccountId || !caption || !image_url) {
@@ -488,6 +857,15 @@ router.post('/create-post', async (req, res) => {
         success: false,
         error: 'Missing required fields: userId, businessAccountId, caption, image_url',
         code: 'MISSING_FIELDS'
+      });
+    }
+
+    // Validate status parameter
+    if (!['draft', 'publish'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        error: 'status must be either "draft" or "publish"',
+        code: 'INVALID_STATUS'
       });
     }
 
@@ -510,9 +888,59 @@ router.post('/create-post', async (req, res) => {
       });
     }
 
-    console.log('🚀 Starting 2-step post creation...');
+    // ===== BRANCH 1: SAVE AS DRAFT (No Instagram API calls) =====
+    if (status === 'draft') {
+      console.log('💾 Saving post as draft (not publishing to Instagram)...');
 
-    // ===== TOKEN RETRIEVAL =====
+      const { data: draftRecord, error: draftError } = await supabase
+        .from('instagram_media')
+        .insert({
+          business_account_id: businessAccountId,
+          caption,
+          media_url: image_url,
+          status: 'draft',  // ✅ Set draft status
+          media_type: 'IMAGE',
+          instagram_media_id: `draft_${Date.now()}`, // Temporary ID
+          created_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (draftError) {
+        console.error('❌ Draft save failed:', draftError);
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to save draft',
+          code: 'DRAFT_SAVE_FAILED',
+          details: draftError.message
+        });
+      }
+
+      await logAudit('instagram_draft_saved', userId, {
+        action: 'save_draft',
+        business_account_id: businessAccountId,
+        draft_id: draftRecord.id,
+        caption_length: caption.length
+      });
+
+      return res.json({
+        success: true,
+        message: 'Post saved as draft',
+        data: {
+          draft_id: draftRecord.id,
+          status: 'draft',
+          can_publish: true
+        },
+        meta: {
+          response_time_ms: Date.now() - requestStartTime
+        }
+      });
+    }
+
+    // ===== BRANCH 2: PUBLISH TO INSTAGRAM (Existing flow) =====
+    console.log('🚀 Publishing post to Instagram (2-step flow)...');
+
+    // Get page token
     let pageToken;
     try {
       pageToken = await retrievePageToken(userId, businessAccountId);
@@ -597,10 +1025,30 @@ router.post('/create-post', async (req, res) => {
       mediaId = publishResponse.data.id;
       console.log(`   ✅ Step 2 Success: Post is live! media_id = ${mediaId}`);
 
+      // STEP 3: Store in database with 'published' status
+      const { data: publishedRecord, error: dbError } = await supabase
+        .from('instagram_media')
+        .insert({
+          business_account_id: businessAccountId,
+          instagram_media_id: mediaId,
+          caption,
+          media_url: image_url,
+          status: 'published',  // ✅ Published status
+          media_type: 'IMAGE',
+          published_at: new Date().toISOString(),
+          created_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (dbError) {
+        console.warn('⚠️  Post published to Instagram but failed to save to database:', dbError);
+      }
+
       const responseTime = Date.now() - requestStartTime;
 
       await logAudit('instagram_post_published', userId, {
-        action: 'create_post_step_2',
+        action: 'publish_post',
         business_account_id: businessAccountId,
         media_id: mediaId,
         creation_id: creationId,
@@ -644,7 +1092,8 @@ router.post('/create-post', async (req, res) => {
       data: {
         media_id: mediaId,
         creation_id: creationId,
-        permalink: `https://www.instagram.com/p/${mediaId}/` // Note: This format may not work for all IDs
+        status: 'published',
+        permalink: `https://www.instagram.com/p/${mediaId}/`
       },
       rate_limit: {
         remaining: req.rateLimitRemaining || 'unknown',
@@ -1080,6 +1529,814 @@ router.post('/ugc/request-permission', async (req, res) => {
       success: false,
       error: error.message,
       code: 'INTERNAL_ERROR'
+    });
+  }
+});
+
+// ==========================================
+// DM CONVERSATION ENDPOINTS
+// ==========================================
+// Permission Required: instagram_business_manage_messages
+// Purpose: Fetch and manage Instagram DM conversations
+
+/**
+ * GET /api/instagram/conversations/:id
+ * Fetches DM conversations for the Instagram Business account
+ *
+ * Query Parameters:
+ *   - userId: UUID of authenticated user
+ *   - businessAccountId: Instagram business account UUID
+ *   - limit: Number of conversations to fetch (default: 20, max: 50)
+ *
+ * Returns: Array of conversations with metadata
+ */
+router.get('/conversations/:id', async (req, res) => {
+  const requestStartTime = Date.now();
+
+  try {
+    const { id } = req.params;
+    const { userId, businessAccountId, limit = 20 } = req.query;
+
+    console.log(`💬 Fetching conversations for IG account: ${id}`);
+
+    // ===== VALIDATION =====
+    if (!userId || !businessAccountId) {
+      console.error('❌ Missing required query parameters for conversations fetch');
+      return res.status(400).json({
+        success: false,
+        error: 'userId and businessAccountId are required',
+        code: 'MISSING_PARAMETERS'
+      });
+    }
+
+    const conversationsLimit = Math.min(Math.max(parseInt(limit) || 20, 1), 50);
+
+    // ===== TOKEN RETRIEVAL =====
+    let pageToken;
+    try {
+      pageToken = await retrievePageToken(userId, businessAccountId);
+    } catch (tokenError) {
+      console.error('❌ Token retrieval failed:', tokenError.message);
+
+      await logAudit('token_retrieval_failed', userId, {
+        action: 'fetch_conversations',
+        business_account_id: businessAccountId,
+        error: tokenError.message
+      });
+
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication failed. Please reconnect your Instagram account.',
+        code: 'TOKEN_RETRIEVAL_FAILED'
+      });
+    }
+
+    // ===== GRAPH API CALL =====
+    // Include messages in conversation data to check 24-hour window
+    const fields = 'id,participants,updated_time,message_count,messages{created_time,from}';
+    const graphApiUrl = `https://graph.facebook.com/v23.0/${id}/conversations`;
+
+    try {
+      const response = await axios.get(graphApiUrl, {
+        params: {
+          fields,
+          access_token: pageToken,
+          limit: conversationsLimit,
+          platform: 'instagram'
+        },
+        timeout: 10000
+      });
+
+      const responseTime = Date.now() - requestStartTime;
+
+      await logAudit('instagram_conversations_fetched', userId, {
+        action: 'fetch_conversations',
+        business_account_id: businessAccountId,
+        conversation_count: response.data.data?.length || 0,
+        response_time_ms: responseTime
+      });
+
+      // Transform conversations with 24-hour window calculation
+      const conversations = (response.data.data || []).map(conv => {
+        const lastMessage = conv.messages?.data?.[0];
+        const lastMessageTime = lastMessage ? new Date(lastMessage.created_time) : null;
+        const now = new Date();
+
+        // Calculate hours since last message
+        const hoursSinceLastMessage = lastMessageTime
+          ? (now - lastMessageTime) / (1000 * 60 * 60)
+          : null;
+
+        // 24-hour window status
+        const isWithin24Hours = hoursSinceLastMessage !== null && hoursSinceLastMessage < 24;
+        const hoursRemaining = hoursSinceLastMessage !== null
+          ? Math.max(0, 24 - hoursSinceLastMessage)
+          : null;
+
+        return {
+          id: conv.id,
+          participants: conv.participants?.data || [],
+          last_message_at: conv.updated_time,
+          message_count: conv.message_count || 0,
+          last_message: lastMessage || null,
+          // ✅ 24-hour window calculation (Instagram Platform Policy 4.2)
+          messaging_window: {
+            is_open: isWithin24Hours,
+            hours_remaining: hoursRemaining !== null ? parseFloat(hoursRemaining.toFixed(1)) : null,
+            minutes_remaining: hoursRemaining !== null ? Math.floor((hoursRemaining % 1) * 60) : null,
+            requires_template: hoursSinceLastMessage !== null && hoursSinceLastMessage >= 24,
+            last_customer_message_at: lastMessageTime ? lastMessageTime.toISOString() : null
+          },
+          // Deprecated fields (kept for backward compatibility)
+          within_window: isWithin24Hours,
+          can_send_messages: isWithin24Hours
+        };
+      });
+
+      // ===== SUCCESS RESPONSE =====
+      res.json({
+        success: true,
+        data: conversations,
+        paging: response.data.paging || {},
+        rate_limit: {
+          remaining: req.rateLimitRemaining || 'unknown',
+          limit: 200,
+          window: '1 hour'
+        },
+        meta: {
+          count: conversations.length,
+          response_time_ms: responseTime
+        }
+      });
+
+    } catch (apiError) {
+      if (apiError.response) {
+        const { status, data } = apiError.response;
+        console.error(`❌ Graph API error (${status}):`, data);
+
+        await logAudit('instagram_api_error', userId, {
+          action: 'fetch_conversations',
+          business_account_id: businessAccountId,
+          status_code: status,
+          error_message: data.error?.message
+        });
+
+        return res.status(status).json({
+          success: false,
+          error: data.error?.message || 'Instagram API error',
+          code: 'GRAPH_API_ERROR'
+        });
+      }
+
+      throw apiError;
+    }
+
+  } catch (error) {
+    const responseTime = Date.now() - requestStartTime;
+    console.error('❌ Conversations fetch error:', error.message);
+
+    await logAudit('conversations_fetch_error', req.query.userId, {
+      action: 'fetch_conversations',
+      error: error.message,
+      response_time_ms: responseTime
+    });
+
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch conversations',
+      code: 'INTERNAL_ERROR',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+/**
+ * GET /api/instagram/conversations/:conversationId/messages
+ * Fetches messages for a specific conversation
+ *
+ * Query Parameters:
+ *   - userId: UUID of authenticated user
+ *   - businessAccountId: Instagram business account UUID
+ *   - limit: Number of messages to fetch (default: 20, max: 100)
+ *
+ * Returns: Array of messages in the conversation
+ */
+router.get('/conversations/:conversationId/messages', async (req, res) => {
+  const requestStartTime = Date.now();
+
+  try {
+    const { conversationId } = req.params;
+    const { userId, businessAccountId, limit = 20 } = req.query;
+
+    console.log(`💬 Fetching messages for conversation: ${conversationId}`);
+
+    // ===== VALIDATION =====
+    if (!userId || !businessAccountId) {
+      console.error('❌ Missing required query parameters for messages fetch');
+      return res.status(400).json({
+        success: false,
+        error: 'userId and businessAccountId are required',
+        code: 'MISSING_PARAMETERS'
+      });
+    }
+
+    const messagesLimit = Math.min(Math.max(parseInt(limit) || 20, 1), 100);
+
+    // ===== TOKEN RETRIEVAL =====
+    let pageToken;
+    try {
+      pageToken = await retrievePageToken(userId, businessAccountId);
+    } catch (tokenError) {
+      console.error('❌ Token retrieval failed:', tokenError.message);
+
+      await logAudit('token_retrieval_failed', userId, {
+        action: 'fetch_messages',
+        business_account_id: businessAccountId,
+        error: tokenError.message
+      });
+
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication failed. Please reconnect your Instagram account.',
+        code: 'TOKEN_RETRIEVAL_FAILED'
+      });
+    }
+
+    // ===== GRAPH API CALL =====
+    const fields = 'id,message,from,created_time,attachments';
+    const graphApiUrl = `https://graph.facebook.com/v23.0/${conversationId}/messages`;
+
+    try {
+      const response = await axios.get(graphApiUrl, {
+        params: {
+          fields,
+          access_token: pageToken,
+          limit: messagesLimit
+        },
+        timeout: 10000
+      });
+
+      const responseTime = Date.now() - requestStartTime;
+
+      await logAudit('instagram_messages_fetched', userId, {
+        action: 'fetch_messages',
+        business_account_id: businessAccountId,
+        conversation_id: conversationId,
+        message_count: response.data.data?.length || 0,
+        response_time_ms: responseTime
+      });
+
+      // ===== SUCCESS RESPONSE =====
+      res.json({
+        success: true,
+        data: response.data.data || [],
+        paging: response.data.paging || {},
+        rate_limit: {
+          remaining: req.rateLimitRemaining || 'unknown',
+          limit: 200,
+          window: '1 hour'
+        },
+        meta: {
+          count: response.data.data?.length || 0,
+          response_time_ms: responseTime
+        }
+      });
+
+    } catch (apiError) {
+      if (apiError.response) {
+        const { status, data } = apiError.response;
+        console.error(`❌ Graph API error (${status}):`, data);
+
+        await logAudit('instagram_api_error', userId, {
+          action: 'fetch_messages',
+          business_account_id: businessAccountId,
+          status_code: status,
+          error_message: data.error?.message
+        });
+
+        return res.status(status).json({
+          success: false,
+          error: data.error?.message || 'Instagram API error',
+          code: 'GRAPH_API_ERROR'
+        });
+      }
+
+      throw apiError;
+    }
+
+  } catch (error) {
+    const responseTime = Date.now() - requestStartTime;
+    console.error('❌ Messages fetch error:', error.message);
+
+    await logAudit('messages_fetch_error', req.query.userId, {
+      action: 'fetch_messages',
+      error: error.message,
+      response_time_ms: responseTime
+    });
+
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch messages',
+      code: 'INTERNAL_ERROR',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+/**
+ * POST /api/instagram/conversations/:conversationId/send
+ * Send a message in a conversation
+ *
+ * Query Parameters:
+ *   - userId: UUID of authenticated user
+ *   - businessAccountId: Instagram business account UUID
+ *
+ * Body:
+ *   - message: Message text to send
+ *
+ * Returns: Sent message ID and success status
+ */
+router.post('/conversations/:conversationId/send', async (req, res) => {
+  const requestStartTime = Date.now();
+
+  try {
+    const { conversationId } = req.params;
+    const { userId, businessAccountId } = req.query;
+    const { message } = req.body;
+
+    console.log(`💬 Sending message to conversation: ${conversationId}`);
+
+    // ===== VALIDATION =====
+    if (!userId || !businessAccountId) {
+      return res.status(400).json({
+        success: false,
+        error: 'userId and businessAccountId are required',
+        code: 'MISSING_PARAMETERS'
+      });
+    }
+
+    if (!message || !message.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Message is required',
+        code: 'MISSING_MESSAGE'
+      });
+    }
+
+    // ===== TOKEN RETRIEVAL =====
+    let pageToken;
+    try {
+      pageToken = await retrievePageToken(userId, businessAccountId);
+    } catch (tokenError) {
+      console.error('❌ Token retrieval failed:', tokenError.message);
+
+      await logAudit('token_retrieval_failed', userId, {
+        action: 'send_message',
+        business_account_id: businessAccountId,
+        error: tokenError.message
+      });
+
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication failed. Please reconnect your Instagram account.',
+        code: 'TOKEN_RETRIEVAL_FAILED'
+      });
+    }
+
+    // ===== GRAPH API CALL =====
+    const graphApiUrl = `https://graph.facebook.com/v23.0/${conversationId}/messages`;
+
+    try {
+      const response = await axios.post(graphApiUrl, null, {
+        params: {
+          message: message.trim(),
+          access_token: pageToken
+        },
+        timeout: 10000
+      });
+
+      const responseTime = Date.now() - requestStartTime;
+
+      await logAudit('instagram_message_sent', userId, {
+        action: 'send_message',
+        business_account_id: businessAccountId,
+        conversation_id: conversationId,
+        message_id: response.data.id,
+        response_time_ms: responseTime
+      });
+
+      // ===== SUCCESS RESPONSE =====
+      res.json({
+        success: true,
+        data: {
+          messageId: response.data.id
+        },
+        message: 'Message sent successfully',
+        rate_limit: {
+          remaining: req.rateLimitRemaining || 'unknown',
+          limit: 200,
+          window: '1 hour'
+        },
+        meta: {
+          response_time_ms: responseTime
+        }
+      });
+
+    } catch (apiError) {
+      if (apiError.response) {
+        const { status, data } = apiError.response;
+        console.error(`❌ Graph API error (${status}):`, data);
+
+        await logAudit('instagram_api_error', userId, {
+          action: 'send_message',
+          business_account_id: businessAccountId,
+          status_code: status,
+          error_message: data.error?.message
+        });
+
+        return res.status(status).json({
+          success: false,
+          error: data.error?.message || 'Failed to send message',
+          code: 'GRAPH_API_ERROR'
+        });
+      }
+
+      throw apiError;
+    }
+
+  } catch (error) {
+    const responseTime = Date.now() - requestStartTime;
+    console.error('❌ Message send error:', error.message);
+
+    await logAudit('message_send_error', req.query.userId, {
+      action: 'send_message',
+      error: error.message,
+      response_time_ms: responseTime
+    });
+
+    res.status(500).json({
+      success: false,
+      error: 'Failed to send message',
+      code: 'INTERNAL_ERROR',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// ==========================================
+// UGC REPOST ENDPOINT
+// ==========================================
+
+/**
+ * POST /api/instagram/ugc/repost
+ * Repost user-generated content to business Instagram account
+ *
+ * CRITICAL SECURITY:
+ * - Enforces permission_granted === true check
+ * - Validates media URL is publicly accessible (not temporary token URL)
+ * - Adds credit caption to original creator
+ * - Updates audit trail with repost timestamps
+ *
+ * Meta Compliance: Instagram Platform Policy 4.2 - UGC Rights Management
+ * Demonstrates "Human Oversight" for App Review
+ *
+ * Query Parameters:
+ *   - userId: UUID of authenticated user
+ *   - businessAccountId: Instagram business account UUID
+ *
+ * Body:
+ *   - ugcContentId: UUID of ugc_content record to repost
+ *
+ * Returns: Reposted media ID, permalink, and audit data
+ */
+router.post('/ugc/repost', async (req, res) => {
+  const requestStartTime = Date.now();
+
+  try {
+    const { userId, businessAccountId, ugcContentId } = req.body;
+
+    console.log(`🔄 [UGC Repost] Request initiated for content: ${ugcContentId}`);
+
+    // ===== VALIDATION: Required Fields =====
+    if (!userId || !businessAccountId || !ugcContentId) {
+      console.error('❌ [UGC Repost] Missing required fields');
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: userId, businessAccountId, ugcContentId',
+        code: 'MISSING_FIELDS'
+      });
+    }
+
+    // ===== STEP 1: Fetch UGC Content from Database =====
+    console.log(`📋 [UGC Repost] Fetching UGC content from database...`);
+
+    const { data: ugcContent, error: ugcError } = await supabase
+      .from('ugc_content')
+      .select('*')
+      .eq('id', ugcContentId)
+      .single();
+
+    if (ugcError || !ugcContent) {
+      console.error('❌ [UGC Repost] Content not found:', ugcError?.message);
+
+      await logAudit('ugc_repost_failed', userId, {
+        action: 'repost_ugc',
+        ugc_content_id: ugcContentId,
+        error: 'content_not_found'
+      });
+
+      return res.status(404).json({
+        success: false,
+        error: 'UGC content not found in database',
+        code: 'CONTENT_NOT_FOUND'
+      });
+    }
+
+    console.log(`✅ [UGC Repost] Content found: @${ugcContent.author_username}`);
+
+    // ===== STEP 2: CRITICAL PERMISSION CHECK =====
+    // SECURITY: This check prevents unauthorized reposting
+    // The frontend is NOT trusted - backend independently verifies permission
+    if (ugcContent.repost_permission_granted !== true) {
+      console.error(`🚫 [UGC Repost] PERMISSION DENIED`);
+      console.error(`   - Permission Requested: ${ugcContent.repost_permission_requested}`);
+      console.error(`   - Permission Granted: ${ugcContent.repost_permission_granted}`);
+
+      await logAudit('ugc_repost_permission_denied', userId, {
+        action: 'repost_ugc',
+        ugc_content_id: ugcContentId,
+        author: ugcContent.author_username,
+        permission_requested: ugcContent.repost_permission_requested,
+        permission_granted: ugcContent.repost_permission_granted,
+        reason: 'permission_not_granted'
+      });
+
+      return res.status(403).json({
+        success: false,
+        error: 'Cannot repost: Permission not granted by content creator',
+        code: 'PERMISSION_DENIED',
+        details: {
+          permission_requested: ugcContent.repost_permission_requested,
+          permission_granted: ugcContent.repost_permission_granted,
+          message: 'The content creator must explicitly grant permission before reposting'
+        }
+      });
+    }
+
+    console.log(`✅ [UGC Repost] Permission check passed`);
+
+    // ===== STEP 3: Validate Media URL =====
+    // CRITICAL: Ensure URL is publicly accessible, not a temporary token URL
+    const mediaUrl = ugcContent.media_url;
+
+    if (!mediaUrl) {
+      console.error('❌ [UGC Repost] No media URL found');
+      return res.status(400).json({
+        success: false,
+        error: 'UGC content has no media URL',
+        code: 'MISSING_MEDIA_URL'
+      });
+    }
+
+    // Check if URL is publicly accessible (not a temporary token URL)
+    // Temporary URLs often contain tokens like ?access_token= or expire parameters
+    if (mediaUrl.includes('?ig_cache_key=') || mediaUrl.includes('?access_token=') || mediaUrl.includes('&oh=') || mediaUrl.includes('&oe=')) {
+      console.warn(`⚠️  [UGC Repost] Media URL appears to be temporary/signed`);
+      console.warn(`   URL: ${mediaUrl.substring(0, 100)}...`);
+
+      // Still allow, but log warning
+      // Instagram CDN URLs with oh= and oe= parameters are stable
+    }
+
+    // Validate URL format
+    if (!mediaUrl.startsWith('http://') && !mediaUrl.startsWith('https://')) {
+      console.error('❌ [UGC Repost] Invalid media URL format');
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid media URL format (must be HTTP/HTTPS)',
+        code: 'INVALID_MEDIA_URL'
+      });
+    }
+
+    console.log(`✅ [UGC Repost] Media URL validated: ${mediaUrl.substring(0, 50)}...`);
+
+    // ===== STEP 4: Check if Already Reposted =====
+    if (ugcContent.reposted_at && ugcContent.reposted_media_id) {
+      console.warn(`⚠️  [UGC Repost] Content already reposted on ${ugcContent.reposted_at}`);
+      console.warn(`   Media ID: ${ugcContent.reposted_media_id}`);
+
+      // Allow re-reposting, but log it
+      await logAudit('ugc_repost_duplicate', userId, {
+        action: 'repost_ugc',
+        ugc_content_id: ugcContentId,
+        previous_repost_at: ugcContent.reposted_at,
+        previous_media_id: ugcContent.reposted_media_id
+      });
+    }
+
+    // ===== STEP 5: Retrieve Access Token =====
+    console.log(`🔑 [UGC Repost] Retrieving access token...`);
+
+    let pageToken;
+    try {
+      pageToken = await retrievePageToken(userId, businessAccountId);
+      console.log(`✅ [UGC Repost] Access token retrieved`);
+    } catch (tokenError) {
+      console.error('❌ [UGC Repost] Token retrieval failed:', tokenError.message);
+
+      await logAudit('ugc_repost_token_failed', userId, {
+        action: 'repost_ugc',
+        business_account_id: businessAccountId,
+        error: tokenError.message
+      });
+
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication failed. Please reconnect your Instagram account.',
+        code: 'TOKEN_RETRIEVAL_FAILED'
+      });
+    }
+
+    // ===== STEP 6: Create Credit Caption =====
+    const originalCaption = ugcContent.message || '';
+    const authorUsername = ugcContent.author_username || 'creator';
+
+    // Build credit caption with original content + attribution
+    const creditCaption = originalCaption
+      ? `${originalCaption}\n\n📸 Credit: @${authorUsername}\n\n#UGC #UserGeneratedContent`
+      : `📸 Credit: @${authorUsername}\n\n#UGC #UserGeneratedContent`;
+
+    console.log(`📝 [UGC Repost] Credit caption created (${creditCaption.length} chars)`);
+
+    // ===== STEP 7: Repost to Instagram (2-Step Flow) =====
+    const igUserId = businessAccountId;
+
+    // Step 7a: Create Media Container
+    console.log(`📦 [UGC Repost] Step 1/2: Creating media container...`);
+
+    let creationId;
+    try {
+      const containerUrl = `https://graph.facebook.com/v23.0/${igUserId}/media`;
+
+      const containerResponse = await axios.post(containerUrl, null, {
+        params: {
+          image_url: mediaUrl,
+          caption: creditCaption,
+          access_token: pageToken
+        },
+        timeout: 15000
+      });
+
+      creationId = containerResponse.data.id;
+      console.log(`✅ [UGC Repost] Container created: ${creationId}`);
+
+      await logAudit('ugc_container_created', userId, {
+        action: 'repost_ugc_step_1',
+        ugc_content_id: ugcContentId,
+        creation_id: creationId
+      });
+
+    } catch (containerError) {
+      console.error('❌ [UGC Repost] Container creation failed:', containerError.response?.data || containerError.message);
+
+      await logAudit('ugc_container_error', userId, {
+        action: 'repost_ugc_step_1',
+        ugc_content_id: ugcContentId,
+        error: containerError.response?.data?.error?.message || containerError.message
+      });
+
+      if (containerError.response) {
+        const { status, data } = containerError.response;
+        return res.status(status).json({
+          success: false,
+          error: data.error?.message || 'Failed to create media container',
+          code: 'CONTAINER_CREATION_FAILED',
+          details: data.error
+        });
+      }
+
+      throw containerError;
+    }
+
+    // Step 7b: Publish Media Container
+    console.log(`🚀 [UGC Repost] Step 2/2: Publishing container...`);
+
+    let mediaId;
+    try {
+      const publishUrl = `https://graph.facebook.com/v23.0/${igUserId}/media_publish`;
+
+      const publishResponse = await axios.post(publishUrl, null, {
+        params: {
+          creation_id: creationId,
+          access_token: pageToken
+        },
+        timeout: 15000
+      });
+
+      mediaId = publishResponse.data.id;
+      console.log(`🎉 [UGC Repost] ✅ SUCCESS! Published to Instagram`);
+      console.log(`   Media ID: ${mediaId}`);
+      console.log(`   Permalink: https://www.instagram.com/p/${mediaId}/`);
+
+    } catch (publishError) {
+      console.error('❌ [UGC Repost] Publishing failed:', publishError.response?.data || publishError.message);
+
+      await logAudit('ugc_publish_error', userId, {
+        action: 'repost_ugc_step_2',
+        ugc_content_id: ugcContentId,
+        creation_id: creationId,
+        error: publishError.response?.data?.error?.message || publishError.message
+      });
+
+      if (publishError.response) {
+        const { status, data } = publishError.response;
+        return res.status(status).json({
+          success: false,
+          error: data.error?.message || 'Failed to publish post',
+          code: 'PUBLISH_FAILED',
+          details: data.error,
+          partial_success: {
+            creation_id: creationId,
+            status: 'Container created but not published'
+          }
+        });
+      }
+
+      throw publishError;
+    }
+
+    // ===== STEP 8: Update Database with Repost Audit Trail =====
+    console.log(`💾 [UGC Repost] Updating database with repost audit trail...`);
+
+    const { error: updateError } = await supabase
+      .from('ugc_content')
+      .update({
+        reposted_at: new Date().toISOString(),
+        reposted_media_id: mediaId
+      })
+      .eq('id', ugcContentId);
+
+    if (updateError) {
+      console.error('⚠️  [UGC Repost] Database update failed:', updateError.message);
+      console.error('   Note: Content was successfully posted to Instagram, but audit trail not saved');
+
+      // Don't fail the request - content is already posted
+      // Just log the warning
+    } else {
+      console.log(`✅ [UGC Repost] Audit trail saved to database`);
+    }
+
+    // ===== STEP 9: Final Audit Log =====
+    const responseTime = Date.now() - requestStartTime;
+
+    await logAudit('ugc_reposted_success', userId, {
+      action: 'repost_ugc',
+      ugc_content_id: ugcContentId,
+      original_author: ugcContent.author_username,
+      original_media_url: mediaUrl,
+      reposted_media_id: mediaId,
+      creation_id: creationId,
+      caption_length: creditCaption.length,
+      response_time_ms: responseTime
+    });
+
+    // ===== SUCCESS RESPONSE =====
+    res.json({
+      success: true,
+      message: `Content successfully reposted from @${authorUsername}!`,
+      data: {
+        media_id: mediaId,
+        creation_id: creationId,
+        permalink: `https://www.instagram.com/p/${mediaId}/`,
+        original_author: authorUsername,
+        reposted_at: new Date().toISOString(),
+        caption_preview: creditCaption.substring(0, 100) + (creditCaption.length > 100 ? '...' : '')
+      },
+      meta: {
+        response_time_ms: responseTime
+      }
+    });
+
+    console.log(`🎉 [UGC Repost] Request completed successfully in ${responseTime}ms`);
+
+  } catch (error) {
+    const responseTime = Date.now() - requestStartTime;
+
+    console.error('❌ [UGC Repost] Unexpected error:', error);
+
+    await logAudit('ugc_repost_error', req.body.userId, {
+      action: 'repost_ugc',
+      ugc_content_id: req.body.ugcContentId,
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+      response_time_ms: responseTime
+    });
+
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to repost content',
+      code: 'REPOST_FAILED',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });

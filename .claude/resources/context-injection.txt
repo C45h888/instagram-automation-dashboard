@@ -1,0 +1,73 @@
+CONTEXT INJECTION: Refactoring Remediation Plan v5 (Phase 4)
+Objective: Refactor Phase 4 (Trust & Safety) of the "Meta App Review Remediation Plan v5" to align with the existing database schema. The current plan proposes creating unnecessary new tables, while the actual database structure supports a cleaner integration.
+
+1. 🔴 Discrepancy: Drafts Storage Strategy
+The Conflict: The plan suggests creating a new table scheduled_posts, but the codebase already has a robust instagram_media table that should be used for both drafts and published posts.
+
+Current Plan v5 (Incorrect Instruction):
+
+"Backend Update: Save to database without publishing. await supabase.from('scheduled_posts').insert(...)"
+
+Actual Database Schema (src/lib/database.types.ts):
+
+TypeScript
+
+instagram_media: {
+  Row: {
+    id: string
+    business_account_id: string
+    caption: string | null
+    media_url: string | null
+    // ... missing 'status' column
+  }
+}
+Required Refactor: Do NOT create a scheduled_posts table. Instead, modify the Phase 4.1 instructions to:
+
+Add a status column to the instagram_media table (enum: 'draft', 'scheduled', 'published').
+
+Update the create-post logic to insert into instagram_media with status: 'draft' when saving.
+
+2. 🔴 Discrepancy: Publishing Logic (Draft vs. Immediate)
+The Conflict: The plan implies a separate draft workflow, but the backend endpoint is currently hardcoded for immediate publishing.
+
+Current Backend Code (backend.api/routes/instagram-api.js):
+
+JavaScript
+
+router.post('/create-post', async (req, res) => {
+  // ...
+  // STEP 1: Create Media Container
+  const containerResponse = await axios.post(containerUrl...);
+  // STEP 2: Publish Container (IMMEDIATELY)
+  const publishResponse = await axios.post(publishUrl...);
+});
+Required Refactor: Update the Phase 4.1 instructions to explicitly modify this endpoint:
+
+"Modify POST /create-post to accept a status parameter. If status === 'draft', bypass the Instagram API calls entirely and only insert a record into the instagram_media table. If status === 'publish', proceed with the existing Graph API logic."
+
+3. 🟡 Discrepancy: UGC Rights Enforcement
+The Conflict: The plan treats rights management as a new feature to build, but the database already supports it. The plan should focus on frontend enforcement rather than backend creation.
+
+Actual Database Schema (src/lib/database.types.ts):
+
+TypeScript
+
+ugc_content: {
+  Row: {
+    repost_permission_granted: boolean | null
+    repost_permission_requested: boolean | null
+    // ... other fields
+  }
+}
+Required Refactor: Update Phase 4.3 instructions to focus solely on the Frontend:
+
+"In VisitorPostCard.tsx, disable the 'Repost' button logic if post.repost_permission_granted is false. Do not create new backend tables for this; use the existing ugc_content columns."
+
+✅ Success Criteria for Refactored Plan
+The updated Phase 4 instructions must:
+
+Target the instagram_media table (updating schema), not a new table.
+
+Explicitly describe the conditional logic in the create-post endpoint (Draft = DB only; Publish = API).
+
+Leverage the existing ugc_content columns for rights management.
