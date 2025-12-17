@@ -443,14 +443,13 @@ const Login: React.FC = () => {
       const scopes = [
         // Core Instagram permissions
         'instagram_basic',
-        'instagram_manage_comments',
         'instagram_manage_insights',
-        'instagram_business_manage_messages',
-
-        // Page permissions
-        'pages_show_list',           // ✅ Gets Pages + instagram_business_account
-        'pages_read_engagement',     // ✅ Read comments
-        'pages_read_user_content'    // ✅ UGC/visitor posts
+        'instagram_manage_messages',
+        'instagram_content_publish',
+        'instagram_manage_comments',
+        'pages_show_list',
+        'pages_read_engagement',
+        'public_profile'    
       ];
 
       // ============================================
