@@ -24,6 +24,7 @@ interface User {
   id: string;
   username: string;
   email?: string;
+  facebook_id?: string;
   avatarUrl?: string;
   permissions: string[];
   role?: 'user' | 'admin' | 'super_admin';
@@ -199,18 +200,19 @@ const mapToUser = (
   adminProfile?: AdminUser | null
 ): User | null => {
   if (!supabaseUser) return null;
-  
+
   const email = profile?.email || supabaseUser.email || undefined;
-  const username = profile?.username || 
+  const username = profile?.username ||
                   (adminProfile?.full_name ? formatUsername(adminProfile.full_name) : null) ||
                   getUsernameFromEmail(email);
-  
+
   return {
     id: supabaseUser.id,
     username,
     email,
+    facebook_id: profile?.facebook_id || undefined,
     avatarUrl: profile?.avatar_url || undefined,
-    permissions: adminProfile 
+    permissions: adminProfile
       ? getPermissions(adminProfile.permissions)
       : ['dashboard', 'content', 'engagement', 'analytics', 'settings'],
     role: adminProfile?.role || profile?.user_role || 'user',

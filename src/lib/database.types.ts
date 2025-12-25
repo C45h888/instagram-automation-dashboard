@@ -900,7 +900,7 @@ export type Database = {
           reach: number | null
           scheduled_for: string | null
           shares_count: number | null
-          status: 'draft' | 'scheduled' | 'published'
+          status: string
           thumbnail_url: string | null
           updated_at: string | null
         }
@@ -923,7 +923,7 @@ export type Database = {
           reach?: number | null
           scheduled_for?: string | null
           shares_count?: number | null
-          status?: 'draft' | 'scheduled' | 'published'
+          status?: string
           thumbnail_url?: string | null
           updated_at?: string | null
         }
@@ -946,7 +946,7 @@ export type Database = {
           reach?: number | null
           scheduled_for?: string | null
           shares_count?: number | null
-          status?: 'draft' | 'scheduled' | 'published'
+          status?: string
           thumbnail_url?: string | null
           updated_at?: string | null
         }
@@ -1339,6 +1339,7 @@ export type Database = {
           company_size: string | null
           created_at: string | null
           email: string | null
+          facebook_id: string | null
           full_name: string | null
           id: string
           industry: string | null
@@ -1366,6 +1367,7 @@ export type Database = {
           company_size?: string | null
           created_at?: string | null
           email?: string | null
+          facebook_id?: string | null
           full_name?: string | null
           id?: string
           industry?: string | null
@@ -1393,6 +1395,7 @@ export type Database = {
           company_size?: string | null
           created_at?: string | null
           email?: string | null
+          facebook_id?: string | null
           full_name?: string | null
           id?: string
           industry?: string | null
@@ -1531,6 +1534,7 @@ export type Database = {
           success: boolean
         }[]
       }
+      current_user_uuid: { Args: never; Returns: string }
       decrypt_instagram_token: {
         Args: { encrypted_token: string }
         Returns: string
@@ -1657,6 +1661,7 @@ export type Database = {
           missing_consents: string[]
         }[]
       }
+      is_admin_user: { Args: { check_user_id: string }; Returns: boolean }
       record_consent: {
         Args: {
           p_browser_language?: string

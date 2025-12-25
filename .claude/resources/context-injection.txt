@@ -1,310 +1,437 @@
-# 🔍 REAL DATA AUDIT REPORT
-## 888 Intelligence Automation - Meta App Review Readiness
-**Audit Date:** December 15, 2025  
-**Purpose:** Verify code logic exists to pull real Instagram data from admin account  
-**Goal:** Maximize chances of Meta App Review approval
-
----
-
-## 📊 EXECUTIVE SUMMARY
-
-| Category | Status | Impact on Approval |
-|----------|--------|-------------------|
-| **OAuth & Token Flow** | ✅ Implemented | Ready |
-| **Backend API Endpoints** | ⚠️ Partial | **BLOCKER** |
-| **Frontend Hooks** | ✅ Updated | Ready |
-| **Data Sync Pipeline** | ❌ Missing | **CRITICAL BLOCKER** |
-| **API Version Consistency** | ⚠️ Mixed | Medium Risk |
-| **Token Refresh Logic** | ✅ Implemented | Ready |
-
-**Overall Verdict:** 🔴 **NOT READY** - Critical gaps will cause rejection
-
----
-
-## ✅ WHAT EXISTS (Implemented & Working)
-
-### 1. OAuth & Authentication Flow
-- ✅ Facebook SDK integration in `Login.tsx`
-- ✅ Token exchange: short-lived → long-lived (60 days)
-- ✅ Token storage with encryption in Supabase
-- ✅ `useInstagramAccount` hook to retrieve businessAccountId
-- ✅ Token retrieval service (`instagram-tokens.js`)
-
-### 2. Backend API Endpoints (Exist but need migration)
-| Endpoint | Status | Notes |
-|----------|--------|-------|
-| `GET /api/instagram/media/:accountId` | ✅ | Uses v23.0, real data |
-| `GET /api/instagram/profile/:id` | ✅ | Uses v23.0, real data |
-| `GET /api/instagram/comments/:mediaId` | ✅ | Uses v23.0, real data |
-| `GET /api/instagram/visitor-posts` | ⚠️ **WRONG API** | Uses Facebook Page API, NOT Instagram |
-| `GET /api/instagram/conversations` | ❓ Needs verification | May not exist |
-| `POST /api/instagram/create-post` | ✅ | Draft + publish workflow |
-| `PATCH /api/instagram/ugc/:postId/feature` | ✅ | Works |
-| `POST /api/instagram/ugc/:ugcContentId/repost` | ✅ | Works |
-
-### 3. Frontend Hooks (Updated for Real API)
-- ✅ `useContentAnalytics.ts` - Calls `/api/instagram/media`
-- ✅ `useVisitorPosts.ts` - Calls `/api/instagram/visitor-posts`
-- ✅ `useInstagramProfile.ts` - Calls `/api/instagram/profile`
-- ✅ `useDMInbox.ts` - Calls `/api/instagram/conversations`
-- ✅ `useComments.ts` - Calls `/api/instagram/comments`
-
-### 4. Token Refresh Service
-- ✅ `src/services/tokenRefreshService.ts` exists
-- ✅ Automatic refresh 7 days before expiration
-- ✅ Manual refresh function
-- ✅ Background interval job
-
-### 5. Trust & Safety Features
-- ✅ Draft workflow (status column in `instagram_media`)
-- ✅ UGC permission columns exist (`repost_permission_granted`, `repost_permission_requested`)
-- ✅ 24-hour messaging window calculation in DM endpoints
-
----
-
-## ❌ CRITICAL GAPS (Must Fix Before Resubmission)
-
-### 🔴 GAP 1: Visitor Posts Uses WRONG API Endpoint
-**Severity:** P0 - REJECTION GUARANTEED  
-**File:** `backend.api/routes/instagram-api.js`  
-**Current Code:**
-```javascript
-const metaUrl = new URL(`https://graph.facebook.com/v20.0/${pageId}/visitor_posts`);
-```
-
-**Problem:** Uses Facebook Page API (`/{page-id}/visitor_posts`) instead of Instagram API (`/{ig-user-id}/tags`)
-
-**This is the "Identity Crisis" that caused your rejection!**
-
-**Required Fix:**
-```javascript
-// ✅ CORRECT - Instagram Tags API
-const graphUrl = `https://graph.facebook.com/v23.0/${igUserId}/tags`;
-```
-
-**Permission Required:** `instagram_basic` (NOT `pages_read_user_content`)
-
----
-
-### 🔴 GAP 2: Missing Data Sync Service (Phase 4.5)
-**Severity:** P0 - CRITICAL  
-**Missing Files:**
-- `backend.api/services/instagram-sync.js` - **DOES NOT EXIST**
-
-**Missing Endpoints:**
-- `POST /api/instagram/sync/ugc` - **DOES NOT EXIST**
-- `POST /api/instagram/sync/posts` - **DOES NOT EXIST**
-
-**Impact:** 
-- Dashboard shows empty/stale data
-- UGC Manager has no mechanism to populate `ugc_content` table
-- Meta reviewer will see blank screens = REJECTION
-
-**What Needs to Be Created:**
-```javascript
-// POST /api/instagram/sync/ugc
-// 1. Fetch tagged posts from /{ig-user-id}/tags
-// 2. UPSERT into ugc_content table
-// 3. Preserve existing permission states
-// 4. Return sync results
-
-// POST /api/instagram/sync/posts  
-// 1. Fetch business media from /{ig-user-id}/media
-// 2. UPSERT into instagram_media table
-// 3. Return sync results
-```
+CONTEXT INJECTION: System Diagnosis & Schema Repair Strategy
+1. SYSTEM HEALTH STATE
+Infrastructure: ✅ ONLINE.
 
----
-
-### 🔴 GAP 3: CDN Link Rot Not Handled
-**Severity:** P1 - Will cause broken images after 3-5 days  
-**File:** `backend.api/routes/instagram-api.js`
+Evidence: Server logs show consistent successful responses on /webhook/realtime-updates (Latency: ~3ms).
 
-**Current UPSERT Logic:**
-```javascript
-await supabase
-  .from('ugc_content')
-  .upsert({...}, {
-    onConflict: 'business_account_id,visitor_post_id'
-  })
-```
+Database: ❌ CRITICAL FAILURE.
 
-**Problem:** Need to verify `media_url` is ALWAYS updated, not just on new records.
+Evidence: Insert operations fail due to Type Mismatch.
 
-**Required Fix:**
-- Ensure `ignoreDuplicates: false` (always update existing)
-- Explicitly include `media_url` and `thumbnail_url` in update fields
-- Preserve `repost_permission_granted` from existing records
+Application Logic: ❌ PARTIAL FAILURE.
 
----
+Evidence: Token Exchange route returns empty response body on failure.
 
-### 🟡 GAP 4: Graph API Version Inconsistency
-**Severity:** P2 - Medium risk  
-**Files:** Multiple backend files
+2. THE CORE PROBLEM (The "Square Peg" Issue)
+The application utilizes Facebook Login, which returns a Numeric String ID (e.g., "12209809..."). However, the Supabase Database Schema strictly enforces UUID types on user_id columns.
 
-**Current State:**
-| File Location | Version Used |
-|---------------|--------------|
-| visitor-posts endpoint | v20.0 |
-| media endpoint | v23.0 |
-| profile endpoint | v23.0 |
-| comments endpoint | v23.0 |
+The Failure Chain:
 
-**Required:** Standardize ALL endpoints to **v23.0**
+Auth: User logs in via Facebook (Success).
 
----
+Insert: Backend tries to save Consent/Token data.
 
-### 🟡 GAP 5: DM Conversations Endpoint Uncertain
-**Severity:** P2 - May cause DM feature to fail  
-**File:** `backend.api/routes/instagram-api.js`
+Crash: Database rejects "122098..." because it is not a valid UUID (a0ee-bc99...).
 
-**Need to Verify:**
-- Does `GET /api/instagram/conversations` endpoint exist?
-- Does it use Instagram Conversations API correctly?
-- Does it include 24-hour window calculation?
+Ripple Effect: The failure triggers a backend exception that isn't caught properly, resulting in a blank response to the frontend.
 
-**Expected Endpoint:**
-```javascript
-GET https://graph.facebook.com/v23.0/{ig-user-id}/conversations?platform=instagram
-```
+3. DIAGNOSTIC LOGS (Technical Evidence)
+A. Server Health (It is Alive):
 
----
+Plaintext
 
-### 🟡 GAP 6: Token Refresh Backend Endpoint
-**Severity:** P2 - Tokens will expire after 60 days  
-**File:** `backend.api/routes/instagram-api.js`
+2025-12-18T16:32:42Z [GET /webhook/realtime-updates] responseTimeMS=3
+2025-12-18T16:32:45Z [GET /webhook/realtime-updates] responseTimeMS=3
+# The server is processing generic requests successfully.
+B. Database Failure (The Smoking Gun):
 
-**Frontend service exists (`tokenRefreshService.ts`) but calls:**
-```javascript
-fetch(`${backendUrl}/api/instagram/refresh-token`, {...})
-```
+Plaintext
 
-**Need to Verify:** Does this endpoint exist in the backend?
+ERROR: invalid input syntax for type uuid: "122098096448937004"
+STATEMENT: INSERT INTO "public"."user_consents" ...
+C. RLS Failure (The Infinite Loop):
 
----
+Plaintext
 
-## 📋 REMEDIATION CHECKLIST
-
-### Priority 0 (Do First - Blockers)
-
-- [ ] **Migrate visitor-posts from Facebook Page API to Instagram Tags API**
-  - Change `/{page-id}/visitor_posts` → `/{ig-user-id}/tags`
-  - Update permission from `pages_read_user_content` to `instagram_basic`
-  - Update field mappings (`username` instead of `from.username`)
-
-- [ ] **Create Instagram Sync Service**
-  - Create `backend.api/services/instagram-sync.js`
-  - Add `POST /api/instagram/sync/ugc` endpoint
-  - Add `POST /api/instagram/sync/posts` endpoint
-  - Include CDN link rot fix (always update media_url)
-
-- [ ] **Update Frontend to Trigger Sync**
-  - Modify `UGCManagement.tsx` to call `/sync/ugc` on mount
-  - Modify `Dashboard.tsx` to call `/sync/posts` on mount
-
-### Priority 1 (Required for Approval)
-
-- [ ] **Standardize Graph API Version**
-  - Update ALL endpoints to v23.0
-  - Grep and replace: `v20.0` → `v23.0`, `v21.0` → `v23.0`
-
-- [ ] **Verify DM Conversations Endpoint**
-  - Confirm endpoint exists and works
-  - Test 24-hour window calculation
-
-- [ ] **Verify Token Refresh Backend Endpoint**
-  - Confirm `POST /api/instagram/refresh-token` exists
-  - Test token refresh flow end-to-end
-
-### Priority 2 (Nice to Have)
-
-- [ ] **Add Video Thumbnail Handling**
-  - Use `thumbnail_url` for VIDEO posts in frontend
-  - Prevent broken image icons
-
-- [ ] **Add Error Boundary Components**
-  - Graceful fallback when API fails
-  - User-friendly error messages
-
----
-
-## 🎯 VERIFICATION COMMANDS
-
-After implementing fixes, run these to verify:
-
-```bash
-# 1. Test visitor-posts endpoint (should use /tags API now)
-curl "http://localhost:3001/api/instagram/visitor-posts?businessAccountId=YOUR_UUID"
-# Expected: Returns tagged posts with real usernames from Instagram
-
-# 2. Test sync endpoint (new)
-curl -X POST "http://localhost:3001/api/instagram/sync/ugc" \
-  -H "Content-Type: application/json" \
-  -d '{"businessAccountId":"YOUR_UUID"}'
-# Expected: { success: true, synced_count: X }
-
-# 3. Verify database has real data
-psql $DATABASE_URL -c "SELECT author_username, media_url FROM ugc_content LIMIT 5;"
-# Expected: Real Instagram usernames and working media URLs
-
-# 4. Test token refresh
-curl -X POST "http://localhost:3001/api/instagram/refresh-token" \
-  -H "Content-Type: application/json" \
-  -d '{"userId":"YOUR_UUID","businessAccountId":"YOUR_UUID"}'
-# Expected: { success: true, expires_in_days: 60 }
-
-# 5. Check Graph API versions
-grep -rn "graph.facebook.com/v" backend.api/
-# Expected: ALL should show v23.0
-```
-
----
-
-## 📈 APPROVAL PROBABILITY ANALYSIS
-
-| Scenario | Probability |
-|----------|-------------|
-| **Current State (with gaps)** | 🔴 **5%** - Guaranteed rejection |
-| **After fixing GAP 1 only** | 🟡 **35%** - Still missing sync |
-| **After fixing GAP 1 + GAP 2** | 🟢 **70%** - Functional but risky |
-| **After fixing ALL gaps** | 🟢 **85%** - Production ready |
-
----
-
-## 📝 ADD TO current-work.md
-
-```markdown
-## Phase 4.5 Audit Results - December 15, 2025
-
-### Critical Blockers Identified
-1. ❌ visitor-posts endpoint uses WRONG API (Facebook Page instead of Instagram Tags)
-2. ❌ Data Sync Service missing entirely (instagram-sync.js doesn't exist)
-3. ⚠️ CDN Link Rot not handled (media URLs expire after 3-5 days)
-
-### Immediate Action Required
-1. Migrate `/api/instagram/visitor-posts` from `/{page-id}/visitor_posts` to `/{ig-user-id}/tags`
-2. Create `backend.api/services/instagram-sync.js` with UPSERT logic
-3. Add `POST /api/instagram/sync/ugc` and `POST /api/instagram/sync/posts` endpoints
-4. Update frontend pages to call sync endpoints on mount
-5. Standardize all Graph API calls to v23.0
-
-### Files to Create
-- `backend.api/services/instagram-sync.js` (NEW)
-
-### Files to Modify
-- `backend.api/routes/instagram-api.js` (visitor-posts endpoint + add sync routes)
-- `src/pages/UGCManagement.tsx` (trigger sync on mount)
-- `src/pages/Dashboard.tsx` (trigger sync on mount)
-
-### Estimated Time
-- GAP 1 (API Migration): 2 hours
-- GAP 2 (Sync Service): 4 hours  
-- GAP 3-6 (Minor fixes): 2 hours
-- Total: ~8 hours
-```
-
----
-
-**Report Generated:** December 15, 2025  
-**Auditor:** Claude (Codebase Analysis)  
-**Next Review:** After GAP fixes implemented
+ERROR: infinite recursion detected in policy for relation "user_profiles"
+DETAIL: Policy "Admins can access all profiles" queries "user_profiles" recursively.
+4. THE HIDDEN DEPENDENCY (Critical Context)
+Previous migration attempts failed because of a Hidden Foreign Key.
+
+Table: instagram_dm_conversations
+
+Column: customer_user_id (or user_id)
+
+Constraint: References user_profiles(user_id)
+
+Issue: This table locks user_profiles, preventing us from changing user_id to TEXT.
+
+5. IMPLEMENTATION STRATEGY (The Fix)
+Objective: Safely alter the schema to accept Facebook IDs (TEXT) and fix the RLS Recursion.
+
+Execution Steps (via Supabase MCP):
+
+Dependency Removal (The Nuclear Option):
+
+We must DROP the Foreign Key constraint on instagram_dm_conversations explicitly.
+
+We must DROP all RLS policies on user_profiles, user_consents, and instagram_business_accounts (to break the recursion and unlock the columns).
+
+Schema Alteration:
+
+Convert user_profiles.user_id → TEXT
+
+Convert user_consents.user_id → TEXT
+
+Convert instagram_business_accounts.user_id → TEXT
+
+Convert instagram_dm_conversations.customer_user_id → TEXT
+
+RLS Restoration (The Bridge):
+
+Create simple, non-recursive policies.
+
+Constraint: Since auth.uid() (UUID) will never match user_id (Facebook String), use a permissive "Authenticated Only" policy:
+
+USING (auth.role() = 'authenticated') OR USING (true) for authenticated roles temporarily.
+
+HERE ARE THE BACKEND SERVER LOGS : 2025-12-18T16:32:03Z clientIP="49.36.8.199" requestID="a273ac6a-0b16-4005" responseTimeMS=4 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:32:03.257030915Z    CF-Country: IN
+2025-12-18T16:32:06Z clientIP="49.36.8.199" requestID="fead57da-e698-493e" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:32:06.094108225Z 📥 2025-12-18T16:32:06.093Z [0b53582d-0dbe-4602-8811-fb6731fcf3a2] GET /webhook/realtime-updates
+2025-12-18T16:32:06.094133746Z    CF-Ray: 9b000de54d2d937f-PDX
+2025-12-18T16:32:06.094137676Z    CF-Country: IN
+2025-12-18T16:32:09Z clientIP="49.36.8.199" requestID="3bba387d-5491-4a0a" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:32:09.099538039Z 📥 2025-12-18T16:32:09.099Z [2c754400-7bc0-4ad4-9c15-51b26b389e74] GET /webhook/realtime-updates
+2025-12-18T16:32:09.09956263Z    CF-Ray: 9b000df81882937f-PDX
+2025-12-18T16:32:09.09956616Z    CF-Country: IN
+2025-12-18T16:32:12Z clientIP="49.36.8.199" requestID="f395d456-9c03-4cef" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:32:12.087249731Z 📥 2025-12-18T16:32:12.087Z [324ae079-5bd1-4528-baa3-a9b9cee6ddab] GET /webhook/realtime-updates
+2025-12-18T16:32:12.087277582Z    CF-Ray: 9b000e0aba43937f-PDX
+2025-12-18T16:32:12.087283052Z    CF-Country: IN
+2025-12-18T16:32:15Z clientIP="49.36.8.199" requestID="03bae488-3a5b-4517" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:32:15.093733095Z 📥 2025-12-18T16:32:15.093Z [783ed5ad-116b-4bce-aeb0-894da249adac] GET /webhook/realtime-updates
+2025-12-18T16:32:15.093760527Z    CF-Ray: 9b000e1d7cfc937f-PDX
+2025-12-18T16:32:15.093797538Z    CF-Country: IN
+2025-12-18T16:32:18Z clientIP="49.36.8.199" requestID="b1ee30f8-f49d-4e31" responseTimeMS=1 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:32:18.080355305Z 📥 2025-12-18T16:32:18.080Z [bd79d9a0-4ffb-4394-9b95-1ad461a5164d] GET /webhook/realtime-updates
+2025-12-18T16:32:18.080381786Z    CF-Ray: 9b000e30387a937f-PDX
+2025-12-18T16:32:18.080387406Z    CF-Country: IN
+2025-12-18T16:32:21Z clientIP="49.36.8.199" requestID="bd2ec14a-9f3b-4ec5" responseTimeMS=9 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:32:21.099290988Z 📥 2025-12-18T16:32:21.099Z [2ae0b61e-1607-4280-b202-9873931dbe8c] GET /webhook/realtime-updates
+2025-12-18T16:32:21.0993332Z    CF-Ray: 9b000e430cb2937f-PDX
+2025-12-18T16:32:21.09933906Z    CF-Country: IN
+2025-12-18T16:32:24Z clientIP="49.36.8.199" requestID="3aada393-c820-4c69" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:32:24.088623207Z 📥 2025-12-18T16:32:24.088Z [b9f3effb-6adc-46ab-bca6-d3081d62a559] GET /webhook/realtime-updates
+2025-12-18T16:32:24.088654119Z    CF-Ray: 9b000e55c805937f-PDX
+2025-12-18T16:32:24.088660109Z    CF-Country: IN
+2025-12-18T16:32:27Z clientIP="49.36.8.199" requestID="d79343f4-61ba-4de6" responseTimeMS=4 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:32:27.084916471Z 📥 2025-12-18T16:32:27.084Z [e0cb8f5b-57af-4d62-aa7c-96b4d0b6f5f2] GET /webhook/realtime-updates
+2025-12-18T16:32:27.084957663Z    CF-Ray: 9b000e687ac7937f-PDX
+2025-12-18T16:32:27.084962943Z    CF-Country: IN
+2025-12-18T16:32:30Z clientIP="49.36.8.199" requestID="23e60790-901d-4173" responseTimeMS=1 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:32:30.101893459Z 📥 2025-12-18T16:32:30.101Z [05673341-abab-4448-ab42-72eb1961c464] GET /webhook/realtime-updates
+2025-12-18T16:32:30.101922951Z    CF-Ray: 9b000e7b4f0b937f-PDX
+2025-12-18T16:32:30.101928771Z    CF-Country: IN
+2025-12-18T16:32:33Z clientIP="49.36.8.199" requestID="197258a3-5d92-4003" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:32:33.234651115Z 📥 2025-12-18T16:32:33.234Z [9d4369ff-211d-4b2e-bbae-d584cbef6d25] GET /webhook/realtime-updates
+2025-12-18T16:32:33.234680466Z    CF-Ray: 9b000e8eda55937f-MAA
+2025-12-18T16:32:33.234686137Z    CF-Country: IN
+2025-12-18T16:32:36Z clientIP="49.36.8.199" requestID="e87ba951-2f55-41cc" responseTimeMS=1 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:32:36.086000119Z 📥 2025-12-18T16:32:36.085Z [4fb1c7b0-fcb8-4764-8cff-b4478eb6fdb6] GET /webhook/realtime-updates
+2025-12-18T16:32:36.08602325Z    CF-Ray: 9b000ea0ccd3937f-PDX
+2025-12-18T16:32:36.08602827Z    CF-Country: IN
+2025-12-18T16:32:39Z clientIP="49.36.8.199" requestID="c10d05b2-e4e1-4bbc" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:32:39.08204996Z 📥 2025-12-18T16:32:39.081Z [34c9f060-9871-49f3-938b-e1f3f8c5f76f] GET /webhook/realtime-updates
+2025-12-18T16:32:39.082085322Z    CF-Ray: 9b000eb37810937f-PDX
+2025-12-18T16:32:39.082096923Z    CF-Country: IN
+2025-12-18T16:32:42Z clientIP="49.36.8.199" requestID="27b869a2-4fe1-4c02" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:32:42.274422702Z 📥 2025-12-18T16:32:42.274Z [1f6b75ca-ddf6-468b-b09c-517efe2c52db] GET /webhook/realtime-updates
+2025-12-18T16:32:42.274452883Z    CF-Ray: 9b000ec76af0937f-PDX
+2025-12-18T16:32:42.274458253Z    CF-Country: IN
+2025-12-18T16:32:45Z clientIP="49.36.8.199" requestID="23a9a50d-a267-4a50" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:32:45.291374178Z 📥 2025-12-18T16:32:45.291Z [83e74861-f153-4837-b4fe-2091f69579df] GET /webhook/realtime-updates
+2025-12-18T16:32:45.291432971Z    CF-Ray: 9b000eda2fef937f-MAA
+2025-12-18T16:32:45.291636521Z    CF-Country: IN
+2025-12-18T16:32:48Z clientIP="49.36.8.199" requestID="727d50f7-5e80-4776" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:32:48.386176847Z 📥 2025-12-18T16:32:48.386Z [a62d2c0b-9811-4d50-80b9-b30b0051804d] GET /webhook/realtime-updates
+2025-12-18T16:32:48.38705415Z    CF-Ray: 9b000eedac6f937f-PDX
+2025-12-18T16:32:48.387106242Z    CF-Country: IN
+2025-12-18T16:32:51Z clientIP="49.36.8.199" requestID="dd6e7fc3-c0b9-4fa9" responseTimeMS=4 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:32:51.348802831Z 📥 2025-12-18T16:32:51.348Z [6394ceed-2cfe-4452-891f-1724ad4f69be] GET /webhook/realtime-updates
+2025-12-18T16:32:51.348843733Z    CF-Ray: 9b000eff9f80937f-PDX
+2025-12-18T16:32:51.348848234Z    CF-Country: IN
+2025-12-18T16:32:54Z clientIP="49.36.8.199" requestID="0fb441e1-ae32-461c" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:32:54.257787526Z 📥 2025-12-18T16:32:54.257Z [774fa20f-0670-4ec9-89c0-7bfdfabec98e] GET /webhook/realtime-updates
+2025-12-18T16:32:54.257814617Z    CF-Ray: 9b000f125a7e937f-PDX
+2025-12-18T16:32:54.257818868Z    CF-Country: IN
+2025-12-18T16:32:57Z clientIP="49.36.8.199" requestID="985f6a77-96fd-4749" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:32:57.250513257Z 📥 2025-12-18T16:32:57.250Z [4ecb9099-6a4a-45bc-aece-b0993de5ab00] GET /webhook/realtime-updates
+2025-12-18T16:32:57.250543858Z    CF-Ray: 9b000f251e2c937f-PDX
+2025-12-18T16:32:57.250548649Z    CF-Country: IN
+2025-12-18T16:33:00Z clientIP="49.36.8.199" requestID="93eebb36-57a7-474d" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:33:00.427917248Z 📥 2025-12-18T16:33:00.427Z [c958626e-0a8f-460e-be12-300a52114869] GET /webhook/realtime-updates
+2025-12-18T16:33:00.427946059Z    CF-Ray: 9b000f38afd1937f-PDX
+2025-12-18T16:33:00.427951539Z    CF-Country: IN
+2025-12-18T16:33:03Z clientIP="49.36.8.199" requestID="63e44836-bef4-4a51" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:33:03.39449168Z 📥 2025-12-18T16:33:03.394Z [9b148780-4d57-43cd-8d50-2596366fbd6c] GET /webhook/realtime-updates
+2025-12-18T16:33:03.394529392Z    CF-Ray: 9b000f4b6b0d937f-PDX
+2025-12-18T16:33:03.394535053Z    CF-Country: IN
+2025-12-18T16:33:06Z clientIP="49.36.8.199" requestID="ea19df35-ac2a-4850" responseTimeMS=1 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:33:06.26470121Z 📥 2025-12-18T16:33:06.264Z [d7d1de75-989e-44b9-bfce-8bd4746203a2] GET /webhook/realtime-updates
+2025-12-18T16:33:06.264731091Z    CF-Ray: 9b000f5d5d17937f-PDX
+2025-12-18T16:33:06.264738062Z    CF-Country: IN
+2025-12-18T16:33:09Z clientIP="49.36.8.199" requestID="5025908d-b502-4ce7" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:33:09.391015283Z 📥 2025-12-18T16:33:09.390Z [58dede83-1788-4054-a136-41c46c3def09] GET /webhook/realtime-updates
+2025-12-18T16:33:09.391040085Z    CF-Ray: 9b000f70e97e937f-PDX
+2025-12-18T16:33:09.391045235Z    CF-Country: IN
+2025-12-18T16:33:12Z clientIP="49.36.8.199" requestID="0190a717-f8ba-423e" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:33:12.247527834Z 📥 2025-12-18T16:33:12.247Z [54b82717-d4fe-491d-980e-ba73081bd79d] GET /webhook/realtime-updates
+2025-12-18T16:33:12.247557745Z    CF-Ray: 9b000f82db0b937f-PDX
+2025-12-18T16:33:12.247565465Z    CF-Country: IN
+2025-12-18T16:33:15Z clientIP="49.36.8.199" requestID="19c78d82-723b-4a1e" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:33:15.29092845Z 📥 2025-12-18T16:33:15.290Z [95dc273f-0b54-4975-a20e-56d0ae822f8a] GET /webhook/realtime-updates
+2025-12-18T16:33:15.290960201Z    CF-Ray: 9b000f959e9c937f-PDX
+2025-12-18T16:33:15.290966952Z    CF-Country: IN
+2025-12-18T16:33:18.264194314Z 📥 2025-12-18T16:33:18.264Z [9f16a720-8901-4f47-b806-c8d530c6be9e] GET /webhook/realtime-updates
+2025-12-18T16:33:18.264238176Z    CF-Ray: 9b000fa8599a937f-PDX
+2025-12-18T16:33:18Z clientIP="49.36.8.199" requestID="656849f2-c116-474a" responseTimeMS=1 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:33:18.264243576Z    CF-Country: IN
+2025-12-18T16:33:21Z clientIP="49.36.8.199" requestID="59a46612-e493-48e9" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:33:21.27327197Z 📥 2025-12-18T16:33:21.273Z [d7963476-c792-4774-9976-ea203688a72b] GET /webhook/realtime-updates
+2025-12-18T16:33:21.273302991Z    CF-Ray: 9b000fbb2aef937f-PDX
+2025-12-18T16:33:21.273308131Z    CF-Country: IN
+2025-12-18T16:33:24Z clientIP="49.36.8.199" requestID="39ed3902-9ee9-4c59" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:33:24.399345811Z 📥 2025-12-18T16:33:24.399Z [20b4e66f-8a72-4f6a-995e-d69d4110eb24] GET /webhook/realtime-updates
+2025-12-18T16:33:24.399394403Z    CF-Ray: 9b000fcebe9c937f-PDX
+2025-12-18T16:33:24.399400553Z    CF-Country: IN
+2025-12-18T16:33:27Z clientIP="49.36.8.199" requestID="1f5444d3-d708-41c6" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:33:27.270000381Z 📥 2025-12-18T16:33:27.269Z [6967fcb8-a171-4004-8b08-77080abd3642] GET /webhook/realtime-updates
+2025-12-18T16:33:27.270030692Z    CF-Ray: 9b000fe099c3937f-MAA
+2025-12-18T16:33:27.270037232Z    CF-Country: IN
+2025-12-18T16:33:30Z clientIP="49.36.8.199" requestID="f30cc59a-947e-4e25" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:33:30.280785528Z 📥 2025-12-18T16:33:30.277Z [e4f9b608-63f6-40a0-bb1d-44dc3e768cad] GET /webhook/realtime-updates
+2025-12-18T16:33:30.280807049Z    CF-Ray: 9b000ff36bc0937f-PDX
+2025-12-18T16:33:30.280813079Z    CF-Country: IN
+2025-12-18T16:33:33Z clientIP="49.36.8.199" requestID="cb76ff93-9c99-4d2a" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:33:33.26525625Z 📥 2025-12-18T16:33:33.265Z [8cd3a3a6-41a9-4c9b-9cba-e79088c4f5b7] GET /webhook/realtime-updates
+2025-12-18T16:33:33.265282971Z    CF-Ray: 9b0010061e29937f-PDX
+2025-12-18T16:33:33.265288451Z    CF-Country: IN
+2025-12-18T16:33:38Z clientIP="49.36.8.199" requestID="247f489c-44cb-4e2d" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:33:38.161509706Z 📥 2025-12-18T16:33:38.161Z [cfbb2aa7-5f9b-44de-866b-6f73d5e021a6] GET /webhook/realtime-updates
+2025-12-18T16:33:38.161552178Z    CF-Ray: 9b001024ac15937f-PDX
+2025-12-18T16:33:38.161556128Z    CF-Country: IN
+2025-12-18T16:33:40Z clientIP="49.36.8.199" requestID="8029751e-768b-4648" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:33:40.260195676Z 📥 2025-12-18T16:33:40.260Z [18da5e5f-67e5-4279-a3e6-907e36488016] GET /webhook/realtime-updates
+2025-12-18T16:33:40.260237769Z    CF-Ray: 9b001031d80a937f-PDX
+2025-12-18T16:33:40.260242299Z    CF-Country: IN
+2025-12-18T16:34:40Z clientIP="49.36.8.199" requestID="faf82ea6-1181-4df0" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:34:40.585814797Z 📥 2025-12-18T16:34:40.585Z [1da45b54-cd51-4c82-9f40-8a6a4dabcfc8] GET /webhook/realtime-updates
+2025-12-18T16:34:40.585839968Z    CF-Ray: 9b0011aadfe6937a-PDX
+2025-12-18T16:34:40.585845298Z    CF-Country: IN
+2025-12-18T16:35:02Z clientIP="49.36.8.199" requestID="af70057d-50b6-447e" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:35:02.295488091Z 📥 2025-12-18T16:35:02.295Z [cadd1156-3c26-4cc9-aba8-362ab2413ff8] GET /webhook/realtime-updates
+2025-12-18T16:35:02.296237207Z    CF-Ray: 9b00122f9ecb937a-MAA
+2025-12-18T16:35:02.296247337Z    CF-Country: IN
+2025-12-18T16:35:03Z clientIP="49.36.8.199" requestID="4ba708d2-2c00-4b5a" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:35:03.112057792Z 📥 2025-12-18T16:35:03.111Z [dd1ab181-c138-4966-9c1f-6beea0b97e4b] GET /webhook/realtime-updates
+2025-12-18T16:35:03.112074293Z    CF-Ray: 9b001237af38937a-PDX
+2025-12-18T16:35:03.112079333Z    CF-Country: IN
+2025-12-18T16:35:06Z clientIP="49.36.8.199" requestID="6b0dc436-ee8d-400c" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:35:06.108324357Z 📥 2025-12-18T16:35:06.108Z [15fcf26c-b5ca-42e9-8ca0-224efaeb0abb] GET /webhook/realtime-updates
+2025-12-18T16:35:06.108346608Z    CF-Ray: 9b00124a682c937a-PDX
+2025-12-18T16:35:06.108351528Z    CF-Country: IN
+2025-12-18T16:35:09Z clientIP="49.36.8.199" requestID="b1b0d6e3-2ffb-432f" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:35:09.225039862Z 📥 2025-12-18T16:35:09.224Z [efa0be6c-e9e1-4eb0-81e0-861af413e627] GET /webhook/realtime-updates
+2025-12-18T16:35:09.225069634Z    CF-Ray: 9b00125dd9c9937a-PDX
+2025-12-18T16:35:09.225074714Z    CF-Country: IN
+2025-12-18T16:35:12Z clientIP="49.36.8.199" requestID="9c085573-dc65-4525" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:35:12.224606065Z 📥 2025-12-18T16:35:12.224Z [2db462eb-6bc1-4c38-af74-2751ec047091] GET /webhook/realtime-updates
+2025-12-18T16:35:12.224628986Z    CF-Ray: 9b0012709b42937a-PDX
+2025-12-18T16:35:12.224633616Z    CF-Country: IN
+2025-12-18T16:35:15Z clientIP="49.36.8.199" requestID="1186623f-6e68-4a69" responseTimeMS=4 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:35:15.157857249Z 📥 2025-12-18T16:35:15.157Z [8bf2cb31-f921-47cc-b283-9c159fa2a39a] GET /webhook/realtime-updates
+2025-12-18T16:35:15.15787679Z    CF-Ray: 9b0012829ca3937a-PDX
+2025-12-18T16:35:15.15788157Z    CF-Country: IN
+2025-12-18T16:35:18Z clientIP="49.36.8.199" requestID="765a7c4e-b7d9-4491" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:35:18.110895644Z 📥 2025-12-18T16:35:18.110Z [beeb0ed6-84ee-4b42-8c9b-e3aa0d1ee956] GET /webhook/realtime-updates
+2025-12-18T16:35:18.110938306Z    CF-Ray: 9b0012956fa4937a-PDX
+2025-12-18T16:35:18.110944126Z    CF-Country: IN
+2025-12-18T16:35:21Z clientIP="49.36.8.199" requestID="d4857d07-e3cf-4cb0" responseTimeMS=1 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:35:21.110879937Z 📥 2025-12-18T16:35:21.110Z [b514d805-0634-42fe-aa80-dc3eda0f7a5c] GET /webhook/realtime-updates
+2025-12-18T16:35:21.110912678Z    CF-Ray: 9b0012a82b4f937a-PDX
+2025-12-18T16:35:21.110918359Z    CF-Country: IN
+2025-12-18T16:35:24Z clientIP="49.36.8.199" requestID="63c59fc0-99eb-4b38" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:35:24.174693378Z 📥 2025-12-18T16:35:24.174Z [3de7ec32-2cc3-4d12-b0cb-d7d6715164c4] GET /webhook/realtime-updates
+2025-12-18T16:35:24.174718239Z    CF-Ray: 9b0012baeb95937a-PDX
+2025-12-18T16:35:24.174721849Z    CF-Country: IN
+2025-12-18T16:35:27Z clientIP="49.36.8.199" requestID="12a6f48a-4623-40a6" responseTimeMS=4 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:35:27.105400219Z 📥 2025-12-18T16:35:27.105Z [6d047344-2add-490f-8dc3-1dfa814a8f1c] GET /webhook/realtime-updates
+2025-12-18T16:35:27.105611689Z    CF-Ray: 9b0012cd9c25937a-PDX
+2025-12-18T16:35:27.105750686Z    CF-Country: IN
+2025-12-18T16:35:30Z clientIP="49.36.8.199" requestID="21dac200-71dc-4c72" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:35:30.103818765Z 📥 2025-12-18T16:35:30.103Z [f33ccbee-97cd-4aab-9222-f36ebeb69187] GET /webhook/realtime-updates
+2025-12-18T16:35:30.103840356Z    CF-Ray: 9b0012e05c5e937a-PDX
+2025-12-18T16:35:30.103845116Z    CF-Country: IN
+2025-12-18T16:35:33Z clientIP="49.36.8.199" requestID="31c9721a-52f0-4056" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:35:33.116066367Z 📥 2025-12-18T16:35:33.115Z [9f6e7d26-3dae-465a-8ddb-01415bae1e9a] GET /webhook/realtime-updates
+2025-12-18T16:35:33.116101718Z    CF-Ray: 9b0012f32cd5937a-PDX
+2025-12-18T16:35:33.116107959Z    CF-Country: IN
+2025-12-18T16:35:36Z clientIP="49.36.8.199" requestID="2c5d2676-a9c1-4a80" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:35:36.221377132Z 📥 2025-12-18T16:35:36.221Z [524f1702-0a5b-41df-81a6-65d14632cab7] GET /webhook/realtime-updates
+2025-12-18T16:35:36.221579772Z    CF-Ray: 9b0013069eef937a-PDX
+2025-12-18T16:35:36.222122868Z    CF-Country: IN
+2025-12-18T16:35:39Z clientIP="49.36.8.199" requestID="183e783d-d983-4720" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:35:39.126558635Z 📥 2025-12-18T16:35:39.126Z [78fc2f3f-6bdb-468c-8ae8-cfba96953dea] GET /webhook/realtime-updates
+2025-12-18T16:35:39.126585347Z    CF-Ray: 9b001318a895937a-PDX
+2025-12-18T16:35:39.126590837Z    CF-Country: IN
+2025-12-18T16:35:42Z clientIP="49.36.8.199" requestID="c08ea69b-e831-4680" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:35:42.113950182Z 📥 2025-12-18T16:35:42.113Z [9a31dbd8-564d-47ab-aa7a-829927ec5a56] GET /webhook/realtime-updates
+2025-12-18T16:35:42.113981523Z    CF-Ray: 9b00132b6961937a-PDX
+2025-12-18T16:35:42.113986843Z    CF-Country: IN
+2025-12-18T16:35:45Z clientIP="49.36.8.199" requestID="4da3d57b-9da1-4a2b" responseTimeMS=96 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:35:45.20143366Z 📥 2025-12-18T16:35:45.201Z [2e4eb5d5-327c-45f8-929d-9f1eb3d19618] GET /webhook/realtime-updates
+2025-12-18T16:35:45.201464452Z    CF-Ray: 9b00133e1a81937a-PDX
+2025-12-18T16:35:45.201470052Z    CF-Country: IN
+2025-12-18T16:35:48.107609171Z 📥 2025-12-18T16:35:48.107Z [bc14d464-188a-41c9-b745-a609ef999b2b] GET /webhook/realtime-updates
+2025-12-18T16:35:48.107642743Z    CF-Ray: 9b001350db1f937a-PDX
+2025-12-18T16:35:48Z clientIP="49.36.8.199" requestID="d83dc17d-b579-4b3a" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:35:48.107651363Z    CF-Country: IN
+2025-12-18T16:35:51Z clientIP="49.36.8.199" requestID="0cb0a334-6151-4dc9" responseTimeMS=4 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:35:51.21862199Z 📥 2025-12-18T16:35:51.218Z [c12d8373-862c-4e6f-9d0b-57f60dc77589] GET /webhook/realtime-updates
+2025-12-18T16:35:51.218653142Z    CF-Ray: 9b0013644d5e937a-PDX
+2025-12-18T16:35:51.218659752Z    CF-Country: IN
+2025-12-18T16:35:54Z clientIP="49.36.8.199" requestID="c7184ee9-b269-48c1" responseTimeMS=4 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:35:54.219093494Z 📥 2025-12-18T16:35:54.218Z [8a4d6a31-597e-47fd-9a40-0d2da218f23a] GET /webhook/realtime-updates
+2025-12-18T16:35:54.219120526Z    CF-Ray: 9b0013770e0c937a-PDX
+2025-12-18T16:35:54.219140876Z    CF-Country: IN
+2025-12-18T16:35:57Z clientIP="49.36.8.199" requestID="65297c03-a279-4158" responseTimeMS=5 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:35:57.114532288Z 📥 2025-12-18T16:35:57.113Z [5671bda4-044a-4344-9b61-6246eda24ef7] GET /webhook/realtime-updates
+2025-12-18T16:35:57.11457711Z    CF-Ray: 9b0013892f87937a-PDX
+2025-12-18T16:35:57.11458327Z    CF-Country: IN
+2025-12-18T16:36:00Z clientIP="49.36.8.199" requestID="4495208e-8533-4d47" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:36:00.103441506Z 📥 2025-12-18T16:36:00.103Z [1a30ea6f-a215-4d91-8733-ad05af911732] GET /webhook/realtime-updates
+2025-12-18T16:36:00.103489258Z    CF-Ray: 9b00139bda22937a-PDX
+2025-12-18T16:36:00.103608614Z    CF-Country: IN
+2025-12-18T16:36:03Z clientIP="49.36.8.199" requestID="fc868801-6734-4ee7" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:36:03.11140969Z 📥 2025-12-18T16:36:03.110Z [bc1f8c19-5b51-4be6-b1ce-e664d1b1973d] GET /webhook/realtime-updates
+2025-12-18T16:36:03.111454672Z    CF-Ray: 9b0013ae9a99937a-PDX
+2025-12-18T16:36:03.111460032Z    CF-Country: IN
+2025-12-18T16:36:06Z clientIP="49.36.8.199" requestID="cbf85adf-6c4d-4a33" responseTimeMS=4 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:36:06.110074398Z 📥 2025-12-18T16:36:06.109Z [dda52e54-1dbe-49e4-82ee-b05649e4010c] GET /webhook/realtime-updates
+2025-12-18T16:36:06.110658816Z    CF-Ray: 9b0013c15bc0937a-PDX
+2025-12-18T16:36:06.110812084Z    CF-Country: IN
+2025-12-18T16:36:09Z clientIP="49.36.8.199" requestID="bdc2565d-0010-4b50" responseTimeMS=1 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:36:09.286805946Z 📥 2025-12-18T16:36:09.286Z [b34582d0-6ac0-4e22-8e43-2269ab06069f] GET /webhook/realtime-updates
+2025-12-18T16:36:09.286832377Z    CF-Ray: 9b0013d54d73937a-PDX
+2025-12-18T16:36:09.286837878Z    CF-Country: IN
+2025-12-18T16:36:12Z clientIP="49.36.8.199" requestID="7503634e-cff3-40ff" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:36:12.116489298Z 📥 2025-12-18T16:36:12.114Z [47ec0142-7044-430a-9eb6-914ad6919b6a] GET /webhook/realtime-updates
+2025-12-18T16:36:12.1165264Z    CF-Ray: 9b0013e6ec3d937a-PDX
+2025-12-18T16:36:12.11653194Z    CF-Country: IN
+2025-12-18T16:36:15Z clientIP="49.36.8.199" requestID="85ca3b1a-941b-434b" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:36:15.749519714Z 📥 2025-12-18T16:36:15.749Z [f7e32c8c-5b5f-4c05-b2bf-38546c0a4f5b] GET /webhook/realtime-updates
+2025-12-18T16:36:15.749555616Z    CF-Ray: 9b0013fa9f53937a-MAA
+2025-12-18T16:36:15.749561636Z    CF-Country: IN
+2025-12-18T16:36:18Z clientIP="49.36.8.199" requestID="16c451a3-c550-4c1a" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:36:18.11175106Z 📥 2025-12-18T16:36:18.111Z [b04b5a5a-1807-4df9-b0c2-5ec9e26541b4] GET /webhook/realtime-updates
+2025-12-18T16:36:18.111816803Z    CF-Ray: 9b00140c5816937a-MAA
+2025-12-18T16:36:18.111826784Z    CF-Country: IN
+2025-12-18T16:36:21Z clientIP="49.36.8.199" requestID="d418b70b-fd83-479d" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:36:21.577478563Z 📥 2025-12-18T16:36:21.577Z [abb95fbb-a0a2-4c54-9eaf-d083c5582b07] GET /webhook/realtime-updates
+2025-12-18T16:36:21.577499844Z    CF-Ray: 9b0014220b4f937a-MAA
+2025-12-18T16:36:21.577516494Z    CF-Country: IN
+2025-12-18T16:36:24Z clientIP="49.36.8.199" requestID="07a8b885-6dc6-454f" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:36:24.543660716Z 📥 2025-12-18T16:36:24.543Z [ecf58e19-6d38-4339-a865-c83c454b2232] GET /webhook/realtime-updates
+2025-12-18T16:36:24.543686598Z    CF-Ray: 9b0014349be1937a-MAA
+2025-12-18T16:36:24.543691258Z    CF-Country: IN
+2025-12-18T16:36:27Z clientIP="49.36.8.199" requestID="ed5e1735-5a0d-4a27" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:36:27.256115281Z 📥 2025-12-18T16:36:27.255Z [ee268c2d-55da-417d-a458-0212e4b6c685] GET /webhook/realtime-updates
+2025-12-18T16:36:27.256147813Z    CF-Ray: 9b0014457cd8937a-PDX
+2025-12-18T16:36:27.256153273Z    CF-Country: IN
+2025-12-18T16:36:30Z clientIP="49.36.8.199" requestID="d9a9496d-bc45-43a6" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:36:30.236799162Z 📥 2025-12-18T16:36:30.236Z [ece59d73-147f-4e47-b2b6-ee687d6b5977] GET /webhook/realtime-updates
+2025-12-18T16:36:30.236823553Z    CF-Ray: 9b0014583eee937a-PDX
+2025-12-18T16:36:30.236827093Z    CF-Country: IN
+2025-12-18T16:36:33Z clientIP="49.36.8.199" requestID="04cb4c75-608c-4b5d" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:36:33.106264675Z 📥 2025-12-18T16:36:33.106Z [68093aba-2a1e-48dd-9ccd-561a0006472f] GET /webhook/realtime-updates
+2025-12-18T16:36:33.106285776Z    CF-Ray: 9b00146a197b937a-PDX
+2025-12-18T16:36:33.106291727Z    CF-Country: IN
+2025-12-18T16:36:36Z clientIP="49.36.8.199" requestID="de1712c6-369e-460e" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:36:36.129087852Z 📥 2025-12-18T16:36:36.128Z [f8361b8e-ed42-4c72-a4d2-baaf56a7e5b3] GET /webhook/realtime-updates
+2025-12-18T16:36:36.129119463Z    CF-Ray: 9b00147cea72937a-PDX
+2025-12-18T16:36:36.129126293Z    CF-Country: IN
+2025-12-18T16:36:39Z clientIP="49.36.8.199" requestID="1b27f9eb-7ba4-4666" responseTimeMS=4 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:36:39.88510026Z 📥 2025-12-18T16:36:39.884Z [afdc292e-2949-4787-bd70-c317dd738d1c] GET /webhook/realtime-updates
+2025-12-18T16:36:39.885127391Z    CF-Ray: 9b00149478e2937a-PDX
+2025-12-18T16:36:39.885133111Z    CF-Country: IN
+2025-12-18T16:36:42Z clientIP="49.36.8.199" requestID="616000a8-2be2-460d" responseTimeMS=5 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:36:42.265848535Z 📥 2025-12-18T16:36:42.264Z [b0d67bb5-d784-484d-8d2b-489706bca615] GET /webhook/realtime-updates
+2025-12-18T16:36:42.265875717Z    CF-Ray: 9b0014a37efd937a-PDX
+2025-12-18T16:36:42.265880797Z    CF-Country: IN
+2025-12-18T16:36:45Z clientIP="49.36.8.199" requestID="ee5620e1-3cd9-484f" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:36:45.286046695Z 📥 2025-12-18T16:36:45.285Z [2cda4c86-d809-443d-bb84-7a05e46083b5] GET /webhook/realtime-updates
+2025-12-18T16:36:45.286132039Z    CF-Ray: 9b0014b63f29937a-PDX
+2025-12-18T16:36:45.28613991Z    CF-Country: IN
+2025-12-18T16:36:48Z clientIP="49.36.8.199" requestID="ca73df52-a1cd-46a7" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:36:48.295982011Z 📥 2025-12-18T16:36:48.294Z [81adada9-3b04-4d14-a528-9babe80258c1] GET /webhook/realtime-updates
+2025-12-18T16:36:48.296024953Z    CF-Ray: 9b0014c8fa45937a-PDX
+2025-12-18T16:36:48.296030093Z    CF-Country: IN
+2025-12-18T16:36:51Z clientIP="49.36.8.199" requestID="ff1993a4-87ec-4a18" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:36:51.285603011Z 📥 2025-12-18T16:36:51.285Z [64739346-d2a9-4341-8e43-285c48bbd85f] GET /webhook/realtime-updates
+2025-12-18T16:36:51.285637772Z    CF-Ray: 9b0014dbbc66937a-PDX
+2025-12-18T16:36:51.285644183Z    CF-Country: IN
+2025-12-18T16:36:54Z clientIP="49.36.8.199" requestID="4f69b730-b0ea-4607" responseTimeMS=4 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:36:54.286571406Z 📥 2025-12-18T16:36:54.285Z [7773af90-486d-488d-b25e-cc1a5f29466b] GET /webhook/realtime-updates
+2025-12-18T16:36:54.286615178Z    CF-Ray: 9b0014ee7de6937a-PDX
+2025-12-18T16:36:54.286621528Z    CF-Country: IN
+2025-12-18T16:36:57Z clientIP="49.36.8.199" requestID="bae93279-4951-4fdb" responseTimeMS=4 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:36:57.285335674Z 📥 2025-12-18T16:36:57.285Z [d280f600-9ec0-43bb-b0e9-443349ea27e4] GET /webhook/realtime-updates
+2025-12-18T16:36:57.285382047Z    CF-Ray: 9b0015013f27937a-MAA
+2025-12-18T16:36:57.285388067Z    CF-Country: IN
+2025-12-18T16:37:00Z clientIP="49.36.8.199" requestID="d03c9154-9588-4a97" responseTimeMS=6 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:37:00.271671326Z 📥 2025-12-18T16:37:00.271Z [e9bb9cbd-0ca1-431d-bdc7-8582832d4d1e] GET /webhook/realtime-updates
+2025-12-18T16:37:00.273054752Z    CF-Ray: 9b001513fff7937a-PDX
+2025-12-18T16:37:00.276169682Z    CF-Country: IN
+2025-12-18T16:37:03.284632497Z 📥 2025-12-18T16:37:03.284Z [021005d7-f16d-4a11-a52d-f54a89710b54] GET /webhook/realtime-updates
+2025-12-18T16:37:03.284654748Z    CF-Ray: 9b001526ca5c937a-PDX
+2025-12-18T16:37:03Z clientIP="49.36.8.199" requestID="df05f301-3b37-42d3" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:37:03.284659898Z    CF-Country: IN
+2025-12-18T16:37:06Z clientIP="49.36.8.199" requestID="639f489c-e30a-4b82" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:37:06.294733Z 📥 2025-12-18T16:37:06.294Z [858380d0-91a2-43b7-bb17-4c9667c39591] GET /webhook/realtime-updates
+2025-12-18T16:37:06.294755171Z    CF-Ray: 9b0015397b7e937a-MAA
+2025-12-18T16:37:06.294760561Z    CF-Country: IN
+2025-12-18T16:37:09Z clientIP="49.36.8.199" requestID="578376ea-d4ba-49ce" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:37:09.276696616Z 📥 2025-12-18T16:37:09.276Z [2c527c6c-d8b3-4027-815e-15837c4897c4] GET /webhook/realtime-updates
+2025-12-18T16:37:09.276753108Z    CF-Ray: 9b00154c3d89937a-PDX
+2025-12-18T16:37:09.276757089Z    CF-Country: IN
+2025-12-18T16:37:12Z clientIP="49.36.8.199" requestID="12a5880f-59e3-482b" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:37:12.282909966Z 📥 2025-12-18T16:37:12.282Z [b376bb9b-b890-4ca1-a592-cfdffbf5e126] GET /webhook/realtime-updates
+2025-12-18T16:37:12.283062694Z    CF-Ray: 9b00155ef88a937a-MAA
+2025-12-18T16:37:12.283595019Z    CF-Country: IN
+2025-12-18T16:37:15Z clientIP="49.36.8.199" requestID="bff2420c-d0b1-45a8" responseTimeMS=1 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:37:15.295394529Z 📥 2025-12-18T16:37:15.295Z [a86f07a7-e67f-4560-a28d-6c5ab1612799] GET /webhook/realtime-updates
+2025-12-18T16:37:15.29541811Z    CF-Ray: 9b001571b967937a-PDX
+2025-12-18T16:37:15.29542153Z    CF-Country: IN
+2025-12-18T16:37:18Z clientIP="49.36.8.199" requestID="35583764-87bf-4977" responseTimeMS=6 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:37:18.418895595Z 📥 2025-12-18T16:37:18.418Z [9f5a381d-83b6-4ebf-834c-7cd275ac40c8] GET /webhook/realtime-updates
+2025-12-18T16:37:18.418931777Z    CF-Ray: 9b0015854c60937a-PDX
+2025-12-18T16:37:18.418936827Z    CF-Country: IN
+2025-12-18T16:37:21Z clientIP="49.36.8.199" requestID="ee15af3c-de4b-485b" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:37:21.291007228Z 📥 2025-12-18T16:37:21.290Z [6ea50246-946f-4184-af15-e31f9c01103b] GET /webhook/realtime-updates
+2025-12-18T16:37:21.291046229Z    CF-Ray: 9b0015974c7e937a-PDX
+2025-12-18T16:37:21.291050199Z    CF-Country: IN
+2025-12-18T16:37:24Z clientIP="49.36.8.199" requestID="89f93433-cb3c-4dea" responseTimeMS=4 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:37:24.287805193Z 📥 2025-12-18T16:37:24.287Z [bc52e82c-bb99-48f3-aa31-cd33b99fa5ca] GET /webhook/realtime-updates
+2025-12-18T16:37:24.287837644Z    CF-Ray: 9b0015a9ff28937a-PDX
+2025-12-18T16:37:24.287842924Z    CF-Country: IN
+2025-12-18T16:37:27Z clientIP="49.36.8.199" requestID="ef0faad0-46c6-4dcc" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:37:27.288211401Z 📥 2025-12-18T16:37:27.288Z [fea8a290-2ed8-4a20-a18a-869d15ea9434] GET /webhook/realtime-updates
+2025-12-18T16:37:27.288235973Z    CF-Ray: 9b0015bcc85f937a-PDX
+2025-12-18T16:37:27.288239923Z    CF-Country: IN
+2025-12-18T16:37:30Z clientIP="49.36.8.199" requestID="f21463f4-eb25-4220" responseTimeMS=6 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:37:30.293087085Z 📥 2025-12-18T16:37:30.292Z [b17d2ed3-510a-4826-9ed6-06bb1c7f8cf4] GET /webhook/realtime-updates
+2025-12-18T16:37:30.293127497Z    CF-Ray: 9b0015cf7870937a-MAA
+2025-12-18T16:37:30.293131927Z    CF-Country: IN
+2025-12-18T16:37:33Z clientIP="49.36.8.199" requestID="2fe0eda8-ec14-48c8" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:37:33.288713942Z 📥 2025-12-18T16:37:33.288Z [aa73d5a3-1e10-4fef-bbda-79788d18459f] GET /webhook/realtime-updates
+2025-12-18T16:37:33.288743974Z    CF-Ray: 9b0015e23860937a-PDX
+2025-12-18T16:37:33.288747504Z    CF-Country: IN
+2025-12-18T16:37:36Z clientIP="49.36.8.199" requestID="e84afddd-e5a5-40cc" responseTimeMS=4 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:37:36.288596355Z 📥 2025-12-18T16:37:36.288Z [55edc48e-7d1a-423b-ac83-5c3b7f59f887] GET /webhook/realtime-updates
+2025-12-18T16:37:36.288618606Z    CF-Ray: 9b0015f50a09937a-PDX
+2025-12-18T16:37:36.288623836Z    CF-Country: IN
+2025-12-18T16:37:39Z clientIP="49.36.8.199" requestID="c55f25f1-5109-48ce" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
+2025-12-18T16:37:39.28437888Z 📥 2025-12-18T16:37:39.284Z [16167a14-73cf-43a4-9492-8a7587d2a9e1] GET /webhook/realtime-updates
+2025-12-18T16:37:39.284410501Z    CF-Ray: 9b001607bb4c937a-PDX
+2025-12-18T16:37:39.284417282Z    CF-Country: IN

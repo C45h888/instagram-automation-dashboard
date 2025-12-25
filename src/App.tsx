@@ -13,7 +13,7 @@ import RequireAuth from './components/layout/RequireAuth';
 
 // Keep Login eager - it's the entry point for unauthenticated users
 import Login from './pages/Login';
-import AuthCallback from './pages/AuthCallback';
+import FacebookCallback from './pages/FacebookCallback';
 
 // ==========================================
 // LAZY IMPORTS (Load on-demand)
@@ -326,10 +326,10 @@ function App() {
             
             {/* ==========================================
                 PUBLIC AUTHENTICATION ROUTES
-                Login is eager, AdminLogin and AuthCallback are lazy/eager
+                Login is eager, AdminLogin and FacebookCallback are lazy/eager
                 ========================================== */}
             <Route path="/login" element={<Login />} />
-            <Route path="/auth/callback" element={<AuthCallback />} />
+            <Route path="/auth/callback" element={<FacebookCallback />} />
             <Route path="/admin/login" element={<AdminLogin />} />
             
             {/* ==========================================

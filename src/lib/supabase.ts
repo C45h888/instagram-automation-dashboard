@@ -355,7 +355,7 @@ export const logApiRequest = async (
   try {
     const user = await getCurrentUser();
     if (!user) return;
-    
+
     const apiUsageEntry = {
       user_id: user.id,
       endpoint,
@@ -368,7 +368,7 @@ export const logApiRequest = async (
       request_count: 1,
       credits_consumed: 1
     };
-    
+
     await supabase
       .from('api_usage')
       .upsert([apiUsageEntry], {
@@ -377,6 +377,58 @@ export const logApiRequest = async (
       });
   } catch (error) {
     console.error('Failed to log API request:', error);
+  }
+};
+
+// =====================================
+// FACEBOOK ID HELPER FUNCTIONS (Dual-ID Mapping)
+// =====================================
+
+/**
+ * Get Facebook ID from Supabase user_id
+ * Used for making Facebook Graph API calls
+ */
+export const getFacebookIdFromUserId = async (userId: string): Promise<string | null> => {
+  try {
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('facebook_id')
+      .eq('user_id', userId)
+      .single();
+
+    if (error) {
+      console.error('Error fetching Facebook ID:', error);
+      return null;
+    }
+
+    return data?.facebook_id || null;
+  } catch (error) {
+    console.error('Error in getFacebookIdFromUserId:', error);
+    return null;
+  }
+};
+
+/**
+ * Get Supabase user_id from Facebook ID
+ * Used for mapping Facebook OAuth responses to internal users
+ */
+export const getUserIdFromFacebookId = async (facebookId: string): Promise<string | null> => {
+  try {
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('user_id')
+      .eq('facebook_id', facebookId)
+      .single();
+
+    if (error) {
+      console.error('Error fetching user_id from Facebook ID:', error);
+      return null;
+    }
+
+    return data?.user_id || null;
+  } catch (error) {
+    console.error('Error in getUserIdFromFacebookId:', error);
+    return null;
   }
 };
 

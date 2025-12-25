@@ -363,6 +363,15 @@ try {
   console.error('❌ Failed to load Instagram API routes:', error.message);
 }
 
+// ✅ Authentication routes (Facebook OAuth with dual-ID system)
+try {
+  const authRoutes = require('./routes/auth');
+  app.use('/api/auth', authRoutes);
+  console.log('✅ Auth routes registered at /api/auth');
+} catch (error) {
+  console.error('❌ Failed to load auth routes:', error.message);
+}
+
 try {
   const testRoutes = require('./routes/test');
   app.use('/api/test', testRoutes);
