@@ -80,81 +80,143 @@ router.use(logAfterResponse);          // Log after response is sent
 // ==========================================
 
 /**
- * Exchange user access token for page access token
+ * Exchange user access token for page access token with AUTO-DISCOVERY
+ *
+ * UPDATED: Now automatically discovers Instagram Business Account ID
+ * No longer requires businessAccountId from frontend
  *
  * This endpoint converts a user-level OAuth token into a page-level token
  * required for the instagram_manage_insights permission
  *
  * Process:
  * 1. Receive user access token from OAuth flow
- * 2. Query Facebook Graph API for user's pages
- * 3. Extract page token and Instagram Business account mapping
+ * 2. Query Facebook Graph API for user's pages AND discover IG Business Account
+ * 3. Create/update business account record in database
  * 4. Encrypt and store page token in database
- * 5. Return page metadata to client
+ * 5. Return business account UUID and metadata to client
  *
  * @route POST /api/instagram/exchange-token
  * @body {string} userAccessToken - User access token from OAuth
- * @body {string} userId - User UUID (for database storage)
- * @body {string} businessAccountId - Instagram Business account UUID
- * @returns {Object} Success response with page metadata
+ * @body {string} userId - User UUID from Supabase Auth (REQUIRED)
+ * @returns {Object} Success response with businessAccountId and page metadata
  */
 router.post('/exchange-token', async (req, res) => {
   try {
-    const { userAccessToken, userId, businessAccountId } = req.body;
+    const { userAccessToken, userId } = req.body;
+
+    // Note: businessAccountId is now OPTIONAL - we will discover it
+    console.log('📥 Token exchange request received');
+    console.log('   User ID (UUID):', userId || 'not provided');
+    console.log('   Token provided:', userAccessToken ? 'YES' : 'NO');
 
     // ===== STEP 1: Validate required fields =====
     if (!userAccessToken) {
       console.error('❌ Missing userAccessToken in request body');
       return res.status(400).json({
         success: false,
-        error: 'Missing required field: userAccessToken',
+        error: 'userAccessToken is required',
         code: 'MISSING_USER_TOKEN',
         message: 'Request body must include userAccessToken from OAuth flow'
       });
     }
 
-    console.log('🔄 Token exchange request received');
-    console.log('   User ID:', userId || 'not provided');
-    console.log('   Business Account ID:', businessAccountId || 'not provided');
-
-    // ===== STEP 2: Perform token exchange =====
-    const pageTokenData = await exchangeForPageToken(userAccessToken);
-
-    // ===== STEP 3: Store in database if IDs provided =====
-    if (userId && businessAccountId) {
-      console.log('💾 Storing page token in database...');
-      await storePageToken(userId, businessAccountId, pageTokenData);
-    } else {
-      console.warn('⚠️  userId or businessAccountId not provided - token NOT stored in database');
-      console.warn('   Token will only be returned in response (not recommended for production)');
+    if (!userId) {
+      console.error('❌ Missing userId in request body');
+      return res.status(400).json({
+        success: false,
+        error: 'userId (UUID) is required',
+        code: 'MISSING_USER_ID',
+        message: 'Request body must include userId (Supabase UUID) from authenticated session'
+      });
     }
 
-    // ===== STEP 4: Return success response =====
-    // DO NOT return actual token in response for security
-    res.json({
-      success: true,
-      message: 'Page token obtained and stored successfully',
-      data: {
-        pageId: pageTokenData.pageId,
-        pageName: pageTokenData.pageName,
-        igBusinessAccountId: pageTokenData.igBusinessAccountId,
-        expiresIn: pageTokenData.expiresIn,
-        tokenType: pageTokenData.tokenType,
-        stored: !!(userId && businessAccountId)
-      }
+    // ===== STEP 2: Exchange for long-lived token AND discover IG Business Account =====
+    // This is the AUTO-DISCOVERY step that was missing
+    console.log('🔄 Starting token exchange and auto-discovery...');
+    const exchangeResult = await exchangeForPageToken(userAccessToken);
+
+    if (!exchangeResult.success) {
+      console.error('❌ Token exchange failed:', exchangeResult.error);
+      return res.status(400).json({
+        success: false,
+        error: 'Failed to exchange token',
+        details: exchangeResult.error,
+        code: 'TOKEN_EXCHANGE_FAILED'
+      });
+    }
+
+    console.log('✅ Token exchange successful');
+    console.log('   Long-lived token obtained');
+
+    // ===== STEP 3: Extract the discovered Instagram Business Account ID =====
+    // This ID comes from the Graph API /me/accounts endpoint
+    const discoveredBusinessAccountId = exchangeResult.igBusinessAccountId;
+    const pageAccessToken = exchangeResult.pageAccessToken;
+    const pageId = exchangeResult.pageId;
+    const pageName = exchangeResult.pageName;
+
+    if (!discoveredBusinessAccountId) {
+      console.error('❌ No Instagram Business Account found');
+      return res.status(400).json({
+        success: false,
+        error: 'No Instagram Business Account found',
+        message: 'Please ensure your Facebook Page is connected to an Instagram Business Account',
+        code: 'NO_IG_BUSINESS_ACCOUNT'
+      });
+    }
+
+    console.log('✅ Instagram Business Account discovered');
+    console.log('   IG Business ID:', discoveredBusinessAccountId);
+    console.log('   Page ID:', pageId);
+    console.log('   Page Name:', pageName);
+
+    // ===== STEP 4: Store the page token using the DISCOVERED ID =====
+    // This creates the business account record AND stores the token
+    console.log('💾 Storing token and creating business account record...');
+
+    const storeResult = await storePageToken({
+      userId: userId,  // UUID from Supabase Auth
+      igBusinessAccountId: discoveredBusinessAccountId,
+      pageAccessToken: pageAccessToken,
+      pageId: pageId,
+      pageName: pageName
     });
 
-    console.log('✅ Token exchange completed successfully');
+    if (!storeResult.success) {
+      console.error('❌ Failed to store page token:', storeResult.error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to store credentials',
+        details: storeResult.error,
+        code: 'STORAGE_FAILED'
+      });
+    }
+
+    console.log('✅ Page token stored successfully');
+
+    // ===== STEP 5: Return the discovered businessAccountId to frontend =====
+    // THIS IS THE HANDSHAKE COMPLETION
+    return res.status(200).json({
+      success: true,
+      message: 'Token exchange and storage successful',
+      data: {
+        businessAccountId: storeResult.businessAccountId,  // UUID from DB
+        instagramBusinessId: discoveredBusinessAccountId,   // Instagram numeric ID
+        pageId: pageId,
+        pageName: pageName,
+        tokenExpiresAt: storeResult.expiresAt
+      }
+    });
 
   } catch (error) {
     console.error('❌ Token exchange error:', error);
 
     // Return user-friendly error message
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      error: error.message,
-      code: 'TOKEN_EXCHANGE_FAILED',
-      message: 'Failed to exchange token. See error for details.'
+      error: 'Internal server error during token exchange',
+      message: error.message,
+      code: 'INTERNAL_ERROR'
     });
   }
 });

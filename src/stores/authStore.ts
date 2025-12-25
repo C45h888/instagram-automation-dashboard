@@ -45,6 +45,12 @@ interface AuthStateProperties {
   isLoading: boolean;
   permissions: string[];
   error: string | null;
+
+  // Instagram Business Account state (PHASE 3.5)
+  businessAccountId: string | null;  // UUID from instagram_business_accounts table
+  instagramBusinessId: string | null;  // Instagram's numeric ID for API calls
+  pageId: string | null;  // Facebook Page ID
+  pageName: string | null;  // Facebook Page Name
 }
 
 /**
@@ -58,6 +64,13 @@ interface PersistedAuthState {
   isAuthenticated: boolean;
   isAdmin: boolean;
   permissions: string[];
+
+  // Instagram Business Account state (PHASE 3.5)
+  businessAccountId: string | null;
+  instagramBusinessId: string | null;
+  pageId: string | null;
+  pageName: string | null;
+
   // Explicitly EXCLUDED (transient state):
   // - session: Contains expiring tokens, must be refreshed
   // - isLoading: UI state, must always start false
@@ -147,6 +160,17 @@ interface AuthStateActions {
    * Clear error state
    */
   clearError: () => void;
+
+  /**
+   * Set Instagram Business Account data (PHASE 3.5)
+   * Called after successful token exchange to store business account info
+   */
+  setBusinessAccount: (data: {
+    businessAccountId: string;
+    instagramBusinessId: string;
+    pageId?: string;
+    pageName?: string;
+  }) => void;
 }
 
 /**
@@ -256,6 +280,12 @@ export const useAuthStore = create<AuthState>()(
         isLoading: false,
         permissions: [],
         error: null,
+
+        // Instagram Business Account state (PHASE 3.5)
+        businessAccountId: null,
+        instagramBusinessId: null,
+        pageId: null,
+        pageName: null,
         
         // =====================================
         // LEGACY METHODS (fixed for backward compatibility)
@@ -643,6 +673,27 @@ export const useAuthStore = create<AuthState>()(
         
         clearError: () => {
           set({ error: null });
+        },
+
+        // =====================================
+        // INSTAGRAM BUSINESS ACCOUNT METHODS (PHASE 3.5)
+        // =====================================
+
+        /**
+         * Set Instagram Business Account data after successful token exchange
+         * This is called from the handshake completion in Login.tsx
+         */
+        setBusinessAccount: (data) => {
+          console.log('📦 Setting business account in authStore:', data);
+
+          set({
+            businessAccountId: data.businessAccountId,
+            instagramBusinessId: data.instagramBusinessId,
+            pageId: data.pageId || null,
+            pageName: data.pageName || null
+          });
+
+          console.log('✅ Business account data stored in authStore');
         }
       }),
       {
@@ -661,7 +712,14 @@ export const useAuthStore = create<AuthState>()(
           token: state.token,
           isAuthenticated: state.isAuthenticated,
           isAdmin: state.isAdmin,
-          permissions: state.permissions
+          permissions: state.permissions,
+
+          // Instagram Business Account state (PHASE 3.5)
+          businessAccountId: state.businessAccountId,
+          instagramBusinessId: state.instagramBusinessId,
+          pageId: state.pageId,
+          pageName: state.pageName
+
           // session, isLoading, error are INTENTIONALLY excluded (transient state)
         })
       }

@@ -1,437 +1,1522 @@
-CONTEXT INJECTION: System Diagnosis & Schema Repair Strategy
-1. SYSTEM HEALTH STATE
-Infrastructure: ✅ ONLINE.
+CONTEXT INJECTION: PHASE 3.5 — THE HANDSHAKE & DUAL-ID CORRECTION
+1. 🔍 Context & Architecture Goal
+Project: Instagram Automation Dashboard Current State: We have successfully implemented Phase 3.0 (Backend Auth). The backend.api/routes/auth.js correctly authenticates users, generates a Supabase UUID, and returns a session containing the critical provider_token (Facebook User Access Token).
 
-Evidence: Server logs show consistent successful responses on /webhook/realtime-updates (Latency: ~3ms).
+The Goal: We need to transition from "Authenticated User" to "Connected Business". We must implement a "Zero-Config Handshake" where the system automatically discovers the user's Instagram Business Page, exchanges tokens, and saves credentials without manual user input.
 
-Database: ❌ CRITICAL FAILURE.
+2. 💥 The "Disconnect" (Flowchart vs. Reality)
+The Intended Flow (The Bridge):
 
-Evidence: Insert operations fail due to Type Mismatch.
+User Logs in → 2. Backend Returns Keys → 3. App Auto-Connects Page → 4. Dashboard Loads Data.
 
-Application Logic: ❌ PARTIAL FAILURE.
+The Current Broken Logic (The Gap):
 
-Evidence: Token Exchange route returns empty response body on failure.
+Step 1 & 2: ✅ WORKING. auth.js returns the provider_token.
 
-2. THE CORE PROBLEM (The "Square Peg" Issue)
-The application utilizes Facebook Login, which returns a Numeric String ID (e.g., "12209809..."). However, the Supabase Database Schema strictly enforces UUID types on user_id columns.
+Step 3: ❌ BROKEN. The instagram-api.js endpoint /exchange-token is passive. It waits for the Frontend to send a businessAccountId.
 
-The Failure Chain:
+The Paradox: The Frontend cannot send the ID because it doesn't know it yet. The Backend is supposed to tell the Frontend, but it won't run the logic unless the Frontend tells it.
 
-Auth: User logs in via Facebook (Success).
+Step 4: ❌ FAILS. Frontend tries to query data using the wrong ID or missing credentials.
 
-Insert: Backend tries to save Consent/Token data.
+3. 🚨 Forensic Evidence (Console Log Analysis)
+The provided console logs reveal two distinct critical failures:
 
-Crash: Database rejects "122098..." because it is not a valid UUID (a0ee-bc99...).
+Failure A: The "Identity Crisis" (Wrong ID Type)
+The logs show repeated crashes when the frontend tries to talk to Supabase.
 
-Ripple Effect: The failure triggers a backend exception that isn't caught properly, resulting in a blank response to the frontend.
+Log: GET .../instagram_business_accounts?...user_id=eq.122098... 400 (Bad Request)
 
-3. DIAGNOSTIC LOGS (Technical Evidence)
-A. Server Health (It is Alive):
+Error: invalid input syntax for type uuid: "122098096448937004"
 
-Plaintext
+Diagnosis: The Frontend components (databaseservices.ts, Login.tsx) are mistakenly using the Facebook Numeric ID (122098...) to query columns that require a Supabase UUID.
 
-2025-12-18T16:32:42Z [GET /webhook/realtime-updates] responseTimeMS=3
-2025-12-18T16:32:45Z [GET /webhook/realtime-updates] responseTimeMS=3
-# The server is processing generic requests successfully.
-B. Database Failure (The Smoking Gun):
+Root Cause: The authStore or the component logic is grabbing user.facebook_id instead of user.id (UUID) for database operations.
 
-Plaintext
+Failure B: The JSON Crash (Missing Handshake)
+Log: Login.tsx:530 ❌ Token exchange error: SyntaxError: Failed to execute 'json' on 'Response': Unexpected end of JSON input
 
-ERROR: invalid input syntax for type uuid: "122098096448937004"
-STATEMENT: INSERT INTO "public"."user_consents" ...
-C. RLS Failure (The Infinite Loop):
+Diagnosis: The frontend is hitting an endpoint (likely /exchange-token or a callback) that is crashing or returning empty because the required businessAccountId was undefined during the call.
 
-Plaintext
+4. 🛠️ Implementation Plan (Atomic Tasks)
+You must fix the code in the following order to resolve the Logic Gap and the Identity Crisis.
 
-ERROR: infinite recursion detected in policy for relation "user_profiles"
-DETAIL: Policy "Admins can access all profiles" queries "user_profiles" recursively.
-4. THE HIDDEN DEPENDENCY (Critical Context)
-Previous migration attempts failed because of a Hidden Foreign Key.
+Task 1: Enable Backend "Auto-Discovery"
+File: backend.api/routes/instagram-api.js Current Logic: The /exchange-token route only calls storePageToken if req.body.businessAccountId is present. Required Logic:
 
-Table: instagram_dm_conversations
+Call exchangeForPageToken(userAccessToken) first.
 
-Column: customer_user_id (or user_id)
+Extract the igBusinessAccountId from the result of that exchange.
 
-Constraint: References user_profiles(user_id)
+Use that discovered ID to call storePageToken, ignoring whether the frontend sent one.
 
-Issue: This table locks user_profiles, preventing us from changing user_id to TEXT.
+Return the discovered businessAccountId to the frontend.
 
-5. IMPLEMENTATION STRATEGY (The Fix)
-Objective: Safely alter the schema to accept Facebook IDs (TEXT) and fix the RLS Recursion.
+Task 2: Fix Frontend ID Usage (The UUID Fix)
+Files: src/services/databaseservices.ts, src/pages/Login.tsx Action: Audit these files for usage of the user ID. Correction: Ensure that when querying Supabase tables (like user_consents or instagram_business_accounts), you are strictly using the UUID (user.id), NEVER the Facebook ID.
 
-Execution Steps (via Supabase MCP):
+Correction Example: Change user_id: user.facebook_id → user_id: user.id.
 
-Dependency Removal (The Nuclear Option):
+Task 3: Implement the "Handshake" in Frontend
+File: src/pages/FacebookCallback.tsx Action: Complete the logic to bridge the gap.
 
-We must DROP the Foreign Key constraint on instagram_dm_conversations explicitly.
+Receive session.provider_token from the auth.js response.
 
-We must DROP all RLS policies on user_profiles, user_consents, and instagram_business_accounts (to break the recursion and unlock the columns).
+Immediately make a POST request to /api/instagram/exchange-token with { userAccessToken: provider_token, userId: user.id }.
 
-Schema Alteration:
+Wait for the response (which now contains the businessAccountId).
 
-Convert user_profiles.user_id → TEXT
+Update the local state/store with this new ID.
 
-Convert user_consents.user_id → TEXT
+Redirect to Dashboard.
 
-Convert instagram_business_accounts.user_id → TEXT
 
-Convert instagram_dm_conversations.customer_user_id → TEXT
 
-RLS Restoration (The Bridge):
+Instagram Automation Dashboard - Complete OAuth to Dashboard Flow
+📊 Visual Flowchart
+graph TB
+    Start([User Visits Login Page]) --> CheckConsent{Consent<br/>Checkbox<br/>Checked?}
+    CheckConsent -->|No| WaitConsent[Wait for User]
+    CheckConsent -->|Yes| InitSDK[Initialize Facebook SDK v23.0]
+    
+    InitSDK --> LoadSDK[Load Facebook SDK Script]
+    LoadSDK --> FBInit[FB.init with App ID]
+    FBInit --> VerifySDK[FB.getLoginStatus Verification]
+    VerifySDK --> SDKReady{SDK Ready?}
+    
+    SDKReady -->|No| SDKError[Show Error Message]
+    SDKReady -->|Yes| EnableButton[Enable Login Button]
+    
+    EnableButton --> UserClick[User Clicks 'Continue with Facebook']
+    UserClick --> LogConsent[Log Consent to SessionStorage]
+    LogConsent --> FetchIP[Fetch IP from ipify.org]
+    FetchIP --> RequestScopes[Request Instagram Business Scopes]
+    
+    RequestScopes --> FBLogin[FB.login with Scopes Array]
+    FBLogin --> MetaDialog[Meta OAuth Consent Dialog Opens]
+    MetaDialog --> UserAuthorize{User<br/>Authorizes?}
+    
+    UserAuthorize -->|No| CancelFlow[Cancel Flow - Return to Login]
+    UserAuthorize -->|Yes| ReturnToken[Return authResponse]
+    
+    ReturnToken --> ExtractToken[Extract Short-Lived User Token]
+    ExtractToken --> SendToBackend[POST /api/instagram/exchange-token]
+    
+    SendToBackend --> BackendReceive[Backend Receives Token]
+    BackendReceive --> ExchangeLongLived[Exchange for Long-Lived Token]
+    
+    ExchangeLongLived --> GraphAPI1[POST graph.facebook.com/oauth/access_token]
+    GraphAPI1 --> LongLivedToken[Receive 60-Day Token]
+    
+    LongLivedToken --> FetchUser[GET graph.facebook.com/me]
+    FetchUser --> UserData[Receive Facebook User Data]
+    
+    UserData --> SupabaseSignIn[Supabase Auth signInWithIdToken]
+    SupabaseSignIn --> CreateSession[Create Supabase Session]
+    CreateSession --> GenerateJWT[Generate JWT Access Token]
+    
+    GenerateJWT --> UpsertProfile[UPSERT user_profiles Table]
+    UpsertProfile --> StoreConsent[INSERT user_consents Table]
+    
+    StoreConsent --> FetchPages[GET graph.facebook.com/me/accounts]
+    FetchPages --> PagesData[Receive Facebook Pages List]
+    
+    PagesData --> ExtractIGBusiness[Extract instagram_business_account]
+    ExtractIGBusiness --> HasIGAccount{Instagram<br/>Business<br/>Account<br/>Connected?}
+    
+    HasIGAccount -->|No| IGError[Return Error: Connect IG Business Account]
+    HasIGAccount -->|Yes| ExtractPageToken[Extract Page Access Token]
+    
+    ExtractPageToken --> EncryptToken[Encrypt Token via Supabase RPC]
+    EncryptToken --> StoreIGAccount[UPSERT instagram_business_accounts]
+    StoreIGAccount --> StoreCredentials[UPSERT instagram_credentials]
+    
+    StoreCredentials --> ReturnSuccess[Return Success Response to Frontend]
+    
+    ReturnSuccess --> FrontendReceive[Frontend Receives Response]
+    FrontendReceive --> SetSession[Set Supabase Session in Browser]
+    SetSession --> UpdateAuthStore[Update Zustand authStore]
+    
+    UpdateAuthStore --> PersistLocal[Persist to localStorage]
+    PersistLocal --> RedirectDashboard[Redirect to /dashboard]
+    
+    RedirectDashboard --> DashboardMount[Dashboard Component Mounts]
+    
+    DashboardMount --> FetchIGAccount[useInstagramAccount Hook]
+    FetchIGAccount --> QueryAccounts[Query instagram_business_accounts Table]
+    QueryAccounts --> ExtractIDs[Extract businessAccountId & instagramBusinessId]
+    
+    ExtractIDs --> ValidateToken[useTokenValidation Hook]
+    ValidateToken --> CheckTokenAPI[POST /api/instagram/validate-token]
+    CheckTokenAPI --> DecryptCheck[Decrypt Token from DB]
+    DecryptCheck --> GraphAPIValidate[Test Token with Graph API]
+    
+    GraphAPIValidate --> TokenValid{Token<br/>Valid?}
+    TokenValid -->|No| ShowBanner[Show TokenExpiredBanner]
+    ShowBanner --> ReconnectButton[User Clicks Reconnect]
+    ReconnectButton --> Start
+    
+    TokenValid -->|Yes| FetchProfile[useInstagramProfile Hook]
+    FetchProfile --> ProfileAPI[GET /api/instagram/profile/:id]
+    ProfileAPI --> DecryptProfile[Backend: Decrypt Page Token]
+    DecryptProfile --> GraphProfile[GET graph.facebook.com/:id]
+    GraphProfile --> ProfileData[Receive Profile Data]
+    
+    ProfileData --> FetchDashboard[useDashboardData Hook]
+    FetchDashboard --> SyncPosts[POST /api/instagram/sync/posts]
+    SyncPosts --> BackgroundSync[Background: Sync Latest Posts to DB]
+    
+    BackgroundSync --> DashboardAPI[GET /api/instagram/dashboard-stats]
+    DashboardAPI --> QueryInsights[Query instagram_media_insights Table]
+    QueryInsights --> AggregateMetrics[Aggregate Last 30 Days]
+    AggregateMetrics --> DashboardData[Return Metrics, Activities, Media, Chart Data]
+    
+    DashboardData --> RenderUI[Render Dashboard UI]
+    
+    RenderUI --> ShowProfile[InstagramProfileCard]
+    RenderUI --> ShowMetrics[AnimatedMetricsGrid]
+    RenderUI --> ShowActivities[ActivityFeed]
+    RenderUI --> ShowChart[PerformanceChart]
+    RenderUI --> ShowMedia[RecentMedia]
+    
+    ShowProfile --> Complete([Dashboard Fully Loaded])
+    ShowMetrics --> Complete
+    ShowActivities --> Complete
+    ShowChart --> Complete
+    ShowMedia --> Complete
+    
+    style Start fill:#e1f5e1
+    style Complete fill:#e1f5e1
+    style MetaDialog fill:#4267B2,color:#fff
+    style GraphAPI1 fill:#4267B2,color:#fff
+    style FetchUser fill:#4267B2,color:#fff
+    style FetchPages fill:#4267B2,color:#fff
+    style GraphProfile fill:#4267B2,color:#fff
+    style SupabaseSignIn fill:#3ECF8E,color:#fff
+    style CreateSession fill:#3ECF8E,color:#fff
+    style UpsertProfile fill:#3ECF8E,color:#fff
+    style StoreIGAccount fill:#3ECF8E,color:#fff
+    style StoreCredentials fill:#3ECF8E,color:#fff
+    style UpdateAuthStore fill:#f0ad4e,color:#fff
+    style PersistLocal fill:#f0ad4e,color:#fff
 
-Create simple, non-recursive policies.
 
-Constraint: Since auth.uid() (UUID) will never match user_id (Facebook String), use a permissive "Authenticated Only" policy:
 
-USING (auth.role() = 'authenticated') OR USING (true) for authenticated roles temporarily.
+📋 Detailed Step-by-Step Flow Breakdown
+PHASE 1: FRONTEND OAUTH INITIATION (src/pages/Login.tsx)
+┌─────────────────────────────────────────────────────────────────┐
+│ STEP 1: User Lands on Login Page                                │
+├─────────────────────────────────────────────────────────────────┤
+│ Location: /login                                                 │
+│ Component: Login.tsx (Lines 13-96)                              │
+│                                                                  │
+│ ✓ Displays two OAuth options:                                   │
+│   - Continue with Facebook (Primary)                            │
+│   - Continue with Instagram (Uses Facebook OAuth)               │
+│                                                                  │
+│ ✓ Requires GDPR/CCPA consent checkbox                          │
+│ ✓ Initializes Facebook SDK via useFacebookSDK hook             │
+└─────────────────────────────────────────────────────────────────┘
+                           ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ STEP 2: Facebook SDK Initialization                             │
+├─────────────────────────────────────────────────────────────────┤
+│ Hook: useFacebookSDK.ts (Lines 23-129)                          │
+│                                                                  │
+│ Process:                                                         │
+│ 1. Load Facebook SDK script dynamically                         │
+│    → src="https://connect.facebook.net/en_US/sdk.js"           │
+│                                                                  │
+│ 2. Call FB.init() with configuration:                           │
+│    {                                                             │
+│      appId: VITE_META_APP_ID,        // From .env               │
+│      version: 'v23.0',               // Latest Meta API         │
+│      cookie: true,                   // Enable session cookies  │
+│      xfbml: true                     // Parse social plugins    │
+│    }                                                             │
+│                                                                  │
+│ 3. Verify initialization:                                       │
+│    → FB.getLoginStatus() to confirm SDK ready                  │
+│                                                                  │
+│ 4. Set sdkReady = true                                          │
+│    → Enables login button                                       │
+└─────────────────────────────────────────────────────────────────┘
+                           ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ STEP 3: User Consent & Permission Request                       │
+├─────────────────────────────────────────────────────────────────┤
+│ User Action: Checks consent checkbox, clicks "Continue"         │
+│                                                                  │
+│ 1. logConsent() function executes:                              │
+│    → Fetch IP: GET https://api.ipify.org?format=json           │
+│    → Store in sessionStorage:                                   │
+│      {                                                           │
+│        consent_type: 'facebook_oauth',                          │
+│        ip_address: '203.0.113.42',                              │
+│        user_agent: 'Mozilla/5.0...',                            │
+│        consented_at: '2025-12-25T10:30:00Z',                   │
+│        privacy_policy_version: '1.0',                           │
+│        terms_version: '1.0'                                      │
+│      }                                                           │
+│                                                                  │
+│ 2. Request Instagram Business Scopes:                           │
+│    [                                                             │
+│      'instagram_basic',              // Profile info            │
+│      'instagram_manage_insights',    // Analytics data          │
+│      'instagram_manage_messages',    // DM inbox access         │
+│      'instagram_content_publish',    // Post content            │
+│      'instagram_manage_comments',    // Comment moderation      │
+│      'pages_show_list',              // List pages              │
+│      'pages_read_engagement',        // Engagement metrics      │
+│      'public_profile'                // Basic FB profile        │
+│    ]                                                             │
+└─────────────────────────────────────────────────────────────────┘
+                           ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ STEP 4: Meta OAuth Dialog                                       │
+├─────────────────────────────────────────────────────────────────┤
+│ Function: window.FB.login(callback, {scope: scopes.join(',')})  │
+│                                                                  │
+│ Meta's OAuth Flow:                                               │
+│ 1. Opens popup window (or redirect)                             │
+│ 2. Shows Facebook login if not logged in                        │
+│ 3. Displays permission consent screen                           │
+│ 4. User reviews requested permissions                           │
+│ 5. User clicks "Continue" or "Cancel"                           │
+│                                                                  │
+│ Response on Success:                                             │
+│ {                                                                │
+│   status: 'connected',                                           │
+│   authResponse: {                                                │
+│     accessToken: 'EAAYqK...',      // Short-lived (1 hour)      │
+│     userID: '122098096448937004',   // Facebook User ID         │
+│     expiresIn: 3600,                // Seconds                   │
+│     signedRequest: '...',                                        │
+│     graphDomain: 'facebook',                                     │
+│     grantedScopes: 'instagram_basic,instagram_manage_insights...'│
+│   }                                                              │
+│ }                                                                │
+└─────────────────────────────────────────────────────────────────┘
 
-HERE ARE THE BACKEND SERVER LOGS : 2025-12-18T16:32:03Z clientIP="49.36.8.199" requestID="a273ac6a-0b16-4005" responseTimeMS=4 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:32:03.257030915Z    CF-Country: IN
-2025-12-18T16:32:06Z clientIP="49.36.8.199" requestID="fead57da-e698-493e" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:32:06.094108225Z 📥 2025-12-18T16:32:06.093Z [0b53582d-0dbe-4602-8811-fb6731fcf3a2] GET /webhook/realtime-updates
-2025-12-18T16:32:06.094133746Z    CF-Ray: 9b000de54d2d937f-PDX
-2025-12-18T16:32:06.094137676Z    CF-Country: IN
-2025-12-18T16:32:09Z clientIP="49.36.8.199" requestID="3bba387d-5491-4a0a" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:32:09.099538039Z 📥 2025-12-18T16:32:09.099Z [2c754400-7bc0-4ad4-9c15-51b26b389e74] GET /webhook/realtime-updates
-2025-12-18T16:32:09.09956263Z    CF-Ray: 9b000df81882937f-PDX
-2025-12-18T16:32:09.09956616Z    CF-Country: IN
-2025-12-18T16:32:12Z clientIP="49.36.8.199" requestID="f395d456-9c03-4cef" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:32:12.087249731Z 📥 2025-12-18T16:32:12.087Z [324ae079-5bd1-4528-baa3-a9b9cee6ddab] GET /webhook/realtime-updates
-2025-12-18T16:32:12.087277582Z    CF-Ray: 9b000e0aba43937f-PDX
-2025-12-18T16:32:12.087283052Z    CF-Country: IN
-2025-12-18T16:32:15Z clientIP="49.36.8.199" requestID="03bae488-3a5b-4517" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:32:15.093733095Z 📥 2025-12-18T16:32:15.093Z [783ed5ad-116b-4bce-aeb0-894da249adac] GET /webhook/realtime-updates
-2025-12-18T16:32:15.093760527Z    CF-Ray: 9b000e1d7cfc937f-PDX
-2025-12-18T16:32:15.093797538Z    CF-Country: IN
-2025-12-18T16:32:18Z clientIP="49.36.8.199" requestID="b1ee30f8-f49d-4e31" responseTimeMS=1 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:32:18.080355305Z 📥 2025-12-18T16:32:18.080Z [bd79d9a0-4ffb-4394-9b95-1ad461a5164d] GET /webhook/realtime-updates
-2025-12-18T16:32:18.080381786Z    CF-Ray: 9b000e30387a937f-PDX
-2025-12-18T16:32:18.080387406Z    CF-Country: IN
-2025-12-18T16:32:21Z clientIP="49.36.8.199" requestID="bd2ec14a-9f3b-4ec5" responseTimeMS=9 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:32:21.099290988Z 📥 2025-12-18T16:32:21.099Z [2ae0b61e-1607-4280-b202-9873931dbe8c] GET /webhook/realtime-updates
-2025-12-18T16:32:21.0993332Z    CF-Ray: 9b000e430cb2937f-PDX
-2025-12-18T16:32:21.09933906Z    CF-Country: IN
-2025-12-18T16:32:24Z clientIP="49.36.8.199" requestID="3aada393-c820-4c69" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:32:24.088623207Z 📥 2025-12-18T16:32:24.088Z [b9f3effb-6adc-46ab-bca6-d3081d62a559] GET /webhook/realtime-updates
-2025-12-18T16:32:24.088654119Z    CF-Ray: 9b000e55c805937f-PDX
-2025-12-18T16:32:24.088660109Z    CF-Country: IN
-2025-12-18T16:32:27Z clientIP="49.36.8.199" requestID="d79343f4-61ba-4de6" responseTimeMS=4 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:32:27.084916471Z 📥 2025-12-18T16:32:27.084Z [e0cb8f5b-57af-4d62-aa7c-96b4d0b6f5f2] GET /webhook/realtime-updates
-2025-12-18T16:32:27.084957663Z    CF-Ray: 9b000e687ac7937f-PDX
-2025-12-18T16:32:27.084962943Z    CF-Country: IN
-2025-12-18T16:32:30Z clientIP="49.36.8.199" requestID="23e60790-901d-4173" responseTimeMS=1 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:32:30.101893459Z 📥 2025-12-18T16:32:30.101Z [05673341-abab-4448-ab42-72eb1961c464] GET /webhook/realtime-updates
-2025-12-18T16:32:30.101922951Z    CF-Ray: 9b000e7b4f0b937f-PDX
-2025-12-18T16:32:30.101928771Z    CF-Country: IN
-2025-12-18T16:32:33Z clientIP="49.36.8.199" requestID="197258a3-5d92-4003" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:32:33.234651115Z 📥 2025-12-18T16:32:33.234Z [9d4369ff-211d-4b2e-bbae-d584cbef6d25] GET /webhook/realtime-updates
-2025-12-18T16:32:33.234680466Z    CF-Ray: 9b000e8eda55937f-MAA
-2025-12-18T16:32:33.234686137Z    CF-Country: IN
-2025-12-18T16:32:36Z clientIP="49.36.8.199" requestID="e87ba951-2f55-41cc" responseTimeMS=1 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:32:36.086000119Z 📥 2025-12-18T16:32:36.085Z [4fb1c7b0-fcb8-4764-8cff-b4478eb6fdb6] GET /webhook/realtime-updates
-2025-12-18T16:32:36.08602325Z    CF-Ray: 9b000ea0ccd3937f-PDX
-2025-12-18T16:32:36.08602827Z    CF-Country: IN
-2025-12-18T16:32:39Z clientIP="49.36.8.199" requestID="c10d05b2-e4e1-4bbc" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:32:39.08204996Z 📥 2025-12-18T16:32:39.081Z [34c9f060-9871-49f3-938b-e1f3f8c5f76f] GET /webhook/realtime-updates
-2025-12-18T16:32:39.082085322Z    CF-Ray: 9b000eb37810937f-PDX
-2025-12-18T16:32:39.082096923Z    CF-Country: IN
-2025-12-18T16:32:42Z clientIP="49.36.8.199" requestID="27b869a2-4fe1-4c02" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:32:42.274422702Z 📥 2025-12-18T16:32:42.274Z [1f6b75ca-ddf6-468b-b09c-517efe2c52db] GET /webhook/realtime-updates
-2025-12-18T16:32:42.274452883Z    CF-Ray: 9b000ec76af0937f-PDX
-2025-12-18T16:32:42.274458253Z    CF-Country: IN
-2025-12-18T16:32:45Z clientIP="49.36.8.199" requestID="23a9a50d-a267-4a50" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:32:45.291374178Z 📥 2025-12-18T16:32:45.291Z [83e74861-f153-4837-b4fe-2091f69579df] GET /webhook/realtime-updates
-2025-12-18T16:32:45.291432971Z    CF-Ray: 9b000eda2fef937f-MAA
-2025-12-18T16:32:45.291636521Z    CF-Country: IN
-2025-12-18T16:32:48Z clientIP="49.36.8.199" requestID="727d50f7-5e80-4776" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:32:48.386176847Z 📥 2025-12-18T16:32:48.386Z [a62d2c0b-9811-4d50-80b9-b30b0051804d] GET /webhook/realtime-updates
-2025-12-18T16:32:48.38705415Z    CF-Ray: 9b000eedac6f937f-PDX
-2025-12-18T16:32:48.387106242Z    CF-Country: IN
-2025-12-18T16:32:51Z clientIP="49.36.8.199" requestID="dd6e7fc3-c0b9-4fa9" responseTimeMS=4 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:32:51.348802831Z 📥 2025-12-18T16:32:51.348Z [6394ceed-2cfe-4452-891f-1724ad4f69be] GET /webhook/realtime-updates
-2025-12-18T16:32:51.348843733Z    CF-Ray: 9b000eff9f80937f-PDX
-2025-12-18T16:32:51.348848234Z    CF-Country: IN
-2025-12-18T16:32:54Z clientIP="49.36.8.199" requestID="0fb441e1-ae32-461c" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:32:54.257787526Z 📥 2025-12-18T16:32:54.257Z [774fa20f-0670-4ec9-89c0-7bfdfabec98e] GET /webhook/realtime-updates
-2025-12-18T16:32:54.257814617Z    CF-Ray: 9b000f125a7e937f-PDX
-2025-12-18T16:32:54.257818868Z    CF-Country: IN
-2025-12-18T16:32:57Z clientIP="49.36.8.199" requestID="985f6a77-96fd-4749" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:32:57.250513257Z 📥 2025-12-18T16:32:57.250Z [4ecb9099-6a4a-45bc-aece-b0993de5ab00] GET /webhook/realtime-updates
-2025-12-18T16:32:57.250543858Z    CF-Ray: 9b000f251e2c937f-PDX
-2025-12-18T16:32:57.250548649Z    CF-Country: IN
-2025-12-18T16:33:00Z clientIP="49.36.8.199" requestID="93eebb36-57a7-474d" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:33:00.427917248Z 📥 2025-12-18T16:33:00.427Z [c958626e-0a8f-460e-be12-300a52114869] GET /webhook/realtime-updates
-2025-12-18T16:33:00.427946059Z    CF-Ray: 9b000f38afd1937f-PDX
-2025-12-18T16:33:00.427951539Z    CF-Country: IN
-2025-12-18T16:33:03Z clientIP="49.36.8.199" requestID="63e44836-bef4-4a51" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:33:03.39449168Z 📥 2025-12-18T16:33:03.394Z [9b148780-4d57-43cd-8d50-2596366fbd6c] GET /webhook/realtime-updates
-2025-12-18T16:33:03.394529392Z    CF-Ray: 9b000f4b6b0d937f-PDX
-2025-12-18T16:33:03.394535053Z    CF-Country: IN
-2025-12-18T16:33:06Z clientIP="49.36.8.199" requestID="ea19df35-ac2a-4850" responseTimeMS=1 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:33:06.26470121Z 📥 2025-12-18T16:33:06.264Z [d7d1de75-989e-44b9-bfce-8bd4746203a2] GET /webhook/realtime-updates
-2025-12-18T16:33:06.264731091Z    CF-Ray: 9b000f5d5d17937f-PDX
-2025-12-18T16:33:06.264738062Z    CF-Country: IN
-2025-12-18T16:33:09Z clientIP="49.36.8.199" requestID="5025908d-b502-4ce7" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:33:09.391015283Z 📥 2025-12-18T16:33:09.390Z [58dede83-1788-4054-a136-41c46c3def09] GET /webhook/realtime-updates
-2025-12-18T16:33:09.391040085Z    CF-Ray: 9b000f70e97e937f-PDX
-2025-12-18T16:33:09.391045235Z    CF-Country: IN
-2025-12-18T16:33:12Z clientIP="49.36.8.199" requestID="0190a717-f8ba-423e" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:33:12.247527834Z 📥 2025-12-18T16:33:12.247Z [54b82717-d4fe-491d-980e-ba73081bd79d] GET /webhook/realtime-updates
-2025-12-18T16:33:12.247557745Z    CF-Ray: 9b000f82db0b937f-PDX
-2025-12-18T16:33:12.247565465Z    CF-Country: IN
-2025-12-18T16:33:15Z clientIP="49.36.8.199" requestID="19c78d82-723b-4a1e" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:33:15.29092845Z 📥 2025-12-18T16:33:15.290Z [95dc273f-0b54-4975-a20e-56d0ae822f8a] GET /webhook/realtime-updates
-2025-12-18T16:33:15.290960201Z    CF-Ray: 9b000f959e9c937f-PDX
-2025-12-18T16:33:15.290966952Z    CF-Country: IN
-2025-12-18T16:33:18.264194314Z 📥 2025-12-18T16:33:18.264Z [9f16a720-8901-4f47-b806-c8d530c6be9e] GET /webhook/realtime-updates
-2025-12-18T16:33:18.264238176Z    CF-Ray: 9b000fa8599a937f-PDX
-2025-12-18T16:33:18Z clientIP="49.36.8.199" requestID="656849f2-c116-474a" responseTimeMS=1 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:33:18.264243576Z    CF-Country: IN
-2025-12-18T16:33:21Z clientIP="49.36.8.199" requestID="59a46612-e493-48e9" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:33:21.27327197Z 📥 2025-12-18T16:33:21.273Z [d7963476-c792-4774-9976-ea203688a72b] GET /webhook/realtime-updates
-2025-12-18T16:33:21.273302991Z    CF-Ray: 9b000fbb2aef937f-PDX
-2025-12-18T16:33:21.273308131Z    CF-Country: IN
-2025-12-18T16:33:24Z clientIP="49.36.8.199" requestID="39ed3902-9ee9-4c59" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:33:24.399345811Z 📥 2025-12-18T16:33:24.399Z [20b4e66f-8a72-4f6a-995e-d69d4110eb24] GET /webhook/realtime-updates
-2025-12-18T16:33:24.399394403Z    CF-Ray: 9b000fcebe9c937f-PDX
-2025-12-18T16:33:24.399400553Z    CF-Country: IN
-2025-12-18T16:33:27Z clientIP="49.36.8.199" requestID="1f5444d3-d708-41c6" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:33:27.270000381Z 📥 2025-12-18T16:33:27.269Z [6967fcb8-a171-4004-8b08-77080abd3642] GET /webhook/realtime-updates
-2025-12-18T16:33:27.270030692Z    CF-Ray: 9b000fe099c3937f-MAA
-2025-12-18T16:33:27.270037232Z    CF-Country: IN
-2025-12-18T16:33:30Z clientIP="49.36.8.199" requestID="f30cc59a-947e-4e25" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:33:30.280785528Z 📥 2025-12-18T16:33:30.277Z [e4f9b608-63f6-40a0-bb1d-44dc3e768cad] GET /webhook/realtime-updates
-2025-12-18T16:33:30.280807049Z    CF-Ray: 9b000ff36bc0937f-PDX
-2025-12-18T16:33:30.280813079Z    CF-Country: IN
-2025-12-18T16:33:33Z clientIP="49.36.8.199" requestID="cb76ff93-9c99-4d2a" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:33:33.26525625Z 📥 2025-12-18T16:33:33.265Z [8cd3a3a6-41a9-4c9b-9cba-e79088c4f5b7] GET /webhook/realtime-updates
-2025-12-18T16:33:33.265282971Z    CF-Ray: 9b0010061e29937f-PDX
-2025-12-18T16:33:33.265288451Z    CF-Country: IN
-2025-12-18T16:33:38Z clientIP="49.36.8.199" requestID="247f489c-44cb-4e2d" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:33:38.161509706Z 📥 2025-12-18T16:33:38.161Z [cfbb2aa7-5f9b-44de-866b-6f73d5e021a6] GET /webhook/realtime-updates
-2025-12-18T16:33:38.161552178Z    CF-Ray: 9b001024ac15937f-PDX
-2025-12-18T16:33:38.161556128Z    CF-Country: IN
-2025-12-18T16:33:40Z clientIP="49.36.8.199" requestID="8029751e-768b-4648" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:33:40.260195676Z 📥 2025-12-18T16:33:40.260Z [18da5e5f-67e5-4279-a3e6-907e36488016] GET /webhook/realtime-updates
-2025-12-18T16:33:40.260237769Z    CF-Ray: 9b001031d80a937f-PDX
-2025-12-18T16:33:40.260242299Z    CF-Country: IN
-2025-12-18T16:34:40Z clientIP="49.36.8.199" requestID="faf82ea6-1181-4df0" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:34:40.585814797Z 📥 2025-12-18T16:34:40.585Z [1da45b54-cd51-4c82-9f40-8a6a4dabcfc8] GET /webhook/realtime-updates
-2025-12-18T16:34:40.585839968Z    CF-Ray: 9b0011aadfe6937a-PDX
-2025-12-18T16:34:40.585845298Z    CF-Country: IN
-2025-12-18T16:35:02Z clientIP="49.36.8.199" requestID="af70057d-50b6-447e" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:35:02.295488091Z 📥 2025-12-18T16:35:02.295Z [cadd1156-3c26-4cc9-aba8-362ab2413ff8] GET /webhook/realtime-updates
-2025-12-18T16:35:02.296237207Z    CF-Ray: 9b00122f9ecb937a-MAA
-2025-12-18T16:35:02.296247337Z    CF-Country: IN
-2025-12-18T16:35:03Z clientIP="49.36.8.199" requestID="4ba708d2-2c00-4b5a" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:35:03.112057792Z 📥 2025-12-18T16:35:03.111Z [dd1ab181-c138-4966-9c1f-6beea0b97e4b] GET /webhook/realtime-updates
-2025-12-18T16:35:03.112074293Z    CF-Ray: 9b001237af38937a-PDX
-2025-12-18T16:35:03.112079333Z    CF-Country: IN
-2025-12-18T16:35:06Z clientIP="49.36.8.199" requestID="6b0dc436-ee8d-400c" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:35:06.108324357Z 📥 2025-12-18T16:35:06.108Z [15fcf26c-b5ca-42e9-8ca0-224efaeb0abb] GET /webhook/realtime-updates
-2025-12-18T16:35:06.108346608Z    CF-Ray: 9b00124a682c937a-PDX
-2025-12-18T16:35:06.108351528Z    CF-Country: IN
-2025-12-18T16:35:09Z clientIP="49.36.8.199" requestID="b1b0d6e3-2ffb-432f" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:35:09.225039862Z 📥 2025-12-18T16:35:09.224Z [efa0be6c-e9e1-4eb0-81e0-861af413e627] GET /webhook/realtime-updates
-2025-12-18T16:35:09.225069634Z    CF-Ray: 9b00125dd9c9937a-PDX
-2025-12-18T16:35:09.225074714Z    CF-Country: IN
-2025-12-18T16:35:12Z clientIP="49.36.8.199" requestID="9c085573-dc65-4525" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:35:12.224606065Z 📥 2025-12-18T16:35:12.224Z [2db462eb-6bc1-4c38-af74-2751ec047091] GET /webhook/realtime-updates
-2025-12-18T16:35:12.224628986Z    CF-Ray: 9b0012709b42937a-PDX
-2025-12-18T16:35:12.224633616Z    CF-Country: IN
-2025-12-18T16:35:15Z clientIP="49.36.8.199" requestID="1186623f-6e68-4a69" responseTimeMS=4 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:35:15.157857249Z 📥 2025-12-18T16:35:15.157Z [8bf2cb31-f921-47cc-b283-9c159fa2a39a] GET /webhook/realtime-updates
-2025-12-18T16:35:15.15787679Z    CF-Ray: 9b0012829ca3937a-PDX
-2025-12-18T16:35:15.15788157Z    CF-Country: IN
-2025-12-18T16:35:18Z clientIP="49.36.8.199" requestID="765a7c4e-b7d9-4491" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:35:18.110895644Z 📥 2025-12-18T16:35:18.110Z [beeb0ed6-84ee-4b42-8c9b-e3aa0d1ee956] GET /webhook/realtime-updates
-2025-12-18T16:35:18.110938306Z    CF-Ray: 9b0012956fa4937a-PDX
-2025-12-18T16:35:18.110944126Z    CF-Country: IN
-2025-12-18T16:35:21Z clientIP="49.36.8.199" requestID="d4857d07-e3cf-4cb0" responseTimeMS=1 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:35:21.110879937Z 📥 2025-12-18T16:35:21.110Z [b514d805-0634-42fe-aa80-dc3eda0f7a5c] GET /webhook/realtime-updates
-2025-12-18T16:35:21.110912678Z    CF-Ray: 9b0012a82b4f937a-PDX
-2025-12-18T16:35:21.110918359Z    CF-Country: IN
-2025-12-18T16:35:24Z clientIP="49.36.8.199" requestID="63c59fc0-99eb-4b38" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:35:24.174693378Z 📥 2025-12-18T16:35:24.174Z [3de7ec32-2cc3-4d12-b0cb-d7d6715164c4] GET /webhook/realtime-updates
-2025-12-18T16:35:24.174718239Z    CF-Ray: 9b0012baeb95937a-PDX
-2025-12-18T16:35:24.174721849Z    CF-Country: IN
-2025-12-18T16:35:27Z clientIP="49.36.8.199" requestID="12a6f48a-4623-40a6" responseTimeMS=4 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:35:27.105400219Z 📥 2025-12-18T16:35:27.105Z [6d047344-2add-490f-8dc3-1dfa814a8f1c] GET /webhook/realtime-updates
-2025-12-18T16:35:27.105611689Z    CF-Ray: 9b0012cd9c25937a-PDX
-2025-12-18T16:35:27.105750686Z    CF-Country: IN
-2025-12-18T16:35:30Z clientIP="49.36.8.199" requestID="21dac200-71dc-4c72" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:35:30.103818765Z 📥 2025-12-18T16:35:30.103Z [f33ccbee-97cd-4aab-9222-f36ebeb69187] GET /webhook/realtime-updates
-2025-12-18T16:35:30.103840356Z    CF-Ray: 9b0012e05c5e937a-PDX
-2025-12-18T16:35:30.103845116Z    CF-Country: IN
-2025-12-18T16:35:33Z clientIP="49.36.8.199" requestID="31c9721a-52f0-4056" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:35:33.116066367Z 📥 2025-12-18T16:35:33.115Z [9f6e7d26-3dae-465a-8ddb-01415bae1e9a] GET /webhook/realtime-updates
-2025-12-18T16:35:33.116101718Z    CF-Ray: 9b0012f32cd5937a-PDX
-2025-12-18T16:35:33.116107959Z    CF-Country: IN
-2025-12-18T16:35:36Z clientIP="49.36.8.199" requestID="2c5d2676-a9c1-4a80" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:35:36.221377132Z 📥 2025-12-18T16:35:36.221Z [524f1702-0a5b-41df-81a6-65d14632cab7] GET /webhook/realtime-updates
-2025-12-18T16:35:36.221579772Z    CF-Ray: 9b0013069eef937a-PDX
-2025-12-18T16:35:36.222122868Z    CF-Country: IN
-2025-12-18T16:35:39Z clientIP="49.36.8.199" requestID="183e783d-d983-4720" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:35:39.126558635Z 📥 2025-12-18T16:35:39.126Z [78fc2f3f-6bdb-468c-8ae8-cfba96953dea] GET /webhook/realtime-updates
-2025-12-18T16:35:39.126585347Z    CF-Ray: 9b001318a895937a-PDX
-2025-12-18T16:35:39.126590837Z    CF-Country: IN
-2025-12-18T16:35:42Z clientIP="49.36.8.199" requestID="c08ea69b-e831-4680" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:35:42.113950182Z 📥 2025-12-18T16:35:42.113Z [9a31dbd8-564d-47ab-aa7a-829927ec5a56] GET /webhook/realtime-updates
-2025-12-18T16:35:42.113981523Z    CF-Ray: 9b00132b6961937a-PDX
-2025-12-18T16:35:42.113986843Z    CF-Country: IN
-2025-12-18T16:35:45Z clientIP="49.36.8.199" requestID="4da3d57b-9da1-4a2b" responseTimeMS=96 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:35:45.20143366Z 📥 2025-12-18T16:35:45.201Z [2e4eb5d5-327c-45f8-929d-9f1eb3d19618] GET /webhook/realtime-updates
-2025-12-18T16:35:45.201464452Z    CF-Ray: 9b00133e1a81937a-PDX
-2025-12-18T16:35:45.201470052Z    CF-Country: IN
-2025-12-18T16:35:48.107609171Z 📥 2025-12-18T16:35:48.107Z [bc14d464-188a-41c9-b745-a609ef999b2b] GET /webhook/realtime-updates
-2025-12-18T16:35:48.107642743Z    CF-Ray: 9b001350db1f937a-PDX
-2025-12-18T16:35:48Z clientIP="49.36.8.199" requestID="d83dc17d-b579-4b3a" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:35:48.107651363Z    CF-Country: IN
-2025-12-18T16:35:51Z clientIP="49.36.8.199" requestID="0cb0a334-6151-4dc9" responseTimeMS=4 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:35:51.21862199Z 📥 2025-12-18T16:35:51.218Z [c12d8373-862c-4e6f-9d0b-57f60dc77589] GET /webhook/realtime-updates
-2025-12-18T16:35:51.218653142Z    CF-Ray: 9b0013644d5e937a-PDX
-2025-12-18T16:35:51.218659752Z    CF-Country: IN
-2025-12-18T16:35:54Z clientIP="49.36.8.199" requestID="c7184ee9-b269-48c1" responseTimeMS=4 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:35:54.219093494Z 📥 2025-12-18T16:35:54.218Z [8a4d6a31-597e-47fd-9a40-0d2da218f23a] GET /webhook/realtime-updates
-2025-12-18T16:35:54.219120526Z    CF-Ray: 9b0013770e0c937a-PDX
-2025-12-18T16:35:54.219140876Z    CF-Country: IN
-2025-12-18T16:35:57Z clientIP="49.36.8.199" requestID="65297c03-a279-4158" responseTimeMS=5 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:35:57.114532288Z 📥 2025-12-18T16:35:57.113Z [5671bda4-044a-4344-9b61-6246eda24ef7] GET /webhook/realtime-updates
-2025-12-18T16:35:57.11457711Z    CF-Ray: 9b0013892f87937a-PDX
-2025-12-18T16:35:57.11458327Z    CF-Country: IN
-2025-12-18T16:36:00Z clientIP="49.36.8.199" requestID="4495208e-8533-4d47" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:36:00.103441506Z 📥 2025-12-18T16:36:00.103Z [1a30ea6f-a215-4d91-8733-ad05af911732] GET /webhook/realtime-updates
-2025-12-18T16:36:00.103489258Z    CF-Ray: 9b00139bda22937a-PDX
-2025-12-18T16:36:00.103608614Z    CF-Country: IN
-2025-12-18T16:36:03Z clientIP="49.36.8.199" requestID="fc868801-6734-4ee7" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:36:03.11140969Z 📥 2025-12-18T16:36:03.110Z [bc1f8c19-5b51-4be6-b1ce-e664d1b1973d] GET /webhook/realtime-updates
-2025-12-18T16:36:03.111454672Z    CF-Ray: 9b0013ae9a99937a-PDX
-2025-12-18T16:36:03.111460032Z    CF-Country: IN
-2025-12-18T16:36:06Z clientIP="49.36.8.199" requestID="cbf85adf-6c4d-4a33" responseTimeMS=4 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:36:06.110074398Z 📥 2025-12-18T16:36:06.109Z [dda52e54-1dbe-49e4-82ee-b05649e4010c] GET /webhook/realtime-updates
-2025-12-18T16:36:06.110658816Z    CF-Ray: 9b0013c15bc0937a-PDX
-2025-12-18T16:36:06.110812084Z    CF-Country: IN
-2025-12-18T16:36:09Z clientIP="49.36.8.199" requestID="bdc2565d-0010-4b50" responseTimeMS=1 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:36:09.286805946Z 📥 2025-12-18T16:36:09.286Z [b34582d0-6ac0-4e22-8e43-2269ab06069f] GET /webhook/realtime-updates
-2025-12-18T16:36:09.286832377Z    CF-Ray: 9b0013d54d73937a-PDX
-2025-12-18T16:36:09.286837878Z    CF-Country: IN
-2025-12-18T16:36:12Z clientIP="49.36.8.199" requestID="7503634e-cff3-40ff" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:36:12.116489298Z 📥 2025-12-18T16:36:12.114Z [47ec0142-7044-430a-9eb6-914ad6919b6a] GET /webhook/realtime-updates
-2025-12-18T16:36:12.1165264Z    CF-Ray: 9b0013e6ec3d937a-PDX
-2025-12-18T16:36:12.11653194Z    CF-Country: IN
-2025-12-18T16:36:15Z clientIP="49.36.8.199" requestID="85ca3b1a-941b-434b" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:36:15.749519714Z 📥 2025-12-18T16:36:15.749Z [f7e32c8c-5b5f-4c05-b2bf-38546c0a4f5b] GET /webhook/realtime-updates
-2025-12-18T16:36:15.749555616Z    CF-Ray: 9b0013fa9f53937a-MAA
-2025-12-18T16:36:15.749561636Z    CF-Country: IN
-2025-12-18T16:36:18Z clientIP="49.36.8.199" requestID="16c451a3-c550-4c1a" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:36:18.11175106Z 📥 2025-12-18T16:36:18.111Z [b04b5a5a-1807-4df9-b0c2-5ec9e26541b4] GET /webhook/realtime-updates
-2025-12-18T16:36:18.111816803Z    CF-Ray: 9b00140c5816937a-MAA
-2025-12-18T16:36:18.111826784Z    CF-Country: IN
-2025-12-18T16:36:21Z clientIP="49.36.8.199" requestID="d418b70b-fd83-479d" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:36:21.577478563Z 📥 2025-12-18T16:36:21.577Z [abb95fbb-a0a2-4c54-9eaf-d083c5582b07] GET /webhook/realtime-updates
-2025-12-18T16:36:21.577499844Z    CF-Ray: 9b0014220b4f937a-MAA
-2025-12-18T16:36:21.577516494Z    CF-Country: IN
-2025-12-18T16:36:24Z clientIP="49.36.8.199" requestID="07a8b885-6dc6-454f" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:36:24.543660716Z 📥 2025-12-18T16:36:24.543Z [ecf58e19-6d38-4339-a865-c83c454b2232] GET /webhook/realtime-updates
-2025-12-18T16:36:24.543686598Z    CF-Ray: 9b0014349be1937a-MAA
-2025-12-18T16:36:24.543691258Z    CF-Country: IN
-2025-12-18T16:36:27Z clientIP="49.36.8.199" requestID="ed5e1735-5a0d-4a27" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:36:27.256115281Z 📥 2025-12-18T16:36:27.255Z [ee268c2d-55da-417d-a458-0212e4b6c685] GET /webhook/realtime-updates
-2025-12-18T16:36:27.256147813Z    CF-Ray: 9b0014457cd8937a-PDX
-2025-12-18T16:36:27.256153273Z    CF-Country: IN
-2025-12-18T16:36:30Z clientIP="49.36.8.199" requestID="d9a9496d-bc45-43a6" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:36:30.236799162Z 📥 2025-12-18T16:36:30.236Z [ece59d73-147f-4e47-b2b6-ee687d6b5977] GET /webhook/realtime-updates
-2025-12-18T16:36:30.236823553Z    CF-Ray: 9b0014583eee937a-PDX
-2025-12-18T16:36:30.236827093Z    CF-Country: IN
-2025-12-18T16:36:33Z clientIP="49.36.8.199" requestID="04cb4c75-608c-4b5d" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:36:33.106264675Z 📥 2025-12-18T16:36:33.106Z [68093aba-2a1e-48dd-9ccd-561a0006472f] GET /webhook/realtime-updates
-2025-12-18T16:36:33.106285776Z    CF-Ray: 9b00146a197b937a-PDX
-2025-12-18T16:36:33.106291727Z    CF-Country: IN
-2025-12-18T16:36:36Z clientIP="49.36.8.199" requestID="de1712c6-369e-460e" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:36:36.129087852Z 📥 2025-12-18T16:36:36.128Z [f8361b8e-ed42-4c72-a4d2-baaf56a7e5b3] GET /webhook/realtime-updates
-2025-12-18T16:36:36.129119463Z    CF-Ray: 9b00147cea72937a-PDX
-2025-12-18T16:36:36.129126293Z    CF-Country: IN
-2025-12-18T16:36:39Z clientIP="49.36.8.199" requestID="1b27f9eb-7ba4-4666" responseTimeMS=4 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:36:39.88510026Z 📥 2025-12-18T16:36:39.884Z [afdc292e-2949-4787-bd70-c317dd738d1c] GET /webhook/realtime-updates
-2025-12-18T16:36:39.885127391Z    CF-Ray: 9b00149478e2937a-PDX
-2025-12-18T16:36:39.885133111Z    CF-Country: IN
-2025-12-18T16:36:42Z clientIP="49.36.8.199" requestID="616000a8-2be2-460d" responseTimeMS=5 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:36:42.265848535Z 📥 2025-12-18T16:36:42.264Z [b0d67bb5-d784-484d-8d2b-489706bca615] GET /webhook/realtime-updates
-2025-12-18T16:36:42.265875717Z    CF-Ray: 9b0014a37efd937a-PDX
-2025-12-18T16:36:42.265880797Z    CF-Country: IN
-2025-12-18T16:36:45Z clientIP="49.36.8.199" requestID="ee5620e1-3cd9-484f" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:36:45.286046695Z 📥 2025-12-18T16:36:45.285Z [2cda4c86-d809-443d-bb84-7a05e46083b5] GET /webhook/realtime-updates
-2025-12-18T16:36:45.286132039Z    CF-Ray: 9b0014b63f29937a-PDX
-2025-12-18T16:36:45.28613991Z    CF-Country: IN
-2025-12-18T16:36:48Z clientIP="49.36.8.199" requestID="ca73df52-a1cd-46a7" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:36:48.295982011Z 📥 2025-12-18T16:36:48.294Z [81adada9-3b04-4d14-a528-9babe80258c1] GET /webhook/realtime-updates
-2025-12-18T16:36:48.296024953Z    CF-Ray: 9b0014c8fa45937a-PDX
-2025-12-18T16:36:48.296030093Z    CF-Country: IN
-2025-12-18T16:36:51Z clientIP="49.36.8.199" requestID="ff1993a4-87ec-4a18" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:36:51.285603011Z 📥 2025-12-18T16:36:51.285Z [64739346-d2a9-4341-8e43-285c48bbd85f] GET /webhook/realtime-updates
-2025-12-18T16:36:51.285637772Z    CF-Ray: 9b0014dbbc66937a-PDX
-2025-12-18T16:36:51.285644183Z    CF-Country: IN
-2025-12-18T16:36:54Z clientIP="49.36.8.199" requestID="4f69b730-b0ea-4607" responseTimeMS=4 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:36:54.286571406Z 📥 2025-12-18T16:36:54.285Z [7773af90-486d-488d-b25e-cc1a5f29466b] GET /webhook/realtime-updates
-2025-12-18T16:36:54.286615178Z    CF-Ray: 9b0014ee7de6937a-PDX
-2025-12-18T16:36:54.286621528Z    CF-Country: IN
-2025-12-18T16:36:57Z clientIP="49.36.8.199" requestID="bae93279-4951-4fdb" responseTimeMS=4 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:36:57.285335674Z 📥 2025-12-18T16:36:57.285Z [d280f600-9ec0-43bb-b0e9-443349ea27e4] GET /webhook/realtime-updates
-2025-12-18T16:36:57.285382047Z    CF-Ray: 9b0015013f27937a-MAA
-2025-12-18T16:36:57.285388067Z    CF-Country: IN
-2025-12-18T16:37:00Z clientIP="49.36.8.199" requestID="d03c9154-9588-4a97" responseTimeMS=6 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:37:00.271671326Z 📥 2025-12-18T16:37:00.271Z [e9bb9cbd-0ca1-431d-bdc7-8582832d4d1e] GET /webhook/realtime-updates
-2025-12-18T16:37:00.273054752Z    CF-Ray: 9b001513fff7937a-PDX
-2025-12-18T16:37:00.276169682Z    CF-Country: IN
-2025-12-18T16:37:03.284632497Z 📥 2025-12-18T16:37:03.284Z [021005d7-f16d-4a11-a52d-f54a89710b54] GET /webhook/realtime-updates
-2025-12-18T16:37:03.284654748Z    CF-Ray: 9b001526ca5c937a-PDX
-2025-12-18T16:37:03Z clientIP="49.36.8.199" requestID="df05f301-3b37-42d3" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:37:03.284659898Z    CF-Country: IN
-2025-12-18T16:37:06Z clientIP="49.36.8.199" requestID="639f489c-e30a-4b82" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:37:06.294733Z 📥 2025-12-18T16:37:06.294Z [858380d0-91a2-43b7-bb17-4c9667c39591] GET /webhook/realtime-updates
-2025-12-18T16:37:06.294755171Z    CF-Ray: 9b0015397b7e937a-MAA
-2025-12-18T16:37:06.294760561Z    CF-Country: IN
-2025-12-18T16:37:09Z clientIP="49.36.8.199" requestID="578376ea-d4ba-49ce" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:37:09.276696616Z 📥 2025-12-18T16:37:09.276Z [2c527c6c-d8b3-4027-815e-15837c4897c4] GET /webhook/realtime-updates
-2025-12-18T16:37:09.276753108Z    CF-Ray: 9b00154c3d89937a-PDX
-2025-12-18T16:37:09.276757089Z    CF-Country: IN
-2025-12-18T16:37:12Z clientIP="49.36.8.199" requestID="12a5880f-59e3-482b" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:37:12.282909966Z 📥 2025-12-18T16:37:12.282Z [b376bb9b-b890-4ca1-a592-cfdffbf5e126] GET /webhook/realtime-updates
-2025-12-18T16:37:12.283062694Z    CF-Ray: 9b00155ef88a937a-MAA
-2025-12-18T16:37:12.283595019Z    CF-Country: IN
-2025-12-18T16:37:15Z clientIP="49.36.8.199" requestID="bff2420c-d0b1-45a8" responseTimeMS=1 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:37:15.295394529Z 📥 2025-12-18T16:37:15.295Z [a86f07a7-e67f-4560-a28d-6c5ab1612799] GET /webhook/realtime-updates
-2025-12-18T16:37:15.29541811Z    CF-Ray: 9b001571b967937a-PDX
-2025-12-18T16:37:15.29542153Z    CF-Country: IN
-2025-12-18T16:37:18Z clientIP="49.36.8.199" requestID="35583764-87bf-4977" responseTimeMS=6 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:37:18.418895595Z 📥 2025-12-18T16:37:18.418Z [9f5a381d-83b6-4ebf-834c-7cd275ac40c8] GET /webhook/realtime-updates
-2025-12-18T16:37:18.418931777Z    CF-Ray: 9b0015854c60937a-PDX
-2025-12-18T16:37:18.418936827Z    CF-Country: IN
-2025-12-18T16:37:21Z clientIP="49.36.8.199" requestID="ee15af3c-de4b-485b" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:37:21.291007228Z 📥 2025-12-18T16:37:21.290Z [6ea50246-946f-4184-af15-e31f9c01103b] GET /webhook/realtime-updates
-2025-12-18T16:37:21.291046229Z    CF-Ray: 9b0015974c7e937a-PDX
-2025-12-18T16:37:21.291050199Z    CF-Country: IN
-2025-12-18T16:37:24Z clientIP="49.36.8.199" requestID="89f93433-cb3c-4dea" responseTimeMS=4 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:37:24.287805193Z 📥 2025-12-18T16:37:24.287Z [bc52e82c-bb99-48f3-aa31-cd33b99fa5ca] GET /webhook/realtime-updates
-2025-12-18T16:37:24.287837644Z    CF-Ray: 9b0015a9ff28937a-PDX
-2025-12-18T16:37:24.287842924Z    CF-Country: IN
-2025-12-18T16:37:27Z clientIP="49.36.8.199" requestID="ef0faad0-46c6-4dcc" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:37:27.288211401Z 📥 2025-12-18T16:37:27.288Z [fea8a290-2ed8-4a20-a18a-869d15ea9434] GET /webhook/realtime-updates
-2025-12-18T16:37:27.288235973Z    CF-Ray: 9b0015bcc85f937a-PDX
-2025-12-18T16:37:27.288239923Z    CF-Country: IN
-2025-12-18T16:37:30Z clientIP="49.36.8.199" requestID="f21463f4-eb25-4220" responseTimeMS=6 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:37:30.293087085Z 📥 2025-12-18T16:37:30.292Z [b17d2ed3-510a-4826-9ed6-06bb1c7f8cf4] GET /webhook/realtime-updates
-2025-12-18T16:37:30.293127497Z    CF-Ray: 9b0015cf7870937a-MAA
-2025-12-18T16:37:30.293131927Z    CF-Country: IN
-2025-12-18T16:37:33Z clientIP="49.36.8.199" requestID="2fe0eda8-ec14-48c8" responseTimeMS=2 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:37:33.288713942Z 📥 2025-12-18T16:37:33.288Z [aa73d5a3-1e10-4fef-bbda-79788d18459f] GET /webhook/realtime-updates
-2025-12-18T16:37:33.288743974Z    CF-Ray: 9b0015e23860937a-PDX
-2025-12-18T16:37:33.288747504Z    CF-Country: IN
-2025-12-18T16:37:36Z clientIP="49.36.8.199" requestID="e84afddd-e5a5-40cc" responseTimeMS=4 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:37:36.288596355Z 📥 2025-12-18T16:37:36.288Z [55edc48e-7d1a-423b-ac83-5c3b7f59f887] GET /webhook/realtime-updates
-2025-12-18T16:37:36.288618606Z    CF-Ray: 9b0015f50a09937a-PDX
-2025-12-18T16:37:36.288623836Z    CF-Country: IN
-2025-12-18T16:37:39Z clientIP="49.36.8.199" requestID="c55f25f1-5109-48ce" responseTimeMS=3 responseBytes=1274 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)"
-2025-12-18T16:37:39.28437888Z 📥 2025-12-18T16:37:39.284Z [16167a14-73cf-43a4-9492-8a7587d2a9e1] GET /webhook/realtime-updates
-2025-12-18T16:37:39.284410501Z    CF-Ray: 9b001607bb4c937a-PDX
-2025-12-18T16:37:39.284417282Z    CF-Country: IN
+
+
+PHASE 2: BACKEND TOKEN EXCHANGE (backend.api/routes/auth.js)
+┌─────────────────────────────────────────────────────────────────┐
+│ STEP 5: Frontend Sends Token to Backend                         │
+├─────────────────────────────────────────────────────────────────┤
+│ Request: POST /api/instagram/exchange-token                     │
+│                                                                  │
+│ Body:                                                            │
+│ {                                                                │
+│   userAccessToken: 'EAAYqK...',    // Short-lived token         │
+│   userId: '122098096448937004',     // Facebook User ID         │
+│   businessAccountId: 'temp_122098096448937004'                  │
+│ }                                                                │
+│                                                                  │
+│ Headers:                                                         │
+│ {                                                                │
+│   'Content-Type': 'application/json'                            │
+│ }                                                                │
+└─────────────────────────────────────────────────────────────────┘
+                           ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ STEP 6: Exchange for Long-Lived Token                           │
+├─────────────────────────────────────────────────────────────────┤
+│ File: backend.api/routes/auth.js (Lines 40-62)                  │
+│                                                                  │
+│ Meta Graph API Call:                                             │
+│ POST https://graph.facebook.com/v23.0/oauth/access_token        │
+│                                                                  │
+│ Parameters:                                                      │
+│ {                                                                │
+│   grant_type: 'fb_exchange_token',                              │
+│   client_id: process.env.META_APP_ID,                           │
+│   client_secret: process.env.META_APP_SECRET,                   │
+│   fb_exchange_token: userAccessToken                            │
+│ }                                                                │
+│                                                                  │
+│ Response:                                                        │
+│ {                                                                │
+│   access_token: 'EAAYqK...',       // Long-lived (60 days)      │
+│   token_type: 'bearer',                                          │
+│   expires_in: 5183999              // ~60 days in seconds       │
+│ }                                                                │
+└─────────────────────────────────────────────────────────────────┘
+                           ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ STEP 7: Fetch Facebook User Profile                             │
+├─────────────────────────────────────────────────────────────────┤
+│ File: backend.api/routes/auth.js (Lines 69-86)                  │
+│                                                                  │
+│ Meta Graph API Call:                                             │
+│ GET https://graph.facebook.com/v23.0/me                          │
+│   ?fields=id,name,email,picture                                 │
+│   &access_token={longLivedToken}                                │
+│                                                                  │
+│ Response:                                                        │
+│ {                                                                │
+│   id: '122098096448937004',         // Facebook ID (TEXT)       │
+│   name: 'John Doe',                                              │
+│   email: 'john@example.com',                                     │
+│   picture: {                                                     │
+│     data: {                                                      │
+│       url: 'https://platform-lookaside.fbsbx.com/...'          │
+│     }                                                            │
+│   }                                                              │
+│ }                                                                │
+└─────────────────────────────────────────────────────────────────┘
+                           ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ STEP 8: Create Supabase Auth Session                            │
+├─────────────────────────────────────────────────────────────────┤
+│ File: backend.api/routes/auth.js (Lines 92-115)                 │
+│                                                                  │
+│ Supabase Admin Auth Call:                                       │
+│ supabaseAdmin.auth.signInWithIdToken({                          │
+│   provider: 'facebook',                                          │
+│   token: longLivedToken,                                         │
+│   options: {                                                     │
+│     data: {                                                      │
+│       facebook_id: '122098096448937004',                         │
+│       full_name: 'John Doe',                                     │
+│       avatar_url: 'https://...'                                  │
+│     }                                                            │
+│   }                                                              │
+│ })                                                               │
+│                                                                  │
+│ Creates/Returns:                                                 │
+│ {                                                                │
+│   user: {                                                        │
+│     id: 'a1b2c3d4-e5f6-47a8-9b0c-1d2e3f4a5b6c',  // UUID        │
+│     app_metadata: {},                                            │
+│     user_metadata: {                                             │
+│       facebook_id: '122098096448937004',                         │
+│       full_name: 'John Doe',                                     │
+│       avatar_url: '...'                                          │
+│     },                                                           │
+│     created_at: '2025-12-25T10:30:00Z'                          │
+│   },                                                             │
+│   session: {                                                     │
+│     access_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',   │
+│     refresh_token: 'v1.MjAyNS0xMi0yNVQxMDozMD...',             │
+│     expires_in: 3600,                    // 1 hour              │
+│     expires_at: 1703510400,                                      │
+│     token_type: 'Bearer',                                        │
+│     user: { /* same as above */ }                                │
+│   }                                                              │
+│ }                                                                │
+└─────────────────────────────────────────────────────────────────┘
+                           ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ STEP 9: Store User Profile in Database                          │
+├─────────────────────────────────────────────────────────────────┤
+│ Table: user_profiles                                             │
+│ File: backend.api/routes/auth.js (Lines 121-148)                │
+│                                                                  │
+│ SQL Operation: UPSERT                                            │
+│ INSERT INTO user_profiles (                                     │
+│   user_id,                          -- UUID (PRIMARY KEY)        │
+│   facebook_id,                      -- TEXT (UNIQUE)             │
+│   email,                                                         │
+│   full_name,                                                     │
+│   avatar_url,                                                    │
+│   instagram_connected,              -- false initially           │
+│   user_role,                        -- 'user' (default)          │
+│   last_active_at,                                                │
+│   updated_at                                                     │
+│ ) VALUES (                                                       │
+│   'a1b2c3d4-e5f6-47a8-9b0c-1d2e3f4a5b6c',                       │
+│   '122098096448937004',                                          │
+│   'john@example.com',                                            │
+│   'John Doe',                                                    │
+│   'https://...',                                                 │
+│   false,                                                         │
+│   'user',                                                        │
+│   NOW(),                                                         │
+│   NOW()                                                          │
+│ )                                                                │
+│ ON CONFLICT (user_id) DO UPDATE SET                             │
+│   email = EXCLUDED.email,                                        │
+│   full_name = EXCLUDED.full_name,                                │
+│   avatar_url = EXCLUDED.avatar_url,                              │
+│   last_active_at = NOW(),                                        │
+│   updated_at = NOW()                                             │
+└─────────────────────────────────────────────────────────────────┘
+                           ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ STEP 10: Log User Consent                                       │
+├─────────────────────────────────────────────────────────────────┤
+│ Table: user_consents                                             │
+│ File: backend.api/routes/auth.js (Lines 154-171)                │
+│                                                                  │
+│ SQL Operation: INSERT                                            │
+│ INSERT INTO user_consents (                                     │
+│   user_id,                                                       │
+│   consent_type,                                                  │
+│   consent_given,                                                 │
+│   consent_text,                                                  │
+│   ip_address,                                                    │
+│   user_agent,                                                    │
+│   consented_at                                                   │
+│ ) VALUES (                                                       │
+│   'a1b2c3d4-e5f6-47a8-9b0c-1d2e3f4a5b6c',                       │
+│   'facebook_oauth',                                              │
+│   true,                                                          │
+│   'User granted Facebook OAuth permissions',                    │
+│   '203.0.113.42',                   -- From request IP           │
+│   'Mozilla/5.0...',                 -- From headers              │
+│   '2025-12-25T10:30:00Z'                                        │
+│ )                                                                │
+│                                                                  │
+│ Purpose: GDPR/CCPA compliance audit trail                       │
+└─────────────────────────────────────────────────────────────────┘
+
+
+
+PHASE 3: INSTAGRAM ACCOUNT LINKAGE (backend.api/services/instagram-tokens.js)
+┌─────────────────────────────────────────────────────────────────┐
+│ STEP 11: Fetch User's Facebook Pages                            │
+├─────────────────────────────────────────────────────────────────┤
+│ File: backend.api/services/instagram-tokens.js (Lines 49-58)    │
+│                                                                  │
+│ Meta Graph API Call:                                             │
+│ GET https://graph.facebook.com/v23.0/me/accounts                 │
+│   ?fields=instagram_business_account                            │
+│   &access_token={longLivedUserToken}                            │
+│                                                                  │
+│ Response:                                                        │
+│ {                                                                │
+│   data: [                                                        │
+│     {                                                            │
+│       id: '108491407294665',      // Facebook Page ID           │
+│       name: 'My Business Page',                                  │
+│       access_token: 'EAAYqK...',  // PAGE TOKEN (60 days)       │
+│       instagram_business_account: {                              │
+│         id: '17841401234567890'   // Instagram Business ID      │
+│       }                                                          │
+│     }                                                            │
+│   ]                                                              │
+│ }                                                                │
+│                                                                  │
+│ 🔑 KEY: Page access token is CRITICAL - used for all API calls  │
+└─────────────────────────────────────────────────────────────────┘
+                           ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ STEP 12: Validate Instagram Business Account                    │
+├─────────────────────────────────────────────────────────────────┤
+│ File: backend.api/services/instagram-tokens.js (Lines 91-103)   │
+│                                                                  │
+│ Validation Checks:                                               │
+│ ✓ Instagram business account exists                             │
+│ ✓ Account is type "BUSINESS" (not personal)                     │
+│ ✓ Page has permissions for Instagram                            │
+│                                                                  │
+│ Error Scenarios:                                                 │
+│ ❌ No Instagram account linked → Return error message           │
+│ ❌ Personal Instagram (not business) → Guide to convert         │
+│ ❌ Permissions missing → Request re-auth                         │
+└─────────────────────────────────────────────────────────────────┘
+                           ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ STEP 13: Encrypt & Store Page Token                             │
+├─────────────────────────────────────────────────────────────────┤
+│ File: backend.api/services/instagram-tokens.js (Lines 311-382)  │
+│                                                                  │
+│ 1. Encrypt Page Access Token:                                   │
+│    const { data: encrypted } = await supabase.rpc(              │
+│      'encrypt_instagram_token',                                  │
+│      { token: pageAccessToken }                                  │
+│    );                                                            │
+│    // Uses Supabase's built-in encryption                       │
+│                                                                  │
+│ 2. Store Instagram Business Account:                            │
+│    Table: instagram_business_accounts                           │
+│    UPSERT (                                                      │
+│      id,                            -- UUID (generated)          │
+│      user_id,                       -- FK to auth.users          │
+│      facebook_id,                   -- '122098096448937004'      │
+│      page_id,                       -- '108491407294665'         │
+│      page_name,                     -- 'My Business Page'        │
+│      instagram_business_id,         -- '17841401234567890'       │
+│      instagram_username,            -- '@mybusiness'             │
+│      is_primary,                    -- true                      │
+│      is_active,                     -- true                      │
+│      connected_at,                  -- NOW()                     │
+│      updated_at                     -- NOW()                     │
+│    )                                                             │
+│                                                                  │
+│ 3. Store Encrypted Credentials:                                 │
+│    Table: instagram_credentials                                 │
+│    UPSERT (                                                      │
+│      user_id,                       -- UUID                      │
+│      business_account_id,           -- FK to IG accounts         │
+│      access_token_encrypted,        -- Encrypted page token     │
+│      token_type,                    -- 'page'                    │
+│      scope,                         -- Array of permissions      │
+│      issued_at,                     -- NOW()                     │
+│      expires_at,                    -- NOW() + 60 days           │
+│      is_active                      -- true                      │
+│    )                                                             │
+│    ON CONFLICT (user_id, business_account_id, token_type)       │
+│    DO UPDATE                                                     │
+│                                                                  │
+│ 🔒 Security: Token never stored in plaintext                     │
+└─────────────────────────────────────────────────────────────────┘
+                           ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ STEP 14: Return Success to Frontend                             │
+├─────────────────────────────────────────────────────────────────┤
+│ File: backend.api/routes/auth.js (Lines 193-211)                │
+│                                                                  │
+│ Response: 200 OK                                                 │
+│ {                                                                │
+│   success: true,                                                 │
+│   message: 'Facebook OAuth successful',                         │
+│   user: {                                                        │
+│     id: 'a1b2c3d4-e5f6-47a8-9b0c-1d2e3f4a5b6c',                │
+│     facebook_id: '122098096448937004',                           │
+│     email: 'john@example.com',                                   │
+│     name: 'John Doe',                                            │
+│     avatar_url: 'https://...'                                    │
+│   },                                                             │
+│   session: {                                                     │
+│     access_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',   │
+│     refresh_token: 'v1.MjAyNS0xMi0yNVQxMDozMD...',             │
+│     expires_in: 3600,                                            │
+│     expires_at: 1703510400,                                      │
+│     token_type: 'Bearer',                                        │
+│     provider_token: 'EAAYqK...'    // Facebook long-lived token │
+│   }                                                              │
+│ }                                                                │
+└─────────────────────────────────────────────────────────────────┘
+
+
+
+PHASE 4: FRONTEND SESSION SETUP (src/pages/AuthCallback.tsx & src/stores/authStore.ts)
+┌─────────────────────────────────────────────────────────────────┐
+│ STEP 15: Set Supabase Session in Browser                        │
+├─────────────────────────────────────────────────────────────────┤
+│ File: src/pages/AuthCallback.tsx (Lines 141-148)                │
+│                                                                  │
+│ Supabase Client Call:                                            │
+│ await supabase.auth.setSession({                                │
+│   access_token: response.session.access_token,                  │
+│   refresh_token: response.session.refresh_token                 │
+│ });                                                              │
+│                                                                  │
+│ Effects:                                                         │
+│ ✓ Stores session in browser (localStorage/sessionStorage)       │
+│ ✓ Sets Authorization header for future requests                 │
+│ ✓ Enables RLS policies (auth.uid() = user UUID)                │
+│ ✓ Triggers onAuthStateChange listener                           │
+│ ✓ Auto-refresh token before expiration                          │
+└─────────────────────────────────────────────────────────────────┘
+                           ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ STEP 16: Update Zustand Auth Store                              │
+├─────────────────────────────────────────────────────────────────┤
+│ File: src/stores/authStore.ts (Lines 549-620)                   │
+│                                                                  │
+│ Function: checkSession()                                         │
+│                                                                  │
+│ Process:                                                         │
+│ 1. Get current Supabase session:                                │
+│    const { data: { session } } = await supabase.auth.getSession()│
+│                                                                  │
+│ 2. Fetch user_profiles table:                                   │
+│    SELECT * FROM user_profiles WHERE user_id = session.user.id  │
+│                                                                  │
+│ 3. Check admin status:                                           │
+│    SELECT * FROM admin_users WHERE user_id = session.user.id    │
+│                                                                  │
+│ 4. Map to User object:                                           │
+│    {                                                             │
+│      id: 'a1b2c3d4-...',            // UUID                      │
+│      email: 'john@example.com',                                  │
+│      name: 'John Doe',                                           │
+│      username: '@mybusiness',       // From IG account           │
+│      avatar: 'https://...',                                      │
+│      role: 'user',                                               │
+│      permissions: [                                              │
+│        'dashboard',                                              │
+│        'content',                                                │
+│        'engagement',                                             │
+│        'analytics',                                              │
+│        'settings'                                                │
+│      ]                                                           │
+│    }                                                             │
+│                                                                  │
+│ 5. Update Zustand state:                                         │
+│    set({                                                         │
+│      user: mappedUser,                                           │
+│      token: session.access_token,                                │
+│      session: session,                                           │
+│      isAuthenticated: true,                                      │
+│      isAdmin: isAdmin,                                           │
+│      permissions: mappedUser.permissions,                        │
+│      isLoading: false,                                           │
+│      error: null                                                 │
+│    })                                                            │
+│                                                                  │
+│ 6. Persist to localStorage:                                      │
+│    localStorage.setItem('auth-storage', JSON.stringify({        │
+│      state: {                                                    │
+│        user, token, isAuthenticated, isAdmin, permissions        │
+│      }                                                           │
+│    }))                                                           │
+└─────────────────────────────────────────────────────────────────┘
+                           ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ STEP 17: Redirect to Dashboard                                  │
+├─────────────────────────────────────────────────────────────────┤
+│ File: src/pages/AuthCallback.tsx (Lines 157-161)                │
+│                                                                  │
+│ Navigation:                                                      │
+│ navigate('/dashboard', { replace: true })                       │
+│                                                                  │
+│ React Router redirects to:                                       │
+│ → http://localhost:5173/dashboard                               │
+└─────────────────────────────────────────────────────────────────┘
+
+
+
+PHASE 5: DASHBOARD DATA LOADING (src/pages/Dashboard.tsx)
+┌─────────────────────────────────────────────────────────────────┐
+│ STEP 18: Dashboard Component Mounts                             │
+├─────────────────────────────────────────────────────────────────┤
+│ File: src/pages/Dashboard.tsx (Lines 105-261)                   │
+│                                                                  │
+│ Parallel Hook Execution:                                         │
+│ ├─ useInstagramAccount()          // Get account IDs            │
+│ ├─ useTokenValidation()           // Validate token             │
+│ ├─ useInstagramProfile()          // Fetch profile              │
+│ ├─ useDashboardData()             // Fetch metrics              │
+│ └─ useRealtimeUpdates()           // WebSocket connection       │
+└─────────────────────────────────────────────────────────────────┘
+                           ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ STEP 19: Retrieve Instagram Account IDs                         │
+├─────────────────────────────────────────────────────────────────┤
+│ Hook: useInstagramAccount                                        │
+│ File: src/hooks/useInstagramAccount.ts                           │
+│                                                                  │
+│ Process:                                                         │
+│ 1. Get user UUID from authStore:                                │
+│    const userId = useAuthStore(state => state.user?.id)         │
+│                                                                  │
+│ 2. Query Supabase:                                               │
+│    SELECT * FROM instagram_business_accounts                    │
+│    WHERE user_id = '{userId}' AND is_active = true              │
+│    ORDER BY is_primary DESC, connected_at DESC                  │
+│    LIMIT 1                                                       │
+│                                                                  │
+│ 3. Extract IDs:                                                  │
+│    {                                                             │
+│      businessAccountId: 'b1c2d3e4-f5a6-47b8-9c0d-2e3f4a5b6c7d', │
+│      instagramBusinessId: '17841401234567890',                   │
+│      instagramUsername: '@mybusiness',                           │
+│      followers: 1234,                                            │
+│      isConnected: true                                           │
+│    }                                                             │
+│                                                                  │
+│ 🔑 These IDs are used in ALL subsequent API calls               │
+└─────────────────────────────────────────────────────────────────┘
+                           ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ STEP 20: Validate Instagram Token                               │
+├─────────────────────────────────────────────────────────────────┤
+│ Hook: useTokenValidation                                         │
+│ File: src/hooks/useTokenValidation.ts                            │
+│                                                                  │
+│ Request:                                                         │
+│ POST /api/instagram/validate-token                              │
+│ {                                                                │
+│   userId: 'a1b2c3d4-...',                                       │
+│   businessAccountId: 'b1c2d3e4-...'                             │
+│ }                                                                │
+│                                                                  │
+│ Backend Process:                                                 │
+│ 1. Retrieve encrypted token from instagram_credentials          │
+│ 2. Decrypt using Supabase RPC                                   │
+│ 3. Check expiration: expires_at > NOW()                         │
+│ 4. Test with Graph API:                                          │
+│    GET https://graph.facebook.com/v23.0/me                       │
+│      ?access_token={pageToken}                                  │
+│                                                                  │
+│ Response Scenarios:                                              │
+│                                                                  │
+│ ✅ Valid Token:                                                  │
+│ {                                                                │
+│   status: 'active',                                              │
+│   message: 'Token is valid',                                     │
+│   expires_at: '2026-02-23T10:30:00Z'                            │
+│ }                                                                │
+│                                                                  │
+│ ❌ Expired Token:                                                │
+│ {                                                                │
+│   status: 'expired',                                             │
+│   error: 'Token has expired',                                    │
+│   details: {                                                     │
+│     error_code: 190,              // Meta error code             │
+│     error_subcode: 463,           // Token expired               │
+│     reason: 'Access token expired'                               │
+│   }                                                              │
+│ }                                                                │
+│                                                                  │
+│ Frontend Action:                                                 │
+│ if (status === 'expired') {                                      │
+│   → Show TokenExpiredBanner with "Reconnect" button             │
+│   → Clicking redirects to OAuth flow (back to STEP 1)           │
+│ }                                                                │
+└─────────────────────────────────────────────────────────────────┘
+                           ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ STEP 21: Fetch Instagram Profile Data                           │
+├─────────────────────────────────────────────────────────────────┤
+│ Hook: useInstagramProfile                                        │
+│ File: src/hooks/useInstagramProfile.ts                           │
+│                                                                  │
+│ Request:                                                         │
+│ GET /api/instagram/profile/{instagramBusinessId}                │
+│   ?userId={userId-UUID}                                         │
+│   &businessAccountId={businessAccountId-UUID}                   │
+│                                                                  │
+│ Backend Process:                                                 │
+│ 1. Retrieve & decrypt page token                                │
+│ 2. Call Meta Graph API:                                          │
+│    GET https://graph.facebook.com/v23.0/17841401234567890        │
+│      ?fields=username,name,biography,followers_count,            │
+│               follows_count,media_count,profile_picture_url      │
+│      &access_token={pageToken}                                  │
+│                                                                  │
+│ Meta Response:                                                   │
+│ {                                                                │
+│   id: '17841401234567890',                                       │
+│   username: 'mybusiness',                                        │
+│   name: 'My Business Name',                                      │
+│   biography: 'Official Instagram for...',                        │
+│   followers_count: 1234,                                         │
+│   follows_count: 567,                                            │
+│   media_count: 89,                                               │
+│   profile_picture_url: 'https://scontent.cdninstagram.com/...'  │
+│ }                                                                │
+│                                                                  │
+│ Frontend State Update:                                           │
+│ setProfile({                                                     │
+│   username: '@mybusiness',                                       │
+│   name: 'My Business Name',                                      │
+│   bio: 'Official Instagram for...',                              │
+│   followers: 1234,                                               │
+│   following: 567,                                                │
+│   posts: 89,                                                     │
+│   avatarUrl: 'https://...'                                       │
+│ })                                                               │
+└─────────────────────────────────────────────────────────────────┘
+                           ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ STEP 22: Fetch Dashboard Metrics                                │
+├─────────────────────────────────────────────────────────────────┤
+│ Hook: useDashboardData                                           │
+│ File: src/hooks/useDashboardData.ts                              │
+│                                                                  │
+│ Two-Part Process:                                                │
+│                                                                  │
+│ Part A: Trigger Background Sync                                 │
+│ POST /api/instagram/sync/posts                                  │
+│ {                                                                │
+│   userId: 'a1b2c3d4-...',                                       │
+│   businessAccountId: 'b1c2d3e4-...'                             │
+│ }                                                                │
+│                                                                  │
+│ Backend (Fire & Forget):                                         │
+│ 1. Retrieve page token                                           │
+│ 2. Fetch latest media:                                           │
+│    GET /v23.0/{igBusinessId}/media                               │
+│      ?fields=id,caption,media_type,media_url,timestamp,          │
+│               like_count,comments_count,permalink                │
+│      &limit=50                                                   │
+│                                                                  │
+│ 3. For each media item, fetch insights:                          │
+│    GET /v23.0/{mediaId}/insights                                 │
+│      ?metric=impressions,reach,engagement,saved                  │
+│                                                                  │
+│ 4. UPSERT to database:                                           │
+│    - instagram_media (media metadata)                           │
+│    - instagram_media_insights (performance metrics)             │
+│                                                                  │
+│ Part B: Fetch Aggregated Dashboard Stats                        │
+│ GET /api/instagram/dashboard-stats/{businessAccountId}          │
+│   ?userId={userId}                                              │
+│                                                                  │
+│ Backend SQL Queries:                                             │
+│                                                                  │
+│ Query 1: Metrics (Last 30 Days)                                 │
+│ SELECT                                                           │
+│   SUM(reach) as total_reach,                                     │
+│   SUM(impressions) as total_impressions,                         │
+│   SUM(engagement) as total_engagement,                           │
+│   AVG(engagement_rate) as avg_engagement_rate                    │
+│ FROM instagram_media_insights                                   │
+│ WHERE business_account_id = $1                                   │
+│   AND date >= NOW() - INTERVAL '30 days'                         │
+│                                                                  │
+│ Query 2: Recent Activities (Comments/Likes)                     │
+│ SELECT type, username, media_id, created_at                      │
+│ FROM instagram_activities                                       │
+│ WHERE business_account_id = $1                                   │
+│ ORDER BY created_at DESC                                         │
+│ LIMIT 10                                                         │
+│                                                                  │
+│ Query 3: Recent Media                                            │
+│ SELECT id, media_type, media_url, caption, like_count,           │
+│        comments_count, timestamp                                 │
+│ FROM instagram_media                                             │
+│ WHERE business_account_id = $1                                   │
+│ ORDER BY timestamp DESC                                          │
+│ LIMIT 6                                                          │
+│                                                                  │
+│ Query 4: Chart Data (Last 7 Days)                               │
+│ SELECT                                                           │
+│   DATE(date) as date,                                            │
+│   SUM(reach) as reach,                                           │
+│   SUM(impressions) as impressions,                               │
+│   SUM(engagement) as engagement                                  │
+│ FROM instagram_media_insights                                   │
+│ WHERE business_account_id = $1                                   │
+│   AND date >= NOW() - INTERVAL '7 days'                          │
+│ GROUP BY DATE(date)                                              │
+│ ORDER BY date ASC                                                │
+│                                                                  │
+│ Response:                                                        │
+│ {                                                                │
+│   success: true,                                                 │
+│   source: 'database',              // Not real-time Graph API    │
+│   data: {                                                        │
+│     metrics: [                                                   │
+│       { label: 'Reach', value: 12345, trend: '+5.2%' },         │
+│       { label: 'Impressions', value: 45678, trend: '+12.1%' },  │
+│       { label: 'Engagement', value: 890, trend: '+3.4%' },      │
+│       { label: 'Followers', value: 1234, trend: '+2.1%' }       │
+│     ],                                                           │
+│     activities: [                                                │
+│       {                                                          │
+│         type: 'like',                                            │
+│         username: 'user123',                                     │
+│         timestamp: '2025-12-25T09:15:00Z',                      │
+│         mediaId: '...'                                           │
+│       },                                                         │
+│       // ... more activities                                     │
+│     ],                                                           │
+│     recentMedia: [                                               │
+│       {                                                          │
+│         id: '...',                                               │
+│         type: 'IMAGE',                                           │
+│         url: 'https://...',                                      │
+│         caption: 'Check out our...',                             │
+│         likes: 123,                                              │
+│         comments: 45,                                            │
+│         timestamp: '2025-12-24T14:30:00Z'                       │
+│       },                                                         │
+│       // ... 5 more media                                        │
+│     ],                                                           │
+│     chartData: [                                                 │
+│       { date: '2025-12-19', reach: 1000, impressions: 3000 },   │
+│       { date: '2025-12-20', reach: 1200, impressions: 3500 },   │
+│       { date: '2025-12-21', reach: 1100, impressions: 3200 },   │
+│       { date: '2025-12-22', reach: 1400, impressions: 4000 },   │
+│       { date: '2025-12-23', reach: 1300, impressions: 3800 },   │
+│       { date: '2025-12-24', reach: 1500, impressions: 4200 },   │
+│       { date: '2025-12-25', reach: 1600, impressions: 4500 }    │
+│     ]                                                            │
+│   }                                                              │
+│ }                                                                │
+└─────────────────────────────────────────────────────────────────┘
+                           ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ STEP 23: Render Dashboard UI                                    │
+├─────────────────────────────────────────────────────────────────┤
+│ File: src/pages/Dashboard.tsx (Lines 180-261)                   │
+│                                                                  │
+│ Component Tree:                                                  │
+│                                                                  │
+│ <Dashboard>                                                      │
+│   <TokenExpiredBanner /> (if token expired)                     │
+│   <DashboardHeader>                                              │
+│     Welcome back, {user.name}!                                   │
+│     Quick stats summary                                          │
+│   </DashboardHeader>                                             │
+│                                                                  │
+│   <InstagramProfileCard>                                         │
+│     Avatar: {profile.avatarUrl}                                  │
+│     Username: @{profile.username}                                │
+│     Followers: {profile.followers.toLocaleString()}              │
+│     Posts: {profile.posts}                                       │
+│   </InstagramProfileCard>                                        │
+│                                                                  │
+│   <QuickActions>                                                 │
+│     [Create Post] [Schedule Content] [View Analytics]           │
+│   </QuickActions>                                                │
+│                                                                  │
+│   <AnimatedMetricsGrid>                                          │
+│     {metrics.map(metric => (                                     │
+│       <MetricCard key={metric.label}>                            │
+│         <Label>{metric.label}</Label>                            │
+│         <Value>{metric.value.toLocaleString()}</Value>           │
+│         <Trend color={metric.trend.startsWith('+') ? 'green' : 'red'}>│
+│           {metric.trend}                                         │
+│         </Trend>                                                 │
+│       </MetricCard>                                              │
+│     ))}                                                          │
+│   </AnimatedMetricsGrid>                                         │
+│                                                                  │
+│   <Grid columns={2}>                                             │
+│     <ActivityFeed activities={activities}>                      │
+│       {activities.map(activity => (                             │
+│         <ActivityItem>                                           │
+│           {activity.username} {activity.type}d your post         │
+│           <Time>{formatDistanceToNow(activity.timestamp)}</Time> │
+│         </ActivityItem>                                          │
+│       ))}                                                        │
+│     </ActivityFeed>                                              │
+│                                                                  │
+│     <PerformanceChart data={chartData}>                         │
+│       <LineChart>                                                │
+│         <XAxis dataKey="date" />                                 │
+│         <YAxis />                                                │
+│         <Line dataKey="reach" stroke="#8b5cf6" />               │
+│         <Line dataKey="impressions" stroke="#3b82f6" />         │
+│       </LineChart>                                               │
+│     </PerformanceChart>                                          │
+│   </Grid>                                                        │
+│                                                                  │
+│   <RecentMedia media={recentMedia}>                             │
+│     <Grid columns={3}>                                           │
+│       {recentMedia.map(item => (                                │
+│         <MediaCard key={item.id}>                               │
+│           <Image src={item.url} />                              │
+│           <Stats>                                                │
+│             ❤️ {item.likes} 💬 {item.comments}                 │
+│           </Stats>                                               │
+│         </MediaCard>                                             │
+│       ))}                                                        │
+│     </Grid>                                                      │
+│   </RecentMedia>                                                 │
+│ </Dashboard>                                                     │
+│                                                                  │
+│ ✨ All data is REAL from user's Instagram Business Account      │
+└─────────────────────────────────────────────────────────────────┘
+
+
+
+🔑 Critical Architecture Points
+Dual-ID Mapping System
+Frontend User ID     = UUID (a1b2c3d4-e5f6-47a8-9b0c-1d2e3f4a5b6c)
+  ↓ Stored in: Supabase Auth, user_profiles.user_id
+  ↓ Used for: Database queries, RLS policies, auth.uid()
+
+Facebook User ID     = TEXT (122098096448937004)
+  ↓ Stored in: user_profiles.facebook_id
+  ↓ Used for: OAuth callbacks, Meta API correlation
+
+Instagram Business ID = TEXT (17841401234567890)
+  ↓ Stored in: instagram_business_accounts.instagram_business_id
+  ↓ Used for: All Meta Graph API calls
+
+
+Token Hierarchy
+1. User Access Token (Short-lived)
+   ├─ Lifespan: 1 hour
+   ├─ Obtained: Facebook OAuth
+   └─ Usage: ONE-TIME exchange for long-lived token
+
+2. Long-lived User Token
+   ├─ Lifespan: 60 days
+   ├─ Obtained: Token exchange endpoint
+   └─ Usage: Fetch user's Facebook pages
+
+3. Page Access Token (CRITICAL)
+   ├─ Lifespan: 60 days
+   ├─ Obtained: /me/accounts endpoint
+   ├─ Stored: Encrypted in instagram_credentials table
+   └─ Usage: ALL Instagram Graph API calls
+
+
+Data Flow Pattern
+Meta Graph API (Real-time source)
+  ↓
+Backend sync endpoint
+  ↓
+Supabase PostgreSQL (Cache/History)
+  ↓
+Frontend hooks
+  ↓
+React UI components
+
+
+Error Handling Strategy
+Token Expired (Error 190)
+  ↓
+Show TokenExpiredBanner
+  ↓
+User clicks "Reconnect"
+  ↓
+Redirect to OAuth (STEP 1)
+  ↓
+New token stored
+  ↓
+Dashboard reload with valid data
+
+
+
+📊 Database Schema Relationships
+auth.users (Supabase Auth)
+  ├─ id: UUID (PRIMARY KEY)
+  └─ email, created_at, etc.
+       ↓
+       ↓ (1:1)
+       ↓
+user_profiles
+  ├─ user_id: UUID (FK → auth.users.id)
+  ├─ facebook_id: TEXT (UNIQUE)
+  ├─ email, full_name, avatar_url
+  └─ instagram_connected: BOOLEAN
+       ↓
+       ↓ (1:N)
+       ↓
+instagram_business_accounts
+  ├─ id: UUID (PRIMARY KEY)
+  ├─ user_id: UUID (FK → user_profiles.user_id)
+  ├─ facebook_id: TEXT
+  ├─ page_id: TEXT
+  ├─ instagram_business_id: TEXT (UNIQUE)
+  └─ instagram_username: TEXT
+       ↓
+       ↓ (1:1)
+       ↓
+instagram_credentials
+  ├─ business_account_id: UUID (FK → instagram_business_accounts.id)
+  ├─ access_token_encrypted: TEXT
+  ├─ expires_at: TIMESTAMP
+  └─ is_active: BOOLEAN
+       ↓
+       ↓ (1:N)
+       ↓
+instagram_media
+  ├─ business_account_id: UUID (FK)
+  ├─ instagram_media_id: TEXT
+  ├─ media_type, media_url, caption
+  └─ like_count, comments_count
+       ↓
+       ↓ (1:N)
+       ↓
+instagram_media_insights
+  ├─ media_id: UUID (FK → instagram_media.id)
+  ├─ date: DATE
+  ├─ impressions, reach, engagement
+  └─ saved, profile_visits
+
+
+
+
+Console logs after the most recent sprint
+
+🚀 Starting real-time polling every 3000 ms
+realtimeService.ts:106 👂 Subscribed to any events
+useTokenValidation.ts:110 [Token Validation] Skipping validation - no user or businessAccountId
+authStore.ts:678 🔄 Auth state changed: INITIAL_SESSION
+uromexjprcrjfmhkmgxa.supabase.co/rest/v1/instagram_business_accounts?select=*&user_id=eq.122098096448937004&is_connected=eq.true&order=created_at.desc:1  Failed to load resource: the server responded with a status of 400 ()
+databaseservices.ts:123 Get business accounts error: Object
+(anonymous) @ databaseservices.ts:123
+uromexjprcrjfmhkmgxa.supabase.co/rest/v1/instagram_business_accounts?select=*&user_id=eq.122098096448937004&is_connected=eq.true&order=created_at.desc:1  Failed to load resource: the server responded with a status of 400 ()
+databaseservices.ts:123 Get business accounts error: Object
+(anonymous) @ databaseservices.ts:123
+realtimeService.ts:95 ⏹️ Stopped real-time polling
+realtimeService.ts:116 🔇 Unsubscribed from any events
+useFacebookSDK.ts:99 📢 window.FB detected, initializing immediately
+useFacebookSDK.ts:34 🔵 Attempting Facebook SDK initialization...
+useFacebookSDK.ts:35    App ID: 1449604936071207
+useFacebookSDK.ts:52 🔄 Calling FB.init() with v23.0...
+useFacebookSDK.ts:69 ✅ FB.init() called successfully
+useFacebookSDK.ts:70    App ID: 1449604936071207
+useFacebookSDK.ts:71    SDK Version: v23.0
+useFacebookSDK.ts:75 🔄 Verifying initialization with getLoginStatus test...
+useFacebookSDK.ts:78 ✅ Facebook SDK verified and ready
+useFacebookSDK.ts:79    Status: connected
+Login.tsx:190 ✅ Consent metadata stored in session
+Login.tsx:191    Timestamp: 2025-12-25T07:16:00.553Z
+Login.tsx:192    IP Address: 49.36.8.131
+Login.tsx:193    Policy Versions: Privacy v2.0, Terms v2.0
+Login.tsx:194    ⏳ Will be persisted to database after authentication
+Login.tsx:431 🔵 Initiating Facebook OAuth via official SDK...
+Login.tsx:432    ✅ User consent verified and logged
+useFacebookSDK.ts:168 🔵 facebookLogin called with scopes: (8) ['instagram_basic', 'instagram_manage_insights', 'instagram_manage_messages', 'instagram_content_publish', 'instagram_manage_comments', 'pages_show_list', 'pages_read_engagement', 'public_profile']
+useFacebookSDK.ts:192 🔄 Calling FB.login()...
+useFacebookSDK.ts:215 ✅ FB.login() called without throwing
+sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:94  GET https://www.facebook.com/platform/impression.php/f704e5f620758d0c8/?api_key=1449604936071207&lid=117&payload=%7B%22payload%22%3A%7B%22cbt_delta%22%3A0%2C%22logger_id%22%3A%22fefc3415cfac1ba46%22%2C%22action%22%3A%22client_login_start%22%2C%22client_funnel_version%22%3A1%7D%2C%22source%22%3A%22jssdk%22%7D net::ERR_BLOCKED_BY_ADBLOCKER
+s @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:94
+e @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:94
+c @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:94
+s @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:111
+c @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:151
+transform @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:151
+prepareCall @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:151
+e @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:152
+s @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:112
+login @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:153
+(anonymous) @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:78
+(anonymous) @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:68
+(anonymous) @ useFacebookSDK.ts:194
+he @ useFacebookSDK.ts:167
+(anonymous) @ Login.tsx:458
+r @ auth-jHjS7u4J.js:1
+Promise.then
+u @ auth-jHjS7u4J.js:1
+(anonymous) @ auth-jHjS7u4J.js:1
+g @ auth-jHjS7u4J.js:1
+H @ Login.tsx:395
+Zf @ react-dom.production.min.js:54
+qf @ react-dom.production.min.js:54
+bf @ react-dom.production.min.js:55
+Si @ react-dom.production.min.js:105
+ia @ react-dom.production.min.js:106
+(anonymous) @ react-dom.production.min.js:117
+Io @ react-dom.production.min.js:273
+Rs @ react-dom.production.min.js:52
+Wl @ react-dom.production.min.js:109
+so @ react-dom.production.min.js:74
+vc @ react-dom.production.min.js:73
+sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:94  Uncaught (in promise) TypeError: Failed to fetch
+    at s (sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:94:956)
+    at e (sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:94:794)
+    at Object.c [as log] (sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:94:1678)
+    at Object.s [as logEvent] (sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:111:957)
+    at c (sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:151:2905)
+    at transform (sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:151:4141)
+    at Object.prepareCall (sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:151:8019)
+    at e (sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:152:1076)
+    at Object.s [as login] (sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:112:617)
+    at Object.login (sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:153:774)
+s @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:94
+e @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:94
+c @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:94
+s @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:111
+c @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:151
+transform @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:151
+prepareCall @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:151
+e @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:152
+s @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:112
+login @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:153
+(anonymous) @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:78
+(anonymous) @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:68
+(anonymous) @ useFacebookSDK.ts:194
+he @ useFacebookSDK.ts:167
+(anonymous) @ Login.tsx:458
+r @ auth-jHjS7u4J.js:1
+Promise.then
+u @ auth-jHjS7u4J.js:1
+(anonymous) @ auth-jHjS7u4J.js:1
+g @ auth-jHjS7u4J.js:1
+H @ Login.tsx:395
+Zf @ react-dom.production.min.js:54
+qf @ react-dom.production.min.js:54
+bf @ react-dom.production.min.js:55
+Si @ react-dom.production.min.js:105
+ia @ react-dom.production.min.js:106
+(anonymous) @ react-dom.production.min.js:117
+Io @ react-dom.production.min.js:273
+Rs @ react-dom.production.min.js:52
+Wl @ react-dom.production.min.js:109
+so @ react-dom.production.min.js:74
+vc @ react-dom.production.min.js:73
+sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:49 You are overriding current access token, that means some other app is expecting different access token and you will probably break things. Please consider passing access_token directly to API parameters instead of overriding the global settings.
+s @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:49
+setAccessToken @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:134
+(anonymous) @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:191
+o @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:61
+inform @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:61
+(anonymous) @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:66
+d @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:112
+(anonymous) @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:112
+_xdRecv @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:151
+(anonymous) @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:151
+b @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:148
+(anonymous) @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:148
+useFacebookSDK.ts:195 📥 FB.login callback received
+useFacebookSDK.ts:196    Response status: connected
+useFacebookSDK.ts:199 ✅ Facebook login successful
+useFacebookSDK.ts:200    Access Token: EAAUmaHNHeCcBQVM8kIN...
+useFacebookSDK.ts:201    User ID: 122098096448937004
+useFacebookSDK.ts:202    Granted Scopes: read_insights,pages_show_list,instagram_basic,instagram_manage_comments,instagram_manage_insights,instagram_content_publish,instagram_manage_messages,pages_read_engagement
+Login.tsx:461 ✅ Facebook OAuth successful!
+Login.tsx:462    Access Token received
+Login.tsx:463    User ID: 122098096448937004
+sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:94  GET https://www.facebook.com/platform/impression.php/f668e4a91fe4d7708/?api_key=1449604936071207&lid=117&payload=%7B%22payload%22%3A%7B%22cbt_delta%22%3A5687%2C%22logger_id%22%3A%22fefc3415cfac1ba46%22%2C%22action%22%3A%22client_login_end%22%2C%22client_funnel_version%22%3A1%7D%2C%22source%22%3A%22jssdk%22%7D net::ERR_BLOCKED_BY_ADBLOCKER
+s @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:94
+e @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:94
+c @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:94
+s @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:111
+u @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:111
+g @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:112
+(anonymous) @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:112
+_xdRecv @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:151
+(anonymous) @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:151
+b @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:148
+(anonymous) @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:148
+sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:94  Uncaught (in promise) TypeError: Failed to fetch
+    at s (sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:94:956)
+    at e (sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:94:794)
+    at Object.c [as log] (sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:94:1678)
+    at s (sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:111:957)
+    at Object.u [as logLoginEvent] (sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:111:1158)
+    at g (sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:112:5746)
+    at sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:112:5558
+    at Object._xdRecv (sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:151:14671)
+    at sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:151:14084
+    at b (sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:148:2269)
+s @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:94
+e @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:94
+c @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:94
+s @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:111
+u @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:111
+g @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:112
+(anonymous) @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:112
+_xdRecv @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:151
+(anonymous) @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:151
+b @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:148
+(anonymous) @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:148
+Login.tsx:530 ❌ Token exchange error: SyntaxError: Failed to execute 'json' on 'Response': Unexpected end of JSON input
+    at Login.tsx:497:55
+    at Generator.next (<anonymous>)
+    at r (auth-jHjS7u4J.js:1:485)
+(anonymous) @ Login.tsx:530
+l @ auth-jHjS7u4J.js:1
+Promise.then
+u @ auth-jHjS7u4J.js:1
+r @ auth-jHjS7u4J.js:1
+Promise.then
+u @ auth-jHjS7u4J.js:1
+r @ auth-jHjS7u4J.js:1
+Promise.then
+u @ auth-jHjS7u4J.js:1
+r @ auth-jHjS7u4J.js:1
+Promise.then
+u @ auth-jHjS7u4J.js:1
+(anonymous) @ auth-jHjS7u4J.js:1
+g @ auth-jHjS7u4J.js:1
+H @ Login.tsx:395
+Zf @ react-dom.production.min.js:54
+qf @ react-dom.production.min.js:54
+bf @ react-dom.production.min.js:55
+Si @ react-dom.production.min.js:105
+ia @ react-dom.production.min.js:106
+(anonymous) @ react-dom.production.min.js:117
+Io @ react-dom.production.min.js:273
+Rs @ react-dom.production.min.js:52
+Wl @ react-dom.production.min.js:109
+so @ react-dom.production.min.js:74
+vc @ react-dom.production.min.js:73
+Login.tsx:533 ⚠️ Using short-lived token as fallback
+(anonymous) @ Login.tsx:533
+l @ auth-jHjS7u4J.js:1
+Promise.then
+u @ auth-jHjS7u4J.js:1
+r @ auth-jHjS7u4J.js:1
+Promise.then
+u @ auth-jHjS7u4J.js:1
+r @ auth-jHjS7u4J.js:1
+Promise.then
+u @ auth-jHjS7u4J.js:1
+r @ auth-jHjS7u4J.js:1
+Promise.then
+u @ auth-jHjS7u4J.js:1
+(anonymous) @ auth-jHjS7u4J.js:1
+g @ auth-jHjS7u4J.js:1
+H @ Login.tsx:395
+Zf @ react-dom.production.min.js:54
+qf @ react-dom.production.min.js:54
+bf @ react-dom.production.min.js:55
+Si @ react-dom.production.min.js:105
+ia @ react-dom.production.min.js:106
+(anonymous) @ react-dom.production.min.js:117
+Io @ react-dom.production.min.js:273
+Rs @ react-dom.production.min.js:52
+Wl @ react-dom.production.min.js:109
+so @ react-dom.production.min.js:74
+vc @ react-dom.production.min.js:73
+authStore.ts:274 ✅ Legacy login successful: facebook_user
+fetch.js:23  POST https://uromexjprcrjfmhkmgxa.supabase.co/rest/v1/user_consents?columns=%22consent_type%22%2C%22consent_given%22%2C%22ip_address%22%2C%22user_agent%22%2C%22privacy_policy_version%22%2C%22terms_version%22%2C%22consented_at%22%2C%22user_id%22&select=* 400 (Bad Request)
+(anonymous) @ fetch.js:23
+(anonymous) @ fetch.js:44
+a @ fetch.js:4
+Promise.then
+c @ fetch.js:6
+(anonymous) @ fetch.js:7
+zs @ fetch.js:3
+(anonymous) @ fetch.js:34
+then @ PostgrestBuilder.js:66
+Login.tsx:282 ❌ Failed to persist consent to database: Error: Database insert failed: invalid input syntax for type uuid: "122098096448937004"
+    at Login.tsx:263:15
+    at Generator.next (<anonymous>)
+    at r (auth-jHjS7u4J.js:1:485)
+(anonymous) @ Login.tsx:282
+r @ auth-jHjS7u4J.js:1
+Promise.then
+u @ auth-jHjS7u4J.js:1
+(anonymous) @ auth-jHjS7u4J.js:1
+g @ auth-jHjS7u4J.js:1
+P @ Login.tsx:230
+(anonymous) @ Login.tsx:543
+l @ auth-jHjS7u4J.js:1
+Promise.then
+u @ auth-jHjS7u4J.js:1
+r @ auth-jHjS7u4J.js:1
+Promise.then
+u @ auth-jHjS7u4J.js:1
+r @ auth-jHjS7u4J.js:1
+Promise.then
+u @ auth-jHjS7u4J.js:1
+r @ auth-jHjS7u4J.js:1
+Promise.then
+u @ auth-jHjS7u4J.js:1
+(anonymous) @ auth-jHjS7u4J.js:1
+g @ auth-jHjS7u4J.js:1
+H @ Login.tsx:395
+Zf @ react-dom.production.min.js:54
+qf @ react-dom.production.min.js:54
+bf @ react-dom.production.min.js:55
+Si @ react-dom.production.min.js:105
+ia @ react-dom.production.min.js:106
+(anonymous) @ react-dom.production.min.js:117
+Io @ react-dom.production.min.js:273
+Rs @ react-dom.production.min.js:52
+Wl @ react-dom.production.min.js:109
+so @ react-dom.production.min.js:74
+vc @ react-dom.production.min.js:73
+Login.tsx:283 ⚠️ Consent metadata was captured but database insert failed
+(anonymous) @ Login.tsx:283
+r @ auth-jHjS7u4J.js:1
+Promise.then
+u @ auth-jHjS7u4J.js:1
+(anonymous) @ auth-jHjS7u4J.js:1
+g @ auth-jHjS7u4J.js:1
+P @ Login.tsx:230
+(anonymous) @ Login.tsx:543
+l @ auth-jHjS7u4J.js:1
+Promise.then
+u @ auth-jHjS7u4J.js:1
+r @ auth-jHjS7u4J.js:1
+Promise.then
+u @ auth-jHjS7u4J.js:1
+r @ auth-jHjS7u4J.js:1
+Promise.then
+u @ auth-jHjS7u4J.js:1
+r @ auth-jHjS7u4J.js:1
+Promise.then
+u @ auth-jHjS7u4J.js:1
+(anonymous) @ auth-jHjS7u4J.js:1
+g @ auth-jHjS7u4J.js:1
+H @ Login.tsx:395
+Zf @ react-dom.production.min.js:54
+qf @ react-dom.production.min.js:54
+bf @ react-dom.production.min.js:55
+Si @ react-dom.production.min.js:105
+ia @ react-dom.production.min.js:106
+(anonymous) @ react-dom.production.min.js:117
+Io @ react-dom.production.min.js:273
+Rs @ react-dom.production.min.js:52
+Wl @ react-dom.production.min.js:109
+so @ react-dom.production.min.js:74
+vc @ react-dom.production.min.js:73
+realtimeService.ts:59 🚀 Starting real-time polling every 3000 ms
+realtimeService.ts:106 👂 Subscribed to any events
+useTokenValidation.ts:110 [Token Validation] Skipping validation - no user or businessAccountId
+fetch.js:23  GET https://uromexjprcrjfmhkmgxa.supabase.co/rest/v1/instagram_business_accounts?select=*&user_id=eq.122098096448937004&is_connected=eq.true&order=created_at.desc 400 (Bad Request)
+(anonymous) @ fetch.js:23
+(anonymous) @ fetch.js:44
+a @ fetch.js:4
+Promise.then
+c @ fetch.js:6
+(anonymous) @ fetch.js:7
+zs @ fetch.js:3
+(anonymous) @ fetch.js:34
+then @ PostgrestBuilder.js:66
+databaseservices.ts:123 Get business accounts error: {code: '22P02', details: null, hint: null, message: 'invalid input syntax for type uuid: "122098096448937004"'}
+(anonymous) @ databaseservices.ts:123
+i @ components-9P_zoejP.js:1
+Promise.then
+s @ components-9P_zoejP.js:1
+(anonymous) @ components-9P_zoejP.js:1
+ue @ components-9P_zoejP.js:1
+getBusinessAccounts @ databaseservices.ts:106
+(anonymous) @ useInstagramAccount.ts:35
+(anonymous) @ components-9P_zoejP.js:1
+ue @ components-9P_zoejP.js:1
+s @ useInstagramAccount.ts:24
+(anonymous) @ useInstagramAccount.ts:55
+al @ react-dom.production.min.js:243
+Zt @ react-dom.production.min.js:285
+(anonymous) @ react-dom.production.min.js:281
+E @ scheduler.production.min.js:13
+sn @ scheduler.production.min.js:14
+fetch.js:23  GET https://uromexjprcrjfmhkmgxa.supabase.co/rest/v1/instagram_business_accounts?select=*&user_id=eq.122098096448937004&is_connected=eq.true&order=created_at.desc 400 (Bad Request)
+(anonymous) @ fetch.js:23
+(anonymous) @ fetch.js:44
+a @ fetch.js:4
+Promise.then
+c @ fetch.js:6
+(anonymous) @ fetch.js:7
+zs @ fetch.js:3
+(anonymous) @ fetch.js:34
+then @ PostgrestBuilder.js:66
+databaseservices.ts:123 Get business accounts error: {code: '22P02', details: null, hint: null, message: 'invalid input syntax for type uuid: "122098096448937004"'}
+(anonymous) @ databaseservices.ts:123
+i @ components-9P_zoejP.js:1
+Promise.then
+s @ components-9P_zoejP.js:1
+(anonymous) @ components-9P_zoejP.js:1
+ue @ components-9P_zoejP.js:1
+getBusinessAccounts @ databaseservices.ts:106
+(anonymous) @ useInstagramAccount.ts:35
+(anonymous) @ components-9P_zoejP.js:1
+ue @ components-9P_zoejP.js:1
+s @ useInstagramAccount.ts:24
+(anonymous) @ useInstagramAccount.ts:55
+al @ react-dom.production.min.js:243
+Zt @ react-dom.production.min.js:285
+(anonymous) @ react-dom.production.min.js:281
+E @ scheduler.production.min.js:13
+sn @ scheduler.production.min.js:14
+sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:94  GET https://www.facebook.com/platform/impression.php/f42bb63fc80f2190f/?api_key=1449604936071207&lid=117&payload=%7B%22payload%22%3A%7B%22cbt_delta%22%3A10689%2C%22logger_id%22%3A%22fefc3415cfac1ba46%22%2C%22action%22%3A%22client_login_complete_heartbeat%22%2C%22client_funnel_version%22%3A1%7D%2C%22source%22%3A%22jssdk%22%7D net::ERR_BLOCKED_BY_ADBLOCKER
+s @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:94
+e @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:94
+c @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:94
+s @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:111
+u @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:111
+(anonymous) @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:112
+setTimeout
+g @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:112
+(anonymous) @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:112
+_xdRecv @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:151
+(anonymous) @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:151
+b @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:148
+(anonymous) @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:148
+sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:94  Uncaught (in promise) TypeError: Failed to fetch
+    at s (sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:94:956)
+    at e (sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:94:794)
+    at Object.c [as log] (sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:94:1678)
+    at s (sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:111:957)
+    at Object.u [as logLoginEvent] (sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:111:1158)
+    at sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:112:5816
+s @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:94
+e @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:94
+c @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:94
+s @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:111
+u @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:111
+(anonymous) @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:112
+setTimeout
+g @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:112
+(anonymous) @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:112
+_xdRecv @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:151
+(anonymous) @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:151
+b @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:148
+(anonymous) @ sdk.js?hash=e450c51aaa80f76e9d5418258b94b5d4:148

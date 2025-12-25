@@ -32,15 +32,23 @@ export const useInstagramAccount = (): UseInstagramAccountResult => {
       setIsLoading(true);
       setError(null);
 
+      // IMPORTANT: userId here is user.id (UUID from Supabase Auth)
+      // user.facebook_id is ONLY for Meta Graph API calls, NEVER for database queries
+      console.log('🔍 Fetching business accounts for UUID:', userId);
+
       const result = await DatabaseService.getBusinessAccounts(userId);
 
       if (result.success && result.data) {
         setAccounts(result.data);
 
         if (result.data.length === 0) {
+          console.warn('⚠️ No Instagram accounts connected');
           setError('No Instagram accounts connected. Please connect an account first.');
+        } else {
+          console.log(`✅ Found ${result.data.length} Instagram account(s)`);
         }
       } else {
+        console.error('❌ Failed to fetch business accounts:', result.error);
         setError(result.error || 'Failed to fetch Instagram accounts');
       }
     } catch (err: any) {

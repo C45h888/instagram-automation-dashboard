@@ -22,8 +22,9 @@ const DEFAULT_METRICS = [
 // ==========================================
 
 /**
- * Exchange user access token for page access token
+ * Exchange user access token for page token AND discover IG Business Account
  *
+ * UPDATED: Now returns success object with consistent error handling
  * Required for instagram_manage_insights permission
  * Meta's architecture requires page-level tokens for analytics APIs
  *
@@ -31,11 +32,10 @@ const DEFAULT_METRICS = [
  * 1. Query user's Facebook pages (/me/accounts)
  * 2. Extract page access token from first page
  * 3. Query Instagram Business account connected to page
- * 4. Return page token + Instagram account mapping
+ * 4. Return success object with page token + Instagram account mapping
  *
  * @param {string} userAccessToken - User's Instagram/Facebook access token
- * @returns {Promise<{pageToken: string, pageId: string, pageName: string, igBusinessAccountId: string, expiresIn: number, tokenType: string}>}
- * @throws {Error} If no pages found, no IG account connected, or API error
+ * @returns {Promise<{success: boolean, pageAccessToken?: string, pageId?: string, pageName?: string, igBusinessAccountId?: string, error?: string}>}
  */
 async function exchangeForPageToken(userAccessToken) {
   try {
@@ -50,7 +50,7 @@ async function exchangeForPageToken(userAccessToken) {
       `${GRAPH_API_BASE}/me/accounts`,
       {
         params: {
-          fields: 'instagram_business_account',
+          fields: 'id,name,access_token,instagram_business_account',
           access_token: userAccessToken
         },
         timeout: 10000 // 10 second timeout
@@ -64,52 +64,46 @@ async function exchangeForPageToken(userAccessToken) {
     // ===== STEP 2: Validate pages exist =====
     if (!pages || pages.length === 0) {
       console.error('❌ No Facebook pages found for user');
-      throw new Error(
-        'No Facebook pages found. To use Instagram Business features, you must:\n' +
-        '1. Create a Facebook page (facebook.com/pages/create)\n' +
-        '2. Connect your Instagram Business account to the page\n' +
-        '3. Complete the OAuth flow again'
-      );
+      return {
+        success: false,
+        error: 'No Facebook pages found. Please ensure you have a Facebook Page connected to your account.'
+      };
     }
 
-    // ===== STEP 3: Select page (use first, log if multiple) =====
-    const page = pages[0];
+    // ===== STEP 3: Find page with Instagram Business account =====
+    const pageWithIG = pages.find(
+      page => page.instagram_business_account && page.instagram_business_account.id
+    );
+
+    if (!pageWithIG) {
+      console.error('❌ No Instagram Business account connected to any page');
+
+      // Log page names for debugging
+      const pageNames = pages.map(p => p.name).join(', ');
+      console.error(`   Pages found: ${pageNames}`);
+
+      return {
+        success: false,
+        error: 'No Instagram Business Account connected. Please connect an Instagram Business Account to your Facebook Page.'
+      };
+    }
 
     if (pages.length > 1) {
       console.warn('⚠️  User has multiple Facebook pages');
-      console.warn(`   Using first page: ${page.name} (ID: ${page.id})`);
-      console.warn('   TODO: Implement page selection UI for users with multiple pages');
+      console.warn(`   Using page with IG: ${pageWithIG.name} (ID: ${pageWithIG.id})`);
     }
 
-    console.log(`✅ Selected Facebook page: "${page.name}" (ID: ${page.id})`);
-    console.log(`   Page token length: ${page.access_token?.length || 0}`);
+    console.log(`✅ Selected Facebook page: "${pageWithIG.name}" (ID: ${pageWithIG.id})`);
+    console.log(`   Page token length: ${pageWithIG.access_token?.length || 0}`);
+    console.log(`✅ Found Instagram Business account: ${pageWithIG.instagram_business_account.id}`);
 
-    // ===== STEP 4: Get Instagram Business account from page data =====
-    // ✅ NO SECOND API CALL NEEDED - already included in /me/accounts response
-    console.log('📱 Step 2: Extracting Instagram Business account from page data...');
-
-    const igBusinessAccount = page.instagram_business_account;
-
-    // ===== STEP 5: Validate Instagram Business account exists =====
-    if (!igBusinessAccount) {
-      console.error(`❌ No Instagram Business account connected to page: ${page.name}`);
-      throw new Error(
-        `No Instagram Business account connected to Facebook page "${page.name}". To fix:\n` +
-        '1. Open Facebook Settings → Instagram\n' +
-        '2. Connect your Instagram Business account\n' +
-        '3. Ensure account is a Business account (not Personal)\n' +
-        '4. Complete the OAuth flow again'
-      );
-    }
-
-    console.log(`✅ Found Instagram Business account: ${igBusinessAccount.id}`);
-
-    // ===== STEP 6: Return token data =====
+    // ===== STEP 4: Return success response =====
     const result = {
-      pageToken: page.access_token,
-      pageId: page.id,
-      pageName: page.name,
-      igBusinessAccountId: igBusinessAccount.id,
+      success: true,
+      pageAccessToken: pageWithIG.access_token,
+      pageId: pageWithIG.id,
+      pageName: pageWithIG.name,
+      igBusinessAccountId: pageWithIG.instagram_business_account.id,
       expiresIn: 5184000, // 60 days (standard for page tokens)
       tokenType: 'page'
     };
@@ -134,31 +128,40 @@ async function exchangeForPageToken(userAccessToken) {
 
       // Provide actionable error messages
       if (apiError?.code === 190) {
-        throw new Error(
-          'Invalid or expired user access token. User must reconnect their Instagram account through OAuth.'
-        );
+        return {
+          success: false,
+          error: 'Invalid or expired user access token. User must reconnect their Instagram account through OAuth.'
+        };
       }
 
       if (apiError?.code === 100) {
-        throw new Error(
-          'Invalid API request. Check that all required permissions (pages_show_list, instagram_basic) are granted.'
-        );
+        return {
+          success: false,
+          error: 'Invalid API request. Check that all required permissions (pages_show_list, instagram_basic) are granted.'
+        };
       }
 
       if (apiError?.message) {
-        throw new Error(`Facebook API Error: ${apiError.message}`);
+        return {
+          success: false,
+          error: `Facebook API Error: ${apiError.message}`
+        };
       }
     }
 
     // ===== Handle network errors =====
     if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
-      throw new Error(
-        'Unable to connect to Facebook Graph API. Check network connection and try again.'
-      );
+      return {
+        success: false,
+        error: 'Unable to connect to Facebook Graph API. Check network connection and try again.'
+      };
     }
 
-    // ===== Re-throw with context =====
-    throw new Error(`Page token exchange failed: ${error.message}`);
+    // ===== Return error response =====
+    return {
+      success: false,
+      error: error.message || 'Page token exchange failed'
+    };
   }
 }
 
@@ -299,57 +302,103 @@ async function getAccountInsights(igBusinessAccountId, pageToken, options = {}) 
 /**
  * Store page token in database with encryption
  *
+ * UPDATED: Now creates/updates business account record first, then stores token
  * Uses Supabase encryption functions to secure token at rest
  * Upserts to handle token refresh scenarios
  *
- * @param {string} userId - User's UUID
- * @param {string} businessAccountId - Instagram Business account UUID
- * @param {Object} pageTokenData - Token data from exchangeForPageToken
- * @returns {Promise<boolean>} True if successful
- * @throws {Error} If database or encryption error
+ * @param {Object} params - Parameters object
+ * @param {string} params.userId - User's UUID from Supabase Auth
+ * @param {string} params.igBusinessAccountId - Instagram Business account ID (numeric)
+ * @param {string} params.pageAccessToken - Page access token to encrypt and store
+ * @param {string} params.pageId - Facebook Page ID
+ * @param {string} params.pageName - Facebook Page name
+ * @returns {Promise<{success: boolean, businessAccountId?: string, expiresAt?: string, error?: string}>}
  */
-async function storePageToken(userId, businessAccountId, pageTokenData) {
+async function storePageToken({ userId, igBusinessAccountId, pageAccessToken, pageId, pageName }) {
   try {
     console.log('💾 Storing page token in database...');
-    console.log('   User ID:', userId);
-    console.log('   Business Account ID:', businessAccountId);
+    console.log('   User ID (UUID):', userId);
+    console.log('   IG Business Account ID:', igBusinessAccountId);
+    console.log('   Page ID:', pageId);
+    console.log('   Page Name:', pageName);
 
     // ===== STEP 1: Get Supabase client =====
     const supabase = getSupabaseAdmin();
     if (!supabase) {
-      throw new Error('Database not available - Supabase client not initialized');
+      return {
+        success: false,
+        error: 'Database not available - Supabase client not initialized'
+      };
     }
 
-    // ===== STEP 2: Encrypt page token using Supabase function =====
+    // ===== STEP 2: Create/Update business account record FIRST =====
+    console.log('📝 Creating/updating Instagram business account record...');
+
+    const { data: businessAccount, error: accountError } = await supabase
+      .from('instagram_business_accounts')
+      .upsert({
+        user_id: userId,
+        instagram_business_id: igBusinessAccountId,
+        page_id: pageId,
+        page_name: pageName,
+        username: pageName, // Use page name as username initially
+        is_connected: true,
+        last_sync_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: 'user_id,instagram_business_id',
+        ignoreDuplicates: false
+      })
+      .select()
+      .single();
+
+    if (accountError) {
+      console.error('❌ Failed to create/update business account:', accountError);
+      return {
+        success: false,
+        error: `Failed to create business account: ${accountError.message}`
+      };
+    }
+
+    console.log('✅ Business account record created/updated');
+    console.log('   Business Account UUID:', businessAccount.id);
+
+    // ===== STEP 3: Encrypt page token using Supabase function =====
     console.log('🔐 Encrypting page token...');
 
     const { data: encryptedToken, error: encryptError } = await supabase
-      .rpc('encrypt_instagram_token', { token: pageTokenData.pageToken });
+      .rpc('encrypt_instagram_token', { token: pageAccessToken });
 
     if (encryptError) {
       console.error('❌ Token encryption failed:', encryptError);
-      throw new Error(`Token encryption failed: ${encryptError.message}`);
+      return {
+        success: false,
+        error: `Token encryption failed: ${encryptError.message}`
+      };
     }
 
     if (!encryptedToken) {
-      throw new Error('Encryption returned null - check Supabase encryption function');
+      return {
+        success: false,
+        error: 'Encryption returned null - check Supabase encryption function'
+      };
     }
 
     console.log('✅ Token encrypted successfully');
 
-    // ===== STEP 3: Calculate expiration timestamp =====
-    const expiresAt = new Date(Date.now() + (pageTokenData.expiresIn * 1000));
+    // ===== STEP 4: Calculate expiration timestamp =====
+    const expiresIn = 5184000; // 60 days in seconds
+    const expiresAt = new Date(Date.now() + (expiresIn * 1000));
 
     console.log('📅 Token expiration:', expiresAt.toISOString());
 
-    // ===== STEP 4: Upsert to instagram_credentials table =====
-    // Unique constraint on (user_id, business_account_id, token_type)
-    // This handles token refresh scenarios automatically
-    const { data, error } = await supabase
+    // ===== STEP 5: Upsert to instagram_credentials table =====
+    // Now we have a valid business_account_id (UUID) to use
+    const { data: credentialData, error: credentialError } = await supabase
       .from('instagram_credentials')
       .upsert({
         user_id: userId,
-        business_account_id: businessAccountId,
+        business_account_id: businessAccount.id, // Use the UUID from business account
         access_token_encrypted: encryptedToken,
         token_type: 'page',
         scope: ['instagram_manage_insights', 'pages_show_list', 'pages_read_engagement'],
@@ -363,21 +412,31 @@ async function storePageToken(userId, businessAccountId, pageTokenData) {
       })
       .select();
 
-    if (error) {
-      console.error('❌ Database upsert failed:', error);
-      throw new Error(`Database error: ${error.message}`);
+    if (credentialError) {
+      console.error('❌ Credential upsert failed:', credentialError);
+      return {
+        success: false,
+        error: `Failed to store credentials: ${credentialError.message}`
+      };
     }
 
     console.log('✅ Page token stored in database');
-    console.log('   Record ID:', data?.[0]?.id);
+    console.log('   Credential Record ID:', credentialData?.[0]?.id);
 
-    return true;
+    return {
+      success: true,
+      businessAccountId: businessAccount.id, // Return the UUID for frontend
+      expiresAt: expiresAt.toISOString()
+    };
 
   } catch (error) {
     console.error('❌ Failed to store page token');
     console.error('   Error type:', error.constructor.name);
     console.error('   Error message:', error.message);
-    throw error;
+    return {
+      success: false,
+      error: error.message || 'Unknown error storing page token'
+    };
   }
 }
 

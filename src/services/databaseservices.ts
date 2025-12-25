@@ -102,22 +102,42 @@ export class DatabaseService {
   
   /**
    * Gets all business accounts for a user
+   *
+   * UPDATED: Now validates that userId is a valid UUID format
+   * Prevents "invalid input syntax for type uuid" errors
    */
   static async getBusinessAccounts(userId: string): Promise<ServiceListResponse<Types.Database['public']['Tables']['instagram_business_accounts']['Row']>> {
     try {
+      // ===== CRITICAL: Validate UUID format =====
+      // This prevents the "invalid input syntax for type uuid" error
+      // when Facebook ID is mistakenly used instead of Supabase UUID
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+      if (!uuidRegex.test(userId)) {
+        console.error('❌ Invalid user_id format. Expected UUID, got:', userId);
+        console.error('   This is likely a Facebook ID being used instead of Supabase UUID');
+        console.error('   Hint: Ensure authStore.user.id contains UUID, not Facebook ID');
+
+        return {
+          success: false,
+          error: 'Invalid user_id format. Expected UUID.',
+          data: []
+        };
+      }
+
       const { data, error, count } = await supabase
         .from('instagram_business_accounts')
         .select('*', { count: 'exact' })
         .eq('user_id', userId)
         .eq('is_connected', true)
         .order('created_at', { ascending: false });
-      
+
       if (error) throw error;
-      
-      return { 
-        success: true, 
-        data: data || [], 
-        count: count || 0 
+
+      return {
+        success: true,
+        data: data || [],
+        count: count || 0
       };
     } catch (error: any) {
       console.error('Get business accounts error:', error);

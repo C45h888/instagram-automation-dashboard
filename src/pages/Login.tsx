@@ -11,7 +11,7 @@ import {  Instagram,      // Instagram logo
 import { useFacebookSDK, facebookLogin } from '../hooks/useFacebookSDK';
 
 const Login: React.FC = () => {
-  const { login } = useAuthStore();
+  const { login, setBusinessAccount } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as any)?.from?.pathname || '/';
@@ -227,10 +227,27 @@ const Login: React.FC = () => {
    * login(userData, token);
    * await persistStoredConsent(userData.id);
    */
+  /**
+   * Persist consent to database with UUID validation (PHASE 3.5 FIX)
+   *
+   * CRITICAL: userId MUST be a Supabase UUID, NOT Facebook ID
+   */
   const persistStoredConsent = async (userId: string): Promise<void> => {
     try {
       // ============================================
-      // STEP 1: Retrieve Consent from Session Storage
+      // STEP 1: Validate UUID format
+      // ============================================
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+      if (!uuidRegex.test(userId)) {
+        console.error('❌ Cannot persist consent: user_id is not a valid UUID');
+        console.error('   Got:', userId);
+        console.error('   Hint: Ensure you are passing Supabase UUID, not Facebook ID');
+        throw new Error('Invalid user_id format for consent persistence');
+      }
+
+      // ============================================
+      // STEP 2: Retrieve Consent from Session Storage
       // ============================================
       const storedConsent = sessionStorage.getItem('pending_consent');
 
@@ -242,16 +259,16 @@ const Login: React.FC = () => {
       const consentData = JSON.parse(storedConsent);
 
       // ============================================
-      // STEP 2: Add user_id to Consent Data
+      // STEP 3: Add user_id to Consent Data
       // ============================================
-      // Now we have authenticated user, add user_id
+      // Now we have authenticated user, add user_id (UUID)
       const completeConsentData = {
         ...consentData,
-        user_id: userId,
+        user_id: userId,  // This is the Supabase UUID
       };
 
       // ============================================
-      // STEP 3: Insert to Database (Now Authenticated)
+      // STEP 4: Insert to Database (Now Authenticated)
       // ============================================
       // User is now authenticated, RLS policy will allow this insert
       const { data, error } = await supabase
@@ -264,12 +281,12 @@ const Login: React.FC = () => {
       }
 
       console.log('✅ User consent persisted to database successfully');
-      console.log('   User ID:', userId);
+      console.log('   User ID (UUID):', userId);
       console.log('   Consent ID:', data?.[0]?.id);
       console.log('   Timestamp:', consentData.consented_at);
 
       // ============================================
-      // STEP 4: Cleanup Session Storage
+      // STEP 5: Cleanup Session Storage
       // ============================================
       sessionStorage.removeItem('pending_consent');
 
@@ -282,12 +299,98 @@ const Login: React.FC = () => {
       console.error('❌ Failed to persist consent to database:', error);
       console.warn('⚠️ Consent metadata was captured but database insert failed');
 
-      // Optional: Retry logic or send to monitoring service
-      // if (window.Sentry) {
-      //   Sentry.captureException(error, {
-      //     tags: { component: 'consent-persistence' }
-      //   });
-      // }
+      // Non-blocking error - don't prevent login
+    }
+  };
+
+  /**
+   * Complete the OAuth handshake (PHASE 3.5 NEW)
+   *
+   * Bridges the gap between OAuth and Dashboard by:
+   * 1. Calling backend /exchange-token with UUID
+   * 2. Receiving discovered businessAccountId
+   * 3. Storing business account info in authStore
+   */
+  const completeHandshake = async (
+    providerToken: string,
+    userId: string  // Must be UUID from Supabase Auth
+  ): Promise<{ success: boolean; error?: string; businessAccountId?: string }> => {
+    console.log('🤝 Starting handshake...');
+    console.log('   Provider token:', providerToken ? 'Present' : 'Missing');
+    console.log('   User ID (UUID):', userId);
+
+    try {
+      const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+
+      // ──────────────────────────────────────────────────────────────
+      // STEP 1: Call the FIXED /exchange-token endpoint
+      // Note: We do NOT send businessAccountId - backend will discover it
+      // ──────────────────────────────────────────────────────────────
+      const response = await fetch(`${backendUrl}/api/instagram/exchange-token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userAccessToken: providerToken,
+          userId: userId  // UUID from Supabase Auth
+          // Note: businessAccountId is intentionally NOT sent
+        })
+      });
+
+      // ──────────────────────────────────────────────────────────────
+      // STEP 2: Parse response (handle empty response gracefully)
+      // ──────────────────────────────────────────────────────────────
+      const text = await response.text();
+
+      if (!text) {
+        console.error('❌ Empty response from token exchange');
+        throw new Error('Server returned empty response');
+      }
+
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (parseError) {
+        console.error('❌ Failed to parse response:', text.substring(0, 200));
+        throw new Error('Invalid JSON response from server');
+      }
+
+      if (!response.ok || !data.success) {
+        console.error('❌ Token exchange failed:', data.error || data.message);
+        throw new Error(data.error || 'Token exchange failed');
+      }
+
+      console.log('✅ Token exchange successful');
+      console.log('   Business Account ID:', data.data.businessAccountId);
+      console.log('   Instagram Business ID:', data.data.instagramBusinessId);
+
+      // ──────────────────────────────────────────────────────────────
+      // STEP 3: Update authStore with the new business account info
+      // ──────────────────────────────────────────────────────────────
+      setBusinessAccount({
+        businessAccountId: data.data.businessAccountId,
+        instagramBusinessId: data.data.instagramBusinessId,
+        pageId: data.data.pageId,
+        pageName: data.data.pageName
+      });
+
+      console.log('✅ Auth store updated with business account info');
+
+      // ──────────────────────────────────────────────────────────────
+      // STEP 4: Return success - caller should redirect to dashboard
+      // ──────────────────────────────────────────────────────────────
+      return {
+        success: true,
+        businessAccountId: data.data.businessAccountId
+      };
+
+    } catch (error: any) {
+      console.error('❌ Handshake failed:', error);
+      return {
+        success: false,
+        error: error.message || 'Handshake failed'
+      };
     }
   };
 
@@ -460,61 +563,91 @@ const Login: React.FC = () => {
       if (response.authResponse) {
         console.log('✅ Facebook OAuth successful!');
         console.log('   Access Token received');
-        console.log('   User ID:', response.authResponse.userID);
+        console.log('   Facebook User ID:', response.authResponse.userID);
 
-        // Extract access token and user ID
-        const shortLivedToken = response.authResponse.accessToken;
-        const userID = response.authResponse.userID;
+        // Extract access token and Facebook user ID
+        const facebookAccessToken = response.authResponse.accessToken;
+        const facebookUserId = response.authResponse.userID;
 
-        // ============================================
-        // STEP 7: EXCHANGE TOKEN & GET INSTAGRAM DATA
-        // ============================================
         setMessage({
           type: 'info',
-          text: 'Setting up your Instagram Business account...'
+          text: 'Creating your account session...'
         });
 
+        // ============================================
+        // STEP 7: CREATE/GET SUPABASE SESSION (PHASE 3.5 FIX)
+        // ============================================
+        // CRITICAL: We need a Supabase session to get the UUID
+        // This replaces the old flow that used Facebook ID directly
+
         try {
-          // Call backend to exchange token for long-lived token
-          const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
-          const exchangeResponse = await fetch(`${backendUrl}/api/instagram/exchange-token`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              userAccessToken: shortLivedToken,
-              userId: userID,
-              businessAccountId: 'temp_' + userID // Will be updated with actual IG account ID
-            })
+          // Option 1: Try to sign in with the Facebook token using Supabase OAuth
+          // This creates a proper Supabase session
+          const { data: authData, error: authError } = await supabase.auth.signInWithIdToken({
+            provider: 'facebook',
+            token: facebookAccessToken
           });
 
-          if (!exchangeResponse.ok) {
-            const errorData = await exchangeResponse.json();
-            throw new Error(errorData.message || 'Token exchange failed');
+          if (authError) {
+            console.error('⚠️ Supabase signInWithIdToken failed:', authError);
+            throw authError;
           }
 
-          const exchangeData = await exchangeResponse.json();
+          if (!authData.user || !authData.session) {
+            throw new Error('Failed to create Supabase session');
+          }
 
-          console.log('✅ Token exchange successful!');
-          console.log('   Page ID:', exchangeData.data.pageId);
-          console.log('   Page Name:', exchangeData.data.pageName);
-          console.log('   Instagram Business Account ID:', exchangeData.data.igBusinessAccountId);
-          console.log('   Token stored:', exchangeData.data.stored);
+          // ============================================
+          // STEP 8: EXTRACT SUPABASE UUID (NOT FACEBOOK ID!)
+          // ============================================
+          const supabaseUserId = authData.user.id;  // This is the UUID
+          const supabaseSession = authData.session;
 
-          // Login with user ID and long-lived token
+          console.log('✅ Supabase session created');
+          console.log('   Supabase UUID:', supabaseUserId);
+          console.log('   Facebook ID (for reference):', facebookUserId);
+
+          setMessage({
+            type: 'info',
+            text: 'Setting up your Instagram Business account...'
+          });
+
+          // ============================================
+          // STEP 9: COMPLETE THE HANDSHAKE (PHASE 3.5 NEW)
+          // ============================================
+          // This calls /exchange-token with UUID and gets businessAccountId
+          const handshakeResult = await completeHandshake(
+            facebookAccessToken,
+            supabaseUserId  // Use UUID, not Facebook ID!
+          );
+
+          if (!handshakeResult.success) {
+            console.error('⚠️ Handshake failed:', handshakeResult.error);
+            console.warn('   Continuing without Instagram connection');
+          } else {
+            console.log('✅ Handshake complete, Instagram connected');
+          }
+
+          // ============================================
+          // STEP 10: LOGIN TO AUTHSTORE (WITH UUID)
+          // ============================================
           login({
-            id: userID,
-            username: exchangeData.data.pageName || 'instagram_user',
-            avatarUrl: '',
+            id: supabaseUserId,  // ✅ Use Supabase UUID, NOT Facebook ID
+            username: authData.user.user_metadata?.name || authData.user.email?.split('@')[0] || 'user',
+            email: authData.user.email,
+            facebook_id: facebookUserId,  // Store Facebook ID separately for reference
+            avatarUrl: authData.user.user_metadata?.avatar_url || '',
             permissions: ['dashboard', 'content', 'engagement', 'analytics', 'settings'],
-          }, shortLivedToken); // Using short token temporarily, long token stored in DB
+          }, supabaseSession.access_token);
 
           // ============================================
-          // STEP 8: PERSIST CONSENT TO DATABASE
+          // STEP 11: PERSIST CONSENT (WITH UUID)
           // ============================================
-          // Now that user is authenticated, save consent with user_id
-          await persistStoredConsent(userID);
+          try {
+            await persistStoredConsent(supabaseUserId);  // ✅ Use UUID
+          } catch (consentError) {
+            console.error('⚠️ Consent persistence failed (non-blocking):', consentError);
+          }
 
           setMessage({
             type: 'success',
@@ -526,25 +659,26 @@ const Login: React.FC = () => {
             navigate(from, { replace: true });
           }, 1500);
 
-        } catch (exchangeError) {
-          console.error('❌ Token exchange error:', exchangeError);
+        } catch (sessionError) {
+          console.error('❌ Session creation error:', sessionError);
 
-          // Fallback: Login with short-lived token (will expire in 1 hour)
-          console.warn('⚠️ Using short-lived token as fallback');
+          // ============================================
+          // FALLBACK: Use legacy flow (will have limited functionality)
+          // ============================================
+          console.warn('⚠️ Falling back to legacy authentication');
+          console.warn('   Some features may not work correctly');
 
           login({
-            id: userID,
+            id: facebookUserId,  // Fallback to Facebook ID (will cause UUID errors)
             username: 'facebook_user',
+            facebook_id: facebookUserId,
             avatarUrl: '',
             permissions: ['dashboard', 'content', 'engagement', 'analytics', 'settings'],
-          }, shortLivedToken);
-
-          // Persist consent even in fallback scenario
-          await persistStoredConsent(userID);
+          }, facebookAccessToken);
 
           setMessage({
             type: 'success',
-            text: '✅ Facebook login successful! Note: Token exchange failed, you may need to reconnect soon.'
+            text: '✅ Facebook login successful! Note: Please reconnect your Instagram account in settings.'
           });
 
           setTimeout(() => {
