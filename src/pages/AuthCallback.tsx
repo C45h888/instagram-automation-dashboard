@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
+import { supabase } from '../lib/supabase';
 import { Loader2, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
 
 /**
@@ -27,7 +28,6 @@ import { Loader2, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
 const AuthCallback: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { login } = useAuthStore();
 
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [message, setMessage] = useState<string>('Processing your login...');
@@ -101,9 +101,9 @@ const AuthCallback: React.FC = () => {
 
         const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
 
-        // This endpoint should exchange the code for an access token
-        // and then exchange that for a long-lived token
-        const response = await fetch(`${backendUrl}/api/instagram/oauth-callback`, {
+        // Exchange authorization code for access token via backend OAuth handler
+        // Backend creates Supabase session and stores dual-ID mapping
+        const response = await fetch(`${backendUrl}/api/auth/facebook/callback`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -121,22 +121,41 @@ const AuthCallback: React.FC = () => {
 
         const data = await response.json();
 
-        console.log('✅ Token exchange successful!');
-        console.log('   User ID:', data.userId);
-        console.log('   Page Name:', data.pageName);
-        console.log('   Instagram Account ID:', data.igBusinessAccountId);
+        if (!data.success) {
+          throw new Error(data.error || 'Authentication failed');
+        }
+
+        console.log('✅ Facebook OAuth successful!');
+        console.log('   User ID:', data.user.id);
+        console.log('   Facebook ID:', data.user.facebook_id);
+        console.log('   Email:', data.user.email);
+        console.log('   Name:', data.user.name);
 
         // ============================================
-        // STEP 5: LOGIN USER
+        // STEP 5: SET SUPABASE SESSION WITH BACKEND TOKENS
         // ============================================
-        setMessage('Logging you in...');
+        setMessage('Setting up your session...');
 
-        login({
-          id: data.userId,
-          username: data.pageName || 'instagram_user',
-          avatarUrl: '',
-          permissions: ['dashboard', 'content', 'engagement', 'analytics', 'settings'],
-        }, data.accessToken);
+        // The backend created a Supabase session server-side and returned the tokens
+        // We need to set this session in the browser's Supabase client
+        const { error: sessionError } = await supabase.auth.setSession({
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token || data.session.access_token
+        });
+
+        if (sessionError) {
+          throw new Error(`Failed to set session: ${sessionError.message}`);
+        }
+
+        console.log('✅ Supabase session established in browser');
+
+        // ============================================
+        // STEP 6: UPDATE AUTH STATE
+        // ============================================
+        setMessage('Loading your profile...');
+
+        const { checkSession } = useAuthStore.getState();
+        await checkSession();
 
         setStatus('success');
         setMessage('Login successful!');
@@ -165,7 +184,7 @@ const AuthCallback: React.FC = () => {
     };
 
     handleOAuthCallback();
-  }, [searchParams, navigate, login]);
+  }, [searchParams, navigate]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 flex items-center justify-center p-4">
