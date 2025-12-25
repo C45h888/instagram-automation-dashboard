@@ -205,7 +205,8 @@ router.post('/facebook/callback', async (req, res) => {
         refresh_token: authData.session.refresh_token,
         expires_in: authData.session.expires_in,
         expires_at: authData.session.expires_at,
-        token_type: authData.session.token_type
+        token_type: authData.session.token_type,
+        provider_token: facebookAccessToken  // ← Facebook access token for Graph API calls
       }
     });
 
