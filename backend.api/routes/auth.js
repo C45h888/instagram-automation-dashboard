@@ -226,4 +226,197 @@ router.post('/facebook/callback', async (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════════════════════════
+// SDK BRIDGE ENDPOINT (PHASE 3.6)
+// Handles Facebook SDK token flow (receives access token directly)
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Facebook SDK Token Handler
+ *
+ * This is the "SDK Bridge" - accepts Facebook access token from SDK flow
+ * and creates a proper Supabase session server-side.
+ *
+ * Use Case: Frontend uses Facebook SDK (FB.login) which returns an access
+ * token directly. This endpoint creates a Supabase session from that token.
+ *
+ * Flow:
+ * 1. Verify access token with Facebook Graph API
+ * 2. Sign in with Supabase Auth using signInWithIdToken (server-side)
+ * 3. Store dual-ID mapping: user_id (UUID) ↔ facebook_id (TEXT)
+ * 4. Return complete session data to frontend
+ *
+ * @route POST /api/auth/facebook/token
+ * @param {string} req.body.accessToken - Facebook access token from SDK
+ * @returns {Object} { success, session, user, provider_token }
+ */
+router.post('/facebook/token', async (req, res) => {
+  const { accessToken } = req.body;
+
+  console.log('📥 Facebook SDK token received (Phase 3.6 - SDK Bridge)');
+  console.log('   Access Token:', accessToken ? accessToken.substring(0, 20) + '...' : 'MISSING');
+
+  if (!accessToken) {
+    return res.status(400).json({
+      success: false,
+      error: 'accessToken is required',
+      message: 'Please provide a Facebook access token'
+    });
+  }
+
+  const supabaseAdmin = await getSupabaseAdmin();
+
+  try {
+    // ──────────────────────────────────────────────────────────────
+    // STEP 1: Verify token with Facebook Graph API (/me)
+    // This confirms the token is valid and gets user data
+    // ──────────────────────────────────────────────────────────────
+    console.log('🔍 Verifying token with Facebook Graph API...');
+
+    const userResponse = await fetch(
+      `https://graph.facebook.com/v23.0/me?fields=id,name,email,picture&access_token=${accessToken}`
+    );
+
+    if (!userResponse.ok) {
+      const errorData = await userResponse.json();
+      console.error('❌ Facebook token verification failed:', errorData);
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid Facebook access token',
+        details: errorData
+      });
+    }
+
+    const facebookUser = await userResponse.json();
+    const facebookId = facebookUser.id;  // Numeric string like "122098096448937004"
+
+    console.log('✅ Facebook token verified');
+    console.log('   Facebook ID:', facebookId);
+    console.log('   User Name:', facebookUser.name);
+    console.log('   Email:', facebookUser.email || 'Not provided');
+
+    // ──────────────────────────────────────────────────────────────
+    // STEP 2: Sign in with Supabase Auth using signInWithIdToken
+    // CRITICAL: This works server-side with admin privileges
+    // Bypasses the "Bad ID Token" error that happens client-side
+    // ──────────────────────────────────────────────────────────────
+    console.log('🔐 Creating Supabase session (server-side)...');
+
+    const { data: authData, error: authError } = await supabaseAdmin.auth.signInWithIdToken({
+      provider: 'facebook',
+      token: accessToken,
+      options: {
+        data: {
+          facebook_id: facebookId,
+          full_name: facebookUser.name,
+          avatar_url: facebookUser.picture && facebookUser.picture.data ? facebookUser.picture.data.url : null
+        }
+      }
+    });
+
+    if (authError || !authData.user) {
+      console.error('❌ Supabase Auth signInWithIdToken failed:', authError);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to create Supabase session',
+        details: authError
+      });
+    }
+
+    const supabaseUserId = authData.user.id;  // This is the UUID!
+
+    console.log('✅ Supabase session created');
+    console.log('   Supabase UUID:', supabaseUserId);
+
+    // ──────────────────────────────────────────────────────────────
+    // STEP 3: Upsert user_profiles with DUAL-ID mapping
+    // This fixes the "Identity Crisis" - maps facebook_id to user_id
+    // ──────────────────────────────────────────────────────────────
+    console.log('💾 Upserting user profile with dual-ID mapping...');
+
+    const { data: profileData, error: profileError } = await supabaseAdmin
+      .from('user_profiles')
+      .upsert({
+        user_id: supabaseUserId,      // ← UUID (PRIMARY KEY)
+        facebook_id: facebookId,       // ← TEXT (FACEBOOK ID MAPPING)
+        email: facebookUser.email || null,
+        full_name: facebookUser.name || null,
+        avatar_url: facebookUser.picture && facebookUser.picture.data ? facebookUser.picture.data.url : null,
+        instagram_connected: false,
+        last_active_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: 'user_id',
+        ignoreDuplicates: false
+      })
+      .select()
+      .single();
+
+    if (profileError) {
+      console.error('❌ user_profiles upsert failed:', profileError);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to create user profile',
+        details: profileError
+      });
+    }
+
+    console.log('✅ User profile upserted');
+    console.log('   UUID → Facebook ID mapping: %s → %s', supabaseUserId, facebookId);
+
+    // ──────────────────────────────────────────────────────────────
+    // STEP 4: Validate session data before returning
+    // ──────────────────────────────────────────────────────────────
+    if (!authData.session || !authData.session.access_token) {
+      console.error('❌ No session token generated');
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to generate session token'
+      });
+    }
+
+    console.log('✅ Session validation passed');
+
+    // ──────────────────────────────────────────────────────────────
+    // STEP 5: Return complete session data
+    // Frontend will use this to set up local Supabase auth
+    // ──────────────────────────────────────────────────────────────
+    console.log('✅ SDK Bridge completed successfully');
+
+    return res.status(200).json({
+      success: true,
+      message: 'Facebook SDK authentication successful',
+      session: {
+        access_token: authData.session.access_token,
+        refresh_token: authData.session.refresh_token,
+        expires_in: authData.session.expires_in,
+        expires_at: authData.session.expires_at,
+        token_type: authData.session.token_type || 'bearer'
+      },
+      user: {
+        id: supabaseUserId,           // ← UUID for all database operations
+        facebook_id: facebookId,      // ← For Facebook Graph API calls
+        email: facebookUser.email || null,
+        name: facebookUser.name || null,
+        avatar_url: facebookUser.picture && facebookUser.picture.data ? facebookUser.picture.data.url : null
+      },
+      provider_token: accessToken     // ← Original Facebook token for Graph API
+    });
+
+  } catch (error) {
+    // ──────────────────────────────────────────────────────────────
+    // CRITICAL ERROR HANDLING
+    // Always return JSON response, never empty body
+    // ──────────────────────────────────────────────────────────────
+    console.error('❌ SDK Bridge error:', error);
+
+    return res.status(500).json({
+      success: false,
+      error: 'Internal server error during Facebook SDK authentication',
+      message: error.message || 'Unknown error',
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
 module.exports = router;

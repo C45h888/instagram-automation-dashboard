@@ -1,14 +1,28 @@
- Facebook OAuth Error: t {message: 'init not called with valid version', innerError: undefined}innerError: undefinedmessage: "init not called with valid version"[[Prototype]]: r
-(anonymous) @ Login.tsx:558
-u @ auth-Blxsmv8K.js:1
+facebookLogin called with scopes: (8) ['instagram_basic', 'instagram_manage_insights', 'instagram_manage_messages', 'instagram_content_publish', 'instagram_manage_comments', 'pages_show_list', 'pages_read_engagement', 'public_profile']
+useFacebookSDK.ts:192 🔄 Calling FB.login()...
+useFacebookSDK.ts:215 ✅ FB.login() called without throwing
+sdk.js?hash=f90a7cc856726295c7e346681a95efb6:94  GET https://www.facebook.com/platform/impression.php/f4de4d6d6a1f07aaa/?api_key=1449604936071207&lid=117&payload=%7B%22payload%22%3A%7B%22cbt_delta%22%3A0%2C%22logger_id%22%3A%22fb731938c1fbd89bf%22%2C%22action%22%3A%22client_login_start%22%2C%22client_funnel_version%22%3A1%7D%2C%22source%22%3A%22jssdk%22%7D net::ERR_BLOCKED_BY_ADBLOCKER
+s @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:94
+e @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:94
+c @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:94
+s @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:111
+c @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:151
+transform @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:151
+prepareCall @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:151
+e @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:152
+s @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:112
+login @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:153
+(anonymous) @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:78
+(anonymous) @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:68
+(anonymous) @ useFacebookSDK.ts:194
+ke @ useFacebookSDK.ts:167
+(anonymous) @ Login.tsx:561
+r @ auth-BVhcrKDh.js:1
 Promise.then
-d @ auth-Blxsmv8K.js:1
-i @ auth-Blxsmv8K.js:1
-Promise.then
-d @ auth-Blxsmv8K.js:1
-(anonymous) @ auth-Blxsmv8K.js:1
-h @ auth-Blxsmv8K.js:1
-H @ Login.tsx:395
+g @ auth-BVhcrKDh.js:1
+(anonymous) @ auth-BVhcrKDh.js:1
+h @ auth-BVhcrKDh.js:1
+ee @ Login.tsx:498
 Zf @ react-dom.production.min.js:54
 qf @ react-dom.production.min.js:54
 bf @ react-dom.production.min.js:55
@@ -20,11 +34,448 @@ Rs @ react-dom.production.min.js:52
 Wl @ react-dom.production.min.js:109
 so @ react-dom.production.min.js:74
 vc @ react-dom.production.min.js:73
-Login.tsx:190 ✅ Consent metadata stored in session
-Login.tsx:191    Timestamp: 2025-12-05T10:37:36.808Z
-Login.tsx:192    IP Address: 49.36.8.199
-Login.tsx:193    Policy Versions: Privacy v2.0, Terms v2.0
-Login.tsx:194    ⏳ Will be persisted to database after authentication
-Login.tsx:431 🔵 Initiating Facebook OAuth via official SDK...
-Login.tsx:432    ✅ User consent verified and logged
-Login.tsx:558 ❌ Facebook OAuth Error: t {message: 'init not called with valid version', innerError: undefined}
+sdk.js?hash=f90a7cc856726295c7e346681a95efb6:94  Uncaught (in promise) TypeError: Failed to fetch
+    at s (sdk.js?hash=f90a7cc856726295c7e346681a95efb6:94:956)
+    at e (sdk.js?hash=f90a7cc856726295c7e346681a95efb6:94:794)
+    at Object.c [as log] (sdk.js?hash=f90a7cc856726295c7e346681a95efb6:94:1678)
+    at Object.s [as logEvent] (sdk.js?hash=f90a7cc856726295c7e346681a95efb6:111:957)
+    at c (sdk.js?hash=f90a7cc856726295c7e346681a95efb6:151:2905)
+    at transform (sdk.js?hash=f90a7cc856726295c7e346681a95efb6:151:4141)
+    at Object.prepareCall (sdk.js?hash=f90a7cc856726295c7e346681a95efb6:151:8019)
+    at e (sdk.js?hash=f90a7cc856726295c7e346681a95efb6:152:1076)
+    at Object.s [as login] (sdk.js?hash=f90a7cc856726295c7e346681a95efb6:112:617)
+    at Object.login (sdk.js?hash=f90a7cc856726295c7e346681a95efb6:153:774)
+s @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:94
+e @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:94
+c @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:94
+s @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:111
+c @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:151
+transform @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:151
+prepareCall @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:151
+e @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:152
+s @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:112
+login @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:153
+(anonymous) @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:78
+(anonymous) @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:68
+(anonymous) @ useFacebookSDK.ts:194
+ke @ useFacebookSDK.ts:167
+(anonymous) @ Login.tsx:561
+r @ auth-BVhcrKDh.js:1
+Promise.then
+g @ auth-BVhcrKDh.js:1
+(anonymous) @ auth-BVhcrKDh.js:1
+h @ auth-BVhcrKDh.js:1
+ee @ Login.tsx:498
+Zf @ react-dom.production.min.js:54
+qf @ react-dom.production.min.js:54
+bf @ react-dom.production.min.js:55
+Si @ react-dom.production.min.js:105
+ia @ react-dom.production.min.js:106
+(anonymous) @ react-dom.production.min.js:117
+Io @ react-dom.production.min.js:273
+Rs @ react-dom.production.min.js:52
+Wl @ react-dom.production.min.js:109
+so @ react-dom.production.min.js:74
+vc @ react-dom.production.min.js:73
+sdk.js?hash=f90a7cc856726295c7e346681a95efb6:49 You are overriding current access token, that means some other app is expecting different access token and you will probably break things. Please consider passing access_token directly to API parameters instead of overriding the global settings.
+s @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:49
+setAccessToken @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:134
+(anonymous) @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:191
+o @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:61
+inform @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:61
+(anonymous) @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:66
+d @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:112
+(anonymous) @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:112
+_xdRecv @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:151
+(anonymous) @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:151
+b @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:148
+(anonymous) @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:148
+useFacebookSDK.ts:195 📥 FB.login callback received
+useFacebookSDK.ts:196    Response status: connected
+useFacebookSDK.ts:199 ✅ Facebook login successful
+useFacebookSDK.ts:200    Access Token: EAAUmaHNHeCcBQXeHtH5...
+useFacebookSDK.ts:201    User ID: 122098096448937004
+useFacebookSDK.ts:202    Granted Scopes: read_insights,pages_show_list,instagram_basic,instagram_manage_comments,instagram_manage_insights,instagram_content_publish,instagram_manage_messages,pages_read_engagement
+Login.tsx:564 ✅ Facebook OAuth successful!
+Login.tsx:565    Access Token received
+Login.tsx:566    Facebook User ID: 122098096448937004
+sdk.js?hash=f90a7cc856726295c7e346681a95efb6:94  GET https://www.facebook.com/platform/impression.php/f808da6bdcfc89ac4/?api_key=1449604936071207&lid=117&payload=%7B%22payload%22%3A%7B%22cbt_delta%22%3A4127%2C%22logger_id%22%3A%22fb731938c1fbd89bf%22%2C%22action%22%3A%22client_login_end%22%2C%22client_funnel_version%22%3A1%7D%2C%22source%22%3A%22jssdk%22%7D net::ERR_BLOCKED_BY_ADBLOCKER
+s @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:94
+e @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:94
+c @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:94
+s @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:111
+u @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:111
+g @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:112
+(anonymous) @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:112
+_xdRecv @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:151
+(anonymous) @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:151
+b @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:148
+(anonymous) @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:148
+sdk.js?hash=f90a7cc856726295c7e346681a95efb6:94  Uncaught (in promise) TypeError: Failed to fetch
+    at s (sdk.js?hash=f90a7cc856726295c7e346681a95efb6:94:956)
+    at e (sdk.js?hash=f90a7cc856726295c7e346681a95efb6:94:794)
+    at Object.c [as log] (sdk.js?hash=f90a7cc856726295c7e346681a95efb6:94:1678)
+    at s (sdk.js?hash=f90a7cc856726295c7e346681a95efb6:111:957)
+    at Object.u [as logLoginEvent] (sdk.js?hash=f90a7cc856726295c7e346681a95efb6:111:1158)
+    at g (sdk.js?hash=f90a7cc856726295c7e346681a95efb6:112:5746)
+    at sdk.js?hash=f90a7cc856726295c7e346681a95efb6:112:5558
+    at Object._xdRecv (sdk.js?hash=f90a7cc856726295c7e346681a95efb6:151:14671)
+    at sdk.js?hash=f90a7cc856726295c7e346681a95efb6:151:14084
+    at b (sdk.js?hash=f90a7cc856726295c7e346681a95efb6:148:2269)
+s @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:94
+e @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:94
+c @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:94
+s @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:111
+u @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:111
+g @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:112
+(anonymous) @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:112
+_xdRecv @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:151
+(anonymous) @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:151
+b @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:148
+(anonymous) @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:148
+helpers.js:87  POST https://uromexjprcrjfmhkmgxa.supabase.co/auth/v1/token?grant_type=id_token 400 (Bad Request)
+(anonymous) @ helpers.js:87
+(anonymous) @ fetch.js:101
+(anonymous) @ 5-supabase-D1hm23dh.js:1
+u @ 5-supabase-D1hm23dh.js:1
+Ir @ fetch.js:97
+(anonymous) @ fetch.js:91
+(anonymous) @ 5-supabase-D1hm23dh.js:1
+u @ 5-supabase-D1hm23dh.js:1
+y @ fetch.js:77
+(anonymous) @ GoTrueClient.js:642
+(anonymous) @ 5-supabase-D1hm23dh.js:1
+u @ 5-supabase-D1hm23dh.js:1
+signInWithIdToken @ GoTrueClient.js:639
+(anonymous) @ Login.tsx:586
+r @ auth-BVhcrKDh.js:1
+Promise.then
+g @ auth-BVhcrKDh.js:1
+r @ auth-BVhcrKDh.js:1
+Promise.then
+g @ auth-BVhcrKDh.js:1
+(anonymous) @ auth-BVhcrKDh.js:1
+h @ auth-BVhcrKDh.js:1
+ee @ Login.tsx:498
+Zf @ react-dom.production.min.js:54
+qf @ react-dom.production.min.js:54
+bf @ react-dom.production.min.js:55
+Si @ react-dom.production.min.js:105
+ia @ react-dom.production.min.js:106
+(anonymous) @ react-dom.production.min.js:117
+Io @ react-dom.production.min.js:273
+Rs @ react-dom.production.min.js:52
+Wl @ react-dom.production.min.js:109
+so @ react-dom.production.min.js:74
+vc @ react-dom.production.min.js:73
+Login.tsx:592 ⚠️ Supabase signInWithIdToken failed: AuthApiError: Bad ID token
+    at fetch.js:66:11
+    at Generator.next (<anonymous>)
+    at n (5-supabase-D1hm23dh.js:1:54)
+(anonymous) @ Login.tsx:592
+r @ auth-BVhcrKDh.js:1
+Promise.then
+g @ auth-BVhcrKDh.js:1
+r @ auth-BVhcrKDh.js:1
+Promise.then
+g @ auth-BVhcrKDh.js:1
+r @ auth-BVhcrKDh.js:1
+Promise.then
+g @ auth-BVhcrKDh.js:1
+(anonymous) @ auth-BVhcrKDh.js:1
+h @ auth-BVhcrKDh.js:1
+ee @ Login.tsx:498
+Zf @ react-dom.production.min.js:54
+qf @ react-dom.production.min.js:54
+bf @ react-dom.production.min.js:55
+Si @ react-dom.production.min.js:105
+ia @ react-dom.production.min.js:106
+(anonymous) @ react-dom.production.min.js:117
+Io @ react-dom.production.min.js:273
+Rs @ react-dom.production.min.js:52
+Wl @ react-dom.production.min.js:109
+so @ react-dom.production.min.js:74
+vc @ react-dom.production.min.js:73
+Login.tsx:663 ❌ Session creation error: AuthApiError: Bad ID token
+    at fetch.js:66:11
+    at Generator.next (<anonymous>)
+    at n (5-supabase-D1hm23dh.js:1:54)
+(anonymous) @ Login.tsx:663
+r @ auth-BVhcrKDh.js:1
+Promise.then
+g @ auth-BVhcrKDh.js:1
+r @ auth-BVhcrKDh.js:1
+Promise.then
+g @ auth-BVhcrKDh.js:1
+r @ auth-BVhcrKDh.js:1
+Promise.then
+g @ auth-BVhcrKDh.js:1
+(anonymous) @ auth-BVhcrKDh.js:1
+h @ auth-BVhcrKDh.js:1
+ee @ Login.tsx:498
+Zf @ react-dom.production.min.js:54
+qf @ react-dom.production.min.js:54
+bf @ react-dom.production.min.js:55
+Si @ react-dom.production.min.js:105
+ia @ react-dom.production.min.js:106
+(anonymous) @ react-dom.production.min.js:117
+Io @ react-dom.production.min.js:273
+Rs @ react-dom.production.min.js:52
+Wl @ react-dom.production.min.js:109
+so @ react-dom.production.min.js:74
+vc @ react-dom.production.min.js:73
+Login.tsx:668 ⚠️ Falling back to legacy authentication
+(anonymous) @ Login.tsx:668
+r @ auth-BVhcrKDh.js:1
+Promise.then
+g @ auth-BVhcrKDh.js:1
+r @ auth-BVhcrKDh.js:1
+Promise.then
+g @ auth-BVhcrKDh.js:1
+r @ auth-BVhcrKDh.js:1
+Promise.then
+g @ auth-BVhcrKDh.js:1
+(anonymous) @ auth-BVhcrKDh.js:1
+h @ auth-BVhcrKDh.js:1
+ee @ Login.tsx:498
+Zf @ react-dom.production.min.js:54
+qf @ react-dom.production.min.js:54
+bf @ react-dom.production.min.js:55
+Si @ react-dom.production.min.js:105
+ia @ react-dom.production.min.js:106
+(anonymous) @ react-dom.production.min.js:117
+Io @ react-dom.production.min.js:273
+Rs @ react-dom.production.min.js:52
+Wl @ react-dom.production.min.js:109
+so @ react-dom.production.min.js:74
+vc @ react-dom.production.min.js:73
+Login.tsx:669    Some features may not work correctly
+(anonymous) @ Login.tsx:669
+r @ auth-BVhcrKDh.js:1
+Promise.then
+g @ auth-BVhcrKDh.js:1
+r @ auth-BVhcrKDh.js:1
+Promise.then
+g @ auth-BVhcrKDh.js:1
+r @ auth-BVhcrKDh.js:1
+Promise.then
+g @ auth-BVhcrKDh.js:1
+(anonymous) @ auth-BVhcrKDh.js:1
+h @ auth-BVhcrKDh.js:1
+ee @ Login.tsx:498
+Zf @ react-dom.production.min.js:54
+qf @ react-dom.production.min.js:54
+bf @ react-dom.production.min.js:55
+Si @ react-dom.production.min.js:105
+ia @ react-dom.production.min.js:106
+(anonymous) @ react-dom.production.min.js:117
+Io @ react-dom.production.min.js:273
+Rs @ react-dom.production.min.js:52
+Wl @ react-dom.production.min.js:109
+so @ react-dom.production.min.js:74
+vc @ react-dom.production.min.js:73
+authStore.ts:304 ✅ Legacy login successful: facebook_user
+realtimeService.ts:59 🚀 Starting real-time polling every 3000 ms
+realtimeService.ts:106 👂 Subscribed to any events
+useInstagramAccount.ts:37 🔍 Fetching business accounts for UUID: 122098096448937004
+databaseservices.ts:117 ❌ Invalid user_id format. Expected UUID, got: 122098096448937004
+(anonymous) @ databaseservices.ts:117
+(anonymous) @ components-q0PPWUWJ.js:1
+ue @ components-q0PPWUWJ.js:1
+getBusinessAccounts @ databaseservices.ts:109
+(anonymous) @ useInstagramAccount.ts:39
+(anonymous) @ components-q0PPWUWJ.js:1
+ue @ components-q0PPWUWJ.js:1
+s @ useInstagramAccount.ts:24
+(anonymous) @ useInstagramAccount.ts:63
+al @ react-dom.production.min.js:243
+Zt @ react-dom.production.min.js:285
+(anonymous) @ react-dom.production.min.js:281
+E @ scheduler.production.min.js:13
+sn @ scheduler.production.min.js:14
+databaseservices.ts:118    This is likely a Facebook ID being used instead of Supabase UUID
+(anonymous) @ databaseservices.ts:118
+(anonymous) @ components-q0PPWUWJ.js:1
+ue @ components-q0PPWUWJ.js:1
+getBusinessAccounts @ databaseservices.ts:109
+(anonymous) @ useInstagramAccount.ts:39
+(anonymous) @ components-q0PPWUWJ.js:1
+ue @ components-q0PPWUWJ.js:1
+s @ useInstagramAccount.ts:24
+(anonymous) @ useInstagramAccount.ts:63
+al @ react-dom.production.min.js:243
+Zt @ react-dom.production.min.js:285
+(anonymous) @ react-dom.production.min.js:281
+E @ scheduler.production.min.js:13
+sn @ scheduler.production.min.js:14
+databaseservices.ts:119    Hint: Ensure authStore.user.id contains UUID, not Facebook ID
+(anonymous) @ databaseservices.ts:119
+(anonymous) @ components-q0PPWUWJ.js:1
+ue @ components-q0PPWUWJ.js:1
+getBusinessAccounts @ databaseservices.ts:109
+(anonymous) @ useInstagramAccount.ts:39
+(anonymous) @ components-q0PPWUWJ.js:1
+ue @ components-q0PPWUWJ.js:1
+s @ useInstagramAccount.ts:24
+(anonymous) @ useInstagramAccount.ts:63
+al @ react-dom.production.min.js:243
+Zt @ react-dom.production.min.js:285
+(anonymous) @ react-dom.production.min.js:281
+E @ scheduler.production.min.js:13
+sn @ scheduler.production.min.js:14
+useInstagramAccount.ts:37 🔍 Fetching business accounts for UUID: 122098096448937004
+databaseservices.ts:117 ❌ Invalid user_id format. Expected UUID, got: 122098096448937004
+(anonymous) @ databaseservices.ts:117
+(anonymous) @ components-q0PPWUWJ.js:1
+ue @ components-q0PPWUWJ.js:1
+getBusinessAccounts @ databaseservices.ts:109
+(anonymous) @ useInstagramAccount.ts:39
+(anonymous) @ components-q0PPWUWJ.js:1
+ue @ components-q0PPWUWJ.js:1
+s @ useInstagramAccount.ts:24
+(anonymous) @ useInstagramAccount.ts:63
+al @ react-dom.production.min.js:243
+Zt @ react-dom.production.min.js:285
+(anonymous) @ react-dom.production.min.js:281
+E @ scheduler.production.min.js:13
+sn @ scheduler.production.min.js:14
+databaseservices.ts:118    This is likely a Facebook ID being used instead of Supabase UUID
+(anonymous) @ databaseservices.ts:118
+(anonymous) @ components-q0PPWUWJ.js:1
+ue @ components-q0PPWUWJ.js:1
+getBusinessAccounts @ databaseservices.ts:109
+(anonymous) @ useInstagramAccount.ts:39
+(anonymous) @ components-q0PPWUWJ.js:1
+ue @ components-q0PPWUWJ.js:1
+s @ useInstagramAccount.ts:24
+(anonymous) @ useInstagramAccount.ts:63
+al @ react-dom.production.min.js:243
+Zt @ react-dom.production.min.js:285
+(anonymous) @ react-dom.production.min.js:281
+E @ scheduler.production.min.js:13
+sn @ scheduler.production.min.js:14
+databaseservices.ts:119    Hint: Ensure authStore.user.id contains UUID, not Facebook ID
+(anonymous) @ databaseservices.ts:119
+(anonymous) @ components-q0PPWUWJ.js:1
+ue @ components-q0PPWUWJ.js:1
+getBusinessAccounts @ databaseservices.ts:109
+(anonymous) @ useInstagramAccount.ts:39
+(anonymous) @ components-q0PPWUWJ.js:1
+ue @ components-q0PPWUWJ.js:1
+s @ useInstagramAccount.ts:24
+(anonymous) @ useInstagramAccount.ts:63
+al @ react-dom.production.min.js:243
+Zt @ react-dom.production.min.js:285
+(anonymous) @ react-dom.production.min.js:281
+E @ scheduler.production.min.js:13
+sn @ scheduler.production.min.js:14
+useTokenValidation.ts:110 [Token Validation] Skipping validation - no user or businessAccountId
+2useInstagramAccount.ts:51 ❌ Failed to fetch business accounts: Invalid user_id format. Expected UUID.
+(anonymous) @ useInstagramAccount.ts:51
+i @ components-q0PPWUWJ.js:1
+Promise.then
+s @ components-q0PPWUWJ.js:1
+(anonymous) @ components-q0PPWUWJ.js:1
+ue @ components-q0PPWUWJ.js:1
+s @ useInstagramAccount.ts:24
+(anonymous) @ useInstagramAccount.ts:63
+al @ react-dom.production.min.js:243
+Zt @ react-dom.production.min.js:285
+(anonymous) @ react-dom.production.min.js:281
+E @ scheduler.production.min.js:13
+sn @ scheduler.production.min.js:14
+sdk.js?hash=f90a7cc856726295c7e346681a95efb6:94  GET https://www.facebook.com/platform/impression.php/f587a9609bc066da6/?api_key=1449604936071207&lid=117&payload=%7B%22payload%22%3A%7B%22cbt_delta%22%3A9128%2C%22logger_id%22%3A%22fb731938c1fbd89bf%22%2C%22action%22%3A%22client_login_complete_heartbeat%22%2C%22client_funnel_version%22%3A1%7D%2C%22source%22%3A%22jssdk%22%7D net::ERR_BLOCKED_BY_ADBLOCKER
+s @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:94
+e @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:94
+c @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:94
+s @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:111
+u @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:111
+(anonymous) @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:112
+setTimeout
+g @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:112
+(anonymous) @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:112
+_xdRecv @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:151
+(anonymous) @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:151
+b @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:148
+(anonymous) @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:148
+sdk.js?hash=f90a7cc856726295c7e346681a95efb6:94  Uncaught (in promise) TypeError: Failed to fetch
+    at s (sdk.js?hash=f90a7cc856726295c7e346681a95efb6:94:956)
+    at e (sdk.js?hash=f90a7cc856726295c7e346681a95efb6:94:794)
+    at Object.c [as log] (sdk.js?hash=f90a7cc856726295c7e346681a95efb6:94:1678)
+    at s (sdk.js?hash=f90a7cc856726295c7e346681a95efb6:111:957)
+    at Object.u [as logLoginEvent] (sdk.js?hash=f90a7cc856726295c7e346681a95efb6:111:1158)
+    at sdk.js?hash=f90a7cc856726295c7e346681a95efb6:112:5816
+s @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:94
+e @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:94
+c @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:94
+s @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:111
+u @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:111
+(anonymous) @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:112
+setTimeout
+g @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:112
+(anonymous) @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:112
+_xdRecv @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:151
+(anonymous) @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:151
+b @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:148
+(anonymous) @ sdk.js?hash=f90a7cc856726295c7e346681a95efb6:148
+
+Network tab error 
+https://uromexjprcrjfmhkmgxa.supabase.co/auth/v1/token?grant_type=id_token
+Request Method
+POST
+Status Code
+400 Bad Request
+Remote Address
+104.18.38.10:443
+Referrer Policy
+strict-origin-when-cross-origin
+:authority
+uromexjprcrjfmhkmgxa.supabase.co
+:method
+POST
+:path
+/auth/v1/token?grant_type=id_token
+:scheme
+https
+accept
+*/*
+accept-encoding
+gzip, deflate, br, zstd
+accept-language
+en-GB,en-US;q=0.9,en;q=0.8,el;q=0.7
+apikey
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVyb21leGpwcmNyamZtaGttZ3hhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU3NTgxOTUsImV4cCI6MjA3MTMzNDE5NX0.4iMC2ktj2nDlOYy-4NfNVHnV4i-tfCVFvgqR835cAOI
+authorization
+Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVyb21leGpwcmNyamZtaGttZ3hhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU3NTgxOTUsImV4cCI6MjA3MTMzNDE5NX0.4iMC2ktj2nDlOYy-4NfNVHnV4i-tfCVFvgqR835cAOI
+content-length
+365
+content-type
+application/json;charset=UTF-8
+origin
+https://app.888intelligenceautomation.in
+priority
+u=1, i
+referer
+https://app.888intelligenceautomation.in/
+sec-ch-ua
+"Chromium";v="140", "Not=A?Brand";v="24", "Opera GX";v="124"
+sec-ch-ua-mobile
+?0
+sec-ch-ua-platform
+"macOS"
+sec-fetch-dest
+empty
+sec-fetch-mode
+cors
+sec-fetch-site
+cross-site
+user-agent
+Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition std-1)
+x-client-info
+instagram-automation-dashboard
+x-client-platform
+web-frontend
+x-client-version
+1.0.0
+x-supabase-api-version
+2024-01-01

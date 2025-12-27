@@ -575,37 +575,76 @@ const Login: React.FC = () => {
         });
 
         // ============================================
-        // STEP 7: CREATE/GET SUPABASE SESSION (PHASE 3.5 FIX)
+        // STEP 7: AUTHENTICATE VIA BACKEND (PHASE 3.6 - SDK BRIDGE)
         // ============================================
-        // CRITICAL: We need a Supabase session to get the UUID
-        // This replaces the old flow that used Facebook ID directly
+        // CRITICAL: DO NOT call supabase.auth.signInWithIdToken() directly!
+        // Facebook access tokens are NOT OIDC ID tokens - that call will ALWAYS fail.
+        // Instead, send the token to our backend which handles authentication properly.
 
         try {
-          // Option 1: Try to sign in with the Facebook token using Supabase OAuth
-          // This creates a proper Supabase session
-          const { data: authData, error: authError } = await supabase.auth.signInWithIdToken({
-            provider: 'facebook',
-            token: facebookAccessToken
+          console.log('🌉 SDK Bridge: Authenticating via backend...');
+
+          // Get API base URL from environment
+          const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+
+          // ============================================
+          // STEP 7a: Call Backend SDK Bridge Endpoint
+          // ============================================
+          const authResponse = await fetch(`${API_BASE_URL}/api/auth/facebook/token`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              accessToken: facebookAccessToken
+            })
           });
 
-          if (authError) {
-            console.error('⚠️ Supabase signInWithIdToken failed:', authError);
-            throw authError;
+          // Handle response safely (avoid "Unexpected end of JSON" error)
+          const responseText = await authResponse.text();
+
+          if (!responseText) {
+            throw new Error('Backend returned empty response');
           }
 
-          if (!authData.user || !authData.session) {
-            throw new Error('Failed to create Supabase session');
+          let authData;
+          try {
+            authData = JSON.parse(responseText);
+          } catch (parseError) {
+            console.error('❌ Failed to parse auth response:', responseText.substring(0, 200));
+            throw new Error('Invalid response from authentication server');
           }
 
-          // ============================================
-          // STEP 8: EXTRACT SUPABASE UUID (NOT FACEBOOK ID!)
-          // ============================================
-          const supabaseUserId = authData.user.id;  // This is the UUID
-          const supabaseSession = authData.session;
+          if (!authResponse.ok || !authData.success) {
+            console.error('❌ Backend authentication failed:', authData.error || authData.message);
+            throw new Error(authData.error || 'Authentication failed');
+          }
 
-          console.log('✅ Supabase session created');
-          console.log('   Supabase UUID:', supabaseUserId);
-          console.log('   Facebook ID (for reference):', facebookUserId);
+          console.log('✅ Backend authentication successful');
+          console.log('   Supabase UUID:', authData.user.id);
+          console.log('   Facebook ID:', authData.user.facebook_id);
+
+          // ============================================
+          // STEP 8: SET SUPABASE SESSION (CLIENT-SIDE)
+          // ============================================
+          // Use the session returned by backend to establish local Supabase auth
+          const { error: sessionError } = await supabase.auth.setSession({
+            access_token: authData.session.access_token,
+            refresh_token: authData.session.refresh_token
+          });
+
+          if (sessionError) {
+            console.error('⚠️ Failed to set Supabase session:', sessionError);
+            throw sessionError;
+          }
+
+          console.log('✅ Supabase session established locally');
+
+          // ============================================
+          // STEP 9: EXTRACT USER DATA (NOW WITH UUID!)
+          // ============================================
+          const supabaseUserId = authData.user.id;  // This is the UUID from backend
+          const providerToken = authData.provider_token;  // Facebook token for Graph API
 
           setMessage({
             type: 'info',
@@ -613,12 +652,12 @@ const Login: React.FC = () => {
           });
 
           // ============================================
-          // STEP 9: COMPLETE THE HANDSHAKE (PHASE 3.5 NEW)
+          // STEP 10: COMPLETE THE HANDSHAKE
           // ============================================
           // This calls /exchange-token with UUID and gets businessAccountId
           const handshakeResult = await completeHandshake(
-            facebookAccessToken,
-            supabaseUserId  // Use UUID, not Facebook ID!
+            providerToken,      // Provider token from backend
+            supabaseUserId      // UUID for database operations
           );
 
           if (!handshakeResult.success) {
@@ -629,19 +668,19 @@ const Login: React.FC = () => {
           }
 
           // ============================================
-          // STEP 10: LOGIN TO AUTHSTORE (WITH UUID)
+          // STEP 11: LOGIN TO AUTHSTORE (WITH UUID)
           // ============================================
           login({
-            id: supabaseUserId,  // ✅ Use Supabase UUID, NOT Facebook ID
-            username: authData.user.user_metadata?.name || authData.user.email?.split('@')[0] || 'user',
+            id: supabaseUserId,  // ✅ UUID from backend
+            username: authData.user.name || authData.user.email?.split('@')[0] || 'user',
             email: authData.user.email,
-            facebook_id: facebookUserId,  // Store Facebook ID separately for reference
-            avatarUrl: authData.user.user_metadata?.avatar_url || '',
+            facebook_id: authData.user.facebook_id,  // Store FB ID for Graph API calls
+            avatarUrl: authData.user.avatar_url || '',
             permissions: ['dashboard', 'content', 'engagement', 'analytics', 'settings'],
-          }, supabaseSession.access_token);
+          }, authData.session.access_token);
 
           // ============================================
-          // STEP 11: PERSIST CONSENT (WITH UUID)
+          // STEP 12: PERSIST CONSENT (WITH UUID)
           // ============================================
           try {
             await persistStoredConsent(supabaseUserId);  // ✅ Use UUID
@@ -659,31 +698,18 @@ const Login: React.FC = () => {
             navigate(from, { replace: true });
           }, 1500);
 
-        } catch (sessionError) {
-          console.error('❌ Session creation error:', sessionError);
-
-          // ============================================
-          // FALLBACK: Use legacy flow (will have limited functionality)
-          // ============================================
-          console.warn('⚠️ Falling back to legacy authentication');
-          console.warn('   Some features may not work correctly');
-
-          login({
-            id: facebookUserId,  // Fallback to Facebook ID (will cause UUID errors)
-            username: 'facebook_user',
-            facebook_id: facebookUserId,
-            avatarUrl: '',
-            permissions: ['dashboard', 'content', 'engagement', 'analytics', 'settings'],
-          }, facebookAccessToken);
+        } catch (authError) {
+          console.error('❌ SDK Bridge authentication error:', authError);
 
           setMessage({
-            type: 'success',
-            text: '✅ Facebook login successful! Note: Please reconnect your Instagram account in settings.'
+            type: 'error',
+            text: authError instanceof Error
+              ? authError.message
+              : 'Authentication failed. Please try again.'
           });
 
-          setTimeout(() => {
-            navigate(from, { replace: true });
-          }, 2000);
+          // DO NOT use legacy fallback - it causes UUID validation errors
+          // Let the user retry authentication instead
         }
       }
 
