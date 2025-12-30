@@ -1502,7 +1502,7 @@ router.post('/ugc/request-permission', async (req, res) => {
 // ==========================================
 // DM CONVERSATION ENDPOINTS
 // ==========================================
-// Permission Required: instagram_business_manage_messages
+// Permission Required: instagram_manage_messages
 // Purpose: Fetch and manage Instagram DM conversations
 
 /**

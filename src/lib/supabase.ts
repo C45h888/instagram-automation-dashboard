@@ -223,8 +223,8 @@ export const getUserProfile = async (userId: string) => {
       .from('user_profiles')
       .select('*')
       .eq('user_id', userId)
-      .single();
-    
+      .maybeSingle();
+
     if (error) throw error;
     return data;
   } catch (error) {
@@ -394,7 +394,7 @@ export const getFacebookIdFromUserId = async (userId: string): Promise<string | 
       .from('user_profiles')
       .select('facebook_id')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
 
     if (error) {
       console.error('Error fetching Facebook ID:', error);
@@ -418,7 +418,7 @@ export const getUserIdFromFacebookId = async (facebookId: string): Promise<strin
       .from('user_profiles')
       .select('user_id')
       .eq('facebook_id', facebookId)
-      .single();
+      .maybeSingle();
 
     if (error) {
       console.error('Error fetching user_id from Facebook ID:', error);

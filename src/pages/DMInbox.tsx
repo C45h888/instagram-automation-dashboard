@@ -1,7 +1,7 @@
 // =====================================
 // DM INBOX PAGE
 // Full page for Instagram Direct Messages management
-// Demonstrates instagram_business_manage_messages permission
+// Demonstrates instagram_manage_messages permission
 // =====================================
 
 import React, { useState } from 'react';
@@ -78,7 +78,7 @@ const DMInbox: React.FC = () => {
             </div>
           </div>
           <PermissionBadge
-            permission="instagram_business_manage_messages"
+            permission="instagram_manage_messages"
             status="granted"
             size="lg"
           />
@@ -265,7 +265,7 @@ const DMInbox: React.FC = () => {
       <div className="mt-8 p-4 bg-pink-500/10 rounded-xl border border-pink-500/30">
         <p className="text-xs text-pink-300 text-center">
           ✓ Demonstrates{' '}
-          <span className="font-mono font-bold">instagram_business_manage_messages</span>{' '}
+          <span className="font-mono font-bold">instagram_manage_messages</span>{' '}
           permission: Send and receive direct messages, manage conversations within 24-hour window
         </p>
       </div>

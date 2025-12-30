@@ -29,7 +29,7 @@
   - instagram_basic
   - instagram_manage_comments
   - instagram_manage_insights
-  - instagram_business_manage_messages
+  - instagram_manage_messages
   - pages_show_list
   - pages_read_engagement
   - pages_read_user_content

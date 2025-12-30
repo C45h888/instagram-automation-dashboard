@@ -18,7 +18,7 @@ export type InstagramPermission =
   | 'instagram_basic'
   | 'instagram_manage_comments'
   | 'instagram_content_publish'
-  | 'instagram_business_manage_messages';
+  | 'instagram_manage_messages';
 
 export interface PermissionScope {
   permission: InstagramPermission;

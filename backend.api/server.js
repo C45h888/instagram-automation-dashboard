@@ -363,14 +363,10 @@ try {
   console.error('❌ Failed to load Instagram API routes:', error.message);
 }
 
-// ✅ Authentication routes (Facebook OAuth with dual-ID system)
-try {
-  const authRoutes = require('./routes/auth');
-  app.use('/api/auth', authRoutes);
-  console.log('✅ Auth routes registered at /api/auth');
-} catch (error) {
-  console.error('❌ Failed to load auth routes:', error.message);
-}
+// ✅ Authentication routes REMOVED (Phase 3.7)
+// Native Supabase OAuth now handles authentication directly
+// Backend auth.js deleted - signInWithIdToken() was incompatible with Facebook tokens
+// See: .claude/resources/current-work.md - Phase 3.7 for details
 
 try {
   const testRoutes = require('./routes/test');

@@ -51,6 +51,11 @@ interface AuthStateProperties {
   instagramBusinessId: string | null;  // Instagram's numeric ID for API calls
   pageId: string | null;  // Facebook Page ID
   pageName: string | null;  // Facebook Page Name
+
+  // Facebook Provider Token (PHASE 3.7)
+  // Captured from OAuth session for Instagram API calls
+  // NOT persisted to localStorage for security (per Supabase recommendations)
+  providerToken: string | null;
 }
 
 /**
@@ -286,7 +291,10 @@ export const useAuthStore = create<AuthState>()(
         instagramBusinessId: null,
         pageId: null,
         pageName: null,
-        
+
+        // Facebook Provider Token (PHASE 3.7)
+        providerToken: null,
+
         // =====================================
         // LEGACY METHODS (fixed for backward compatibility)
         // =====================================
@@ -360,7 +368,7 @@ export const useAuthStore = create<AuthState>()(
               .from('user_profiles')
               .select('*')
               .eq('user_id', data.user.id)
-              .single();
+              .maybeSingle();
             
             if (profileError && profileError.code !== 'PGRST116') {
               console.error('Profile fetch error:', profileError);
@@ -463,7 +471,7 @@ export const useAuthStore = create<AuthState>()(
               .select('*')
               .eq('email', email)
               .eq('is_active', true)
-              .single();
+              .maybeSingle();
             
             if (adminError || !adminProfile) {
               throw new Error('Unauthorized: Admin access required');
@@ -473,7 +481,7 @@ export const useAuthStore = create<AuthState>()(
               .from('user_profiles')
               .select('*')
               .eq('user_id', data.user.id)
-              .single();
+              .maybeSingle();
             
             const user = mapToUser(data.user, profile, adminProfile);
             
@@ -527,7 +535,7 @@ export const useAuthStore = create<AuthState>()(
                 .from('admin_users')
                 .select('login_attempts')
                 .eq('email', email)
-                .single();
+                .maybeSingle();
               
               if (admin) {
                 await supabase
@@ -587,14 +595,14 @@ export const useAuthStore = create<AuthState>()(
                 .from('user_profiles')
                 .select('*')
                 .eq('user_id', session.user.id)
-                .single();
+                .maybeSingle();
               
               const { data: adminProfile } = await supabase
                 .from('admin_users')
                 .select('*')
                 .eq('user_id', session.user.id)
                 .eq('is_active', true)
-                .single();
+                .maybeSingle();
               
               const user = mapToUser(session.user, profile, adminProfile);
               
@@ -734,36 +742,78 @@ export const useAuthStore = create<AuthState>()(
 
 supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
   console.log('🔄 Auth state changed:', event);
-  
+
   const store = useAuthStore.getState();
-  
+
   switch (event) {
-    case 'SIGNED_IN':
+    case 'INITIAL_SESSION':
+      // Handle initial session on page load
+      // Capture provider_token if available (OAuth session restoration)
+      if (session?.provider_token) {
+        console.log('📦 Provider token captured from initial session');
+        useAuthStore.setState({ providerToken: session.provider_token });
+      }
       if (session) {
         store.checkSession();
       }
       break;
-      
+
+    case 'SIGNED_IN':
+      // ============================================
+      // PHASE 3.7: Capture provider_token on OAuth sign-in
+      // ============================================
+      // This is the Supabase-recommended approach for capturing
+      // the Facebook access token from OAuth flow
+      if (session?.provider_token) {
+        console.log('📦 Provider token captured from OAuth sign-in');
+        console.log('   Token prefix:', session.provider_token.substring(0, 20) + '...');
+        useAuthStore.setState({ providerToken: session.provider_token });
+
+        // Optional: Also store in localStorage for backup
+        // Note: Supabase recommends NOT persisting provider tokens
+        // but we store it temporarily for the Instagram exchange
+        try {
+          localStorage.setItem('fb_provider_token', session.provider_token);
+          console.log('   ✅ Provider token backed up to localStorage');
+        } catch (e) {
+          console.warn('   ⚠️ Could not backup provider token to localStorage');
+        }
+      }
+      if (session) {
+        store.checkSession();
+      }
+      break;
+
     case 'SIGNED_OUT':
+      // Clear provider token on sign out
       useAuthStore.setState({
         user: null,
         session: null,
         token: null,
+        providerToken: null,
         isAuthenticated: false,
         isAdmin: false,
         permissions: []
       });
+      // Also clear from localStorage
+      try {
+        localStorage.removeItem('fb_provider_token');
+      } catch (e) {
+        // Ignore localStorage errors
+      }
       break;
-      
+
     case 'TOKEN_REFRESHED':
       if (session) {
         useAuthStore.setState({
           session,
           token: session.access_token
         });
+        // Note: provider_token is NOT refreshed by Supabase
+        // It must be re-obtained via new OAuth flow if expired
       }
       break;
-      
+
     case 'USER_UPDATED':
       store.checkSession();
       break;

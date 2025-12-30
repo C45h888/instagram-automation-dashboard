@@ -8,7 +8,8 @@ import {  Instagram,      // Instagram logo
   Shield,         // Permission/security icon for consent section
   CheckCircle     // Checkmark for permission list items
 } from 'lucide-react';
-import { useFacebookSDK, facebookLogin } from '../hooks/useFacebookSDK';
+// Phase 3.7: Facebook SDK removed - using Native Supabase OAuth
+// import { useFacebookSDK, facebookLogin } from '../hooks/useFacebookSDK';
 
 const Login: React.FC = () => {
   const { login, setBusinessAccount } = useAuthStore();
@@ -16,8 +17,9 @@ const Login: React.FC = () => {
   const location = useLocation();
   const from = (location.state as any)?.from?.pathname || '/';
 
-  // Initialize Facebook SDK
-  const fbSdkReady = useFacebookSDK();
+  // Phase 3.7: Facebook SDK initialization removed
+  // Native Supabase OAuth handles everything via signInWithOAuth()
+  // const fbSdkReady = useFacebookSDK();
 
   const [isInstagramLoading, setIsInstagramLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'info' | 'error' | 'success'; text: string } | null>(null);
@@ -185,7 +187,7 @@ const Login: React.FC = () => {
       // Store temporarily until authentication completes
       // Will be persisted to database by persistStoredConsent()
 
-      sessionStorage.setItem('pending_consent', JSON.stringify(consentData));
+      sessionStorage.setItem('pendingConsent', JSON.stringify(consentData));
 
       console.log('✅ Consent metadata stored in session');
       console.log('   Timestamp:', consentData.consented_at);
@@ -249,7 +251,7 @@ const Login: React.FC = () => {
       // ============================================
       // STEP 2: Retrieve Consent from Session Storage
       // ============================================
-      const storedConsent = sessionStorage.getItem('pending_consent');
+      const storedConsent = sessionStorage.getItem('pendingConsent');
 
       if (!storedConsent) {
         console.warn('⚠️ No pending consent found in session storage');
@@ -288,7 +290,7 @@ const Login: React.FC = () => {
       // ============================================
       // STEP 5: Cleanup Session Storage
       // ============================================
-      sessionStorage.removeItem('pending_consent');
+      sessionStorage.removeItem('pendingConsent');
 
       // Optional: Store consent ID for reference
       if (data && data[0] && data[0].id) {
@@ -495,6 +497,23 @@ const Login: React.FC = () => {
    *
    * @see https://developers.facebook.com/docs/facebook-login/web
    */
+/**
+   * PHASE 3.7: Native Supabase OAuth Handler
+   *
+   * Uses signInWithOAuth() instead of Facebook SDK
+   * Supabase handles Facebook token exchange internally
+   *
+   * Flow:
+   * 1. User consents
+   * 2. Log consent to session storage
+   * 3. Call supabase.auth.signInWithOAuth({ provider: 'facebook' })
+   * 4. Browser redirects to Facebook OAuth dialog
+   * 5. User grants permissions
+   * 6. Facebook redirects to Supabase callback
+   * 7. Supabase exchanges code for token (internal)
+   * 8. Supabase redirects to /auth/callback with session
+   * 9. FacebookCallback.tsx handles rest (Instagram exchange, auth store update)
+   */
   const handleFacebookLogin = async (): Promise<void> => {
     // ============================================
     // STEP 1: CONSENT VALIDATION (CRITICAL)
@@ -502,229 +521,86 @@ const Login: React.FC = () => {
     if (!consentGiven) {
       setMessage({
         type: 'error',
-        text: 'Please accept the Privacy Policy and Terms of Service to continue with Facebook Login.'
+        text: 'Please accept the Privacy Policy and Terms of Service to continue.'
       });
-      console.warn('⚠️ OAuth attempt without consent - Facebook Login blocked');
+      console.warn('⚠️ OAuth attempt without consent - Login blocked');
       return;
     }
 
     // ============================================
-    // STEP 2: CHECK FACEBOOK SDK
-    // ============================================
-    if (!fbSdkReady) {
-      setMessage({
-        type: 'error',
-        text: 'Facebook SDK not loaded yet. Please wait a moment and try again.'
-      });
-      return;
-    }
-
-    // ============================================
-    // STEP 3: SET LOADING STATE
+    // STEP 2: SET LOADING STATE
     // ============================================
     setIsFacebookLoading(true);
     setMessage(null);
 
     try {
       // ============================================
-      // STEP 4: LOG CONSENT (BEFORE OAuth)
+      // STEP 3: LOG CONSENT (BEFORE OAuth redirect)
       // ============================================
       await logConsent();
-
-      console.log('🔵 Initiating Facebook OAuth via official SDK...');
+      console.log('🔵 Initiating Native Supabase OAuth...');
       console.log('   ✅ User consent verified and logged');
 
       // ============================================
-      // STEP 5: DEFINE INSTAGRAM BUSINESS SCOPES
+      // STEP 4: DEFINE INSTAGRAM BUSINESS SCOPES
       // ============================================
-      /**
-       * Required OAuth permissions for 888 Intelligence Automation
-       * ✅ pages_manage_metadata REMOVED - Not needed for IG account linking
-       *
-       * @see https://developers.facebook.com/docs/permissions/reference
-       */
       const scopes = [
-        // Core Instagram permissions
         'instagram_basic',
         'instagram_manage_insights',
         'instagram_manage_messages',
         'instagram_content_publish',
         'instagram_manage_comments',
         'pages_show_list',
-        'pages_read_engagement',
-        'public_profile'    
-      ];
+        'pages_read_engagement'
+      ].join(',');
+
+      console.log('   Requested scopes:', scopes);
 
       // ============================================
-      // STEP 6: USE OFFICIAL FACEBOOK SDK LOGIN
+      // STEP 5: NATIVE SUPABASE OAUTH
       // ============================================
-      const response = await facebookLogin(scopes);
-
-      if (response.authResponse) {
-        console.log('✅ Facebook OAuth successful!');
-        console.log('   Access Token received');
-        console.log('   Facebook User ID:', response.authResponse.userID);
-
-        // Extract access token and Facebook user ID
-        const facebookAccessToken = response.authResponse.accessToken;
-        const facebookUserId = response.authResponse.userID;
-
-        setMessage({
-          type: 'info',
-          text: 'Creating your account session...'
-        });
-
-        // ============================================
-        // STEP 7: AUTHENTICATE VIA BACKEND (PHASE 3.6 - SDK BRIDGE)
-        // ============================================
-        // CRITICAL: DO NOT call supabase.auth.signInWithIdToken() directly!
-        // Facebook access tokens are NOT OIDC ID tokens - that call will ALWAYS fail.
-        // Instead, send the token to our backend which handles authentication properly.
-
-        try {
-          console.log('🌉 SDK Bridge: Authenticating via backend...');
-
-          // Get API base URL from environment
-          const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
-
-          // ============================================
-          // STEP 7a: Call Backend SDK Bridge Endpoint
-          // ============================================
-          const authResponse = await fetch(`${API_BASE_URL}/api/auth/facebook/token`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              accessToken: facebookAccessToken
-            })
-          });
-
-          // Handle response safely (avoid "Unexpected end of JSON" error)
-          const responseText = await authResponse.text();
-
-          if (!responseText) {
-            throw new Error('Backend returned empty response');
+      // This is the critical fix - Supabase handles everything:
+      // - Builds OAuth URL with correct parameters
+      // - Redirects to Facebook
+      // - Receives callback with authorization code
+      // - Exchanges code for access token (server-side)
+      // - Creates Supabase session with UUID
+      // - Stores provider_token in auth.identities
+      // - Redirects back to our app with session
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'facebook',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+          scopes: scopes,
+          queryParams: {
+            // Request fresh permissions dialog
+            auth_type: 'rerequest'
           }
-
-          let authData;
-          try {
-            authData = JSON.parse(responseText);
-          } catch (parseError) {
-            console.error('❌ Failed to parse auth response:', responseText.substring(0, 200));
-            throw new Error('Invalid response from authentication server');
-          }
-
-          if (!authResponse.ok || !authData.success) {
-            console.error('❌ Backend authentication failed:', authData.error || authData.message);
-            throw new Error(authData.error || 'Authentication failed');
-          }
-
-          console.log('✅ Backend authentication successful');
-          console.log('   Supabase UUID:', authData.user.id);
-          console.log('   Facebook ID:', authData.user.facebook_id);
-
-          // ============================================
-          // STEP 8: SET SUPABASE SESSION (CLIENT-SIDE)
-          // ============================================
-          // Use the session returned by backend to establish local Supabase auth
-          const { error: sessionError } = await supabase.auth.setSession({
-            access_token: authData.session.access_token,
-            refresh_token: authData.session.refresh_token
-          });
-
-          if (sessionError) {
-            console.error('⚠️ Failed to set Supabase session:', sessionError);
-            throw sessionError;
-          }
-
-          console.log('✅ Supabase session established locally');
-
-          // ============================================
-          // STEP 9: EXTRACT USER DATA (NOW WITH UUID!)
-          // ============================================
-          const supabaseUserId = authData.user.id;  // This is the UUID from backend
-          const providerToken = authData.provider_token;  // Facebook token for Graph API
-
-          setMessage({
-            type: 'info',
-            text: 'Setting up your Instagram Business account...'
-          });
-
-          // ============================================
-          // STEP 10: COMPLETE THE HANDSHAKE
-          // ============================================
-          // This calls /exchange-token with UUID and gets businessAccountId
-          const handshakeResult = await completeHandshake(
-            providerToken,      // Provider token from backend
-            supabaseUserId      // UUID for database operations
-          );
-
-          if (!handshakeResult.success) {
-            console.error('⚠️ Handshake failed:', handshakeResult.error);
-            console.warn('   Continuing without Instagram connection');
-          } else {
-            console.log('✅ Handshake complete, Instagram connected');
-          }
-
-          // ============================================
-          // STEP 11: LOGIN TO AUTHSTORE (WITH UUID)
-          // ============================================
-          login({
-            id: supabaseUserId,  // ✅ UUID from backend
-            username: authData.user.name || authData.user.email?.split('@')[0] || 'user',
-            email: authData.user.email,
-            facebook_id: authData.user.facebook_id,  // Store FB ID for Graph API calls
-            avatarUrl: authData.user.avatar_url || '',
-            permissions: ['dashboard', 'content', 'engagement', 'analytics', 'settings'],
-          }, authData.session.access_token);
-
-          // ============================================
-          // STEP 12: PERSIST CONSENT (WITH UUID)
-          // ============================================
-          try {
-            await persistStoredConsent(supabaseUserId);  // ✅ Use UUID
-          } catch (consentError) {
-            console.error('⚠️ Consent persistence failed (non-blocking):', consentError);
-          }
-
-          setMessage({
-            type: 'success',
-            text: '✅ Instagram Business account connected! Redirecting...'
-          });
-
-          // Navigate to dashboard
-          setTimeout(() => {
-            navigate(from, { replace: true });
-          }, 1500);
-
-        } catch (authError) {
-          console.error('❌ SDK Bridge authentication error:', authError);
-
-          setMessage({
-            type: 'error',
-            text: authError instanceof Error
-              ? authError.message
-              : 'Authentication failed. Please try again.'
-          });
-
-          // DO NOT use legacy fallback - it causes UUID validation errors
-          // Let the user retry authentication instead
         }
+      });
+
+      if (error) {
+        console.error('❌ Supabase OAuth error:', error);
+        throw error;
       }
 
-    } catch (error) {
-      console.error('❌ Facebook OAuth Error:', error);
+      console.log('✅ Redirecting to Facebook OAuth...');
+      console.log('   Redirect URL:', data.url);
 
+      // Browser will redirect to Facebook OAuth dialog
+      // After user grants permissions, Facebook redirects to Supabase
+      // Supabase creates session and redirects to /auth/callback
+      // FacebookCallback.tsx handles the rest
+
+    } catch (error) {
+      console.error('❌ OAuth Error:', error);
       setMessage({
         type: 'error',
-        text: error instanceof Error
-          ? error.message
-          : 'Facebook login failed. Please try again or contact support.'
+        text: error instanceof Error ? error.message : 'Login failed. Please try again.'
       });
-    } finally {
       setIsFacebookLoading(false);
     }
+    // Note: No finally block to reset loading - page will redirect
   };
 
   return (
@@ -845,7 +721,7 @@ const Login: React.FC = () => {
                       Read and send direct messages to automate customer service (24-hour window enforced)
                     </p>
                     <p className="text-xs text-gray-500 mt-1">
-                      Permission: <code className="text-blue-400">instagram_business_manage_messages</code>
+                      Permission: <code className="text-blue-400">instagram_manage_messages</code>
                     </p>
                   </div>
                 </div>
@@ -964,15 +840,15 @@ const Login: React.FC = () => {
               )}
 
               {/* Facebook Login Button - Meta Brand Guidelines Compliant */}
-              {/* UPDATED 2025: Official Facebook SDK approach with exact brand colors */}
+              {/* PHASE 3.7: Native Supabase OAuth - No SDK loading needed */}
               <button
                 onClick={handleFacebookLogin}
-                disabled={!consentGiven || isFacebookLoading || isAnyAuthLoading || !fbSdkReady}
+                disabled={!consentGiven || isFacebookLoading || isAnyAuthLoading}
                 className={`
                   w-full py-5 px-6 rounded-lg font-bold text-lg
                   flex items-center justify-center space-x-4
                   transition-all duration-200
-                  ${!consentGiven || isFacebookLoading || isAnyAuthLoading || !fbSdkReady
+                  ${!consentGiven || isFacebookLoading || isAnyAuthLoading
                     ? 'bg-gray-400 cursor-not-allowed opacity-60'
                     : 'bg-[#1877F2] hover:bg-[#0C63D4] active:bg-[#0952b8]'
                   }
@@ -1011,31 +887,7 @@ const Login: React.FC = () => {
                         d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                       />
                     </svg>
-                    <span className="text-xl">Connecting to Facebook...</span>
-                  </div>
-                ) : !fbSdkReady ? (
-                  <div className="flex items-center space-x-3">
-                    <svg
-                      className="animate-spin h-6 w-6 text-white"
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      />
-                    </svg>
-                    <span className="text-lg">Loading Facebook SDK...</span>
+                    <span className="text-xl">Redirecting to Facebook...</span>
                   </div>
                 ) : (
                   <>

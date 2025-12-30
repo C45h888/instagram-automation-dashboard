@@ -10,7 +10,7 @@ import { motion } from 'framer-motion';
 
 interface PermissionBadgeProps {
   permission: 'instagram_basic' | 'instagram_manage_comments' |
-              'instagram_content_publish' | 'instagram_business_manage_messages';
+              'instagram_content_publish' | 'instagram_manage_messages';
   status?: 'granted' | 'requesting' | 'denied';
   showIcon?: boolean;
   size?: 'sm' | 'md' | 'lg';
@@ -33,8 +33,8 @@ const PERMISSION_CONFIG = {
     color: 'green',
     description: 'Create media, publish content'
   },
-  instagram_business_manage_messages: {
-    label: 'instagram_business_manage_messages',
+  instagram_manage_messages: {
+    label: 'instagram_manage_messages',
     color: 'pink',
     description: 'Send and receive direct messages'
   }

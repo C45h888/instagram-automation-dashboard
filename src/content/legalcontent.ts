@@ -57,7 +57,7 @@ export const LEGAL_CONTENT = {
   • Audience demographics (age, gender, location, active hours)
   Purpose: Performance analytics, automated reporting, and audience analysis
 
-  instagram_business_manage_messages (Direct Message Automation):
+  instagram_manage_messages (Direct Message Automation):
   • Read direct messages sent to your business account
   • Send automated responses within 24-hour messaging window
   • Access message metadata and conversation history

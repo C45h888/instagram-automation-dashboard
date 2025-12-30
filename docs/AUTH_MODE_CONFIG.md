@@ -361,7 +361,7 @@ const getUserAuthMode = () => {
   - `instagram_basic`
   - `instagram_manage_comments`
   - `instagram_manage_insights`
-  - `instagram_business_manage_messages`
+  - `instagram_manage_messages`
   - `pages_show_list`
   - `pages_read_engagement`
   - `pages_manage_metadata`
@@ -422,7 +422,7 @@ to their Instagram Business account."
 - instagram_basic: Profile information display
 - instagram_manage_comments: Comment management dashboard
 - instagram_manage_insights: Analytics charts
-- instagram_business_manage_messages: DM inbox with 24-hour window
+- instagram_manage_messages: DM inbox with 24-hour window
 
 [3:00-3:30] Data Deletion
 [Navigate to data deletion page]
