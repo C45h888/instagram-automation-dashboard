@@ -178,9 +178,9 @@ const LegalFooter: React.FC = () => {
         {/* Meta Crawler Notice - Hidden but accessible for SEO */}
         <div className="sr-only">
           Instagram Automation Platform by 888 Intelligence Automation.
-          Privacy Policy: https://instagram-backend.888intelligenceautomation.in/privacy-policy
-          Terms of Service: https://instagram-backend.888intelligenceautomation.in/terms-of-service
-          Data Deletion: https://instagram-backend.888intelligenceautomation.in/data-deletion
+          Privacy Policy: https://api.888intelligenceautomation.in/privacy-policy
+          Terms of Service: https://api.888intelligenceautomation.in/terms-of-service
+          Data Deletion: https://api.888intelligenceautomation.in/data-deletion
         </div>
       </div>
     </footer>

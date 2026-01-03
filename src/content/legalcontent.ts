@@ -245,7 +245,7 @@ export const LEGAL_CONTENT = {
           content: `Data Access: View all stored information through your dashboard or request a comprehensive data export in JSON format.
 
   Data Deletion: Our platform provides a user-friendly data deletion interface accessible through your account dashboard at:
-  https://instagram-backend.888intelligenceautomation.in/dashboard/privacy-controls
+  https://app.888intelligenceautomation.in/dashboard/privacy-controls
 
   Deletion Options:
   • Selective Deletion: Choose specific data categories
@@ -347,7 +347,7 @@ export const LEGAL_CONTENT = {
           title: "2. Data Deletion Request Methods",
           content: `Primary Deletion Method: Dashboard Self-Service
   The primary and recommended method for data deletion is through the secure user dashboard located at:
-  https://instagram-backend.888intelligenceautomation.in/dashboard/privacy-controls
+  https://app.888intelligenceautomation.in/dashboard/privacy-controls
   
   Dashboard Deletion Features:
   • Granular Deletion Options: Selective deletion of specific data categories
@@ -403,7 +403,7 @@ export const LEGAL_CONTENT = {
       "dateModified": "2025-01-01",
       "inLanguage": "en-US",
       "isAccessibleForFree": true,
-      "url": "https://instagram-backend.888intelligenceautomation.in/privacy-policy"
+      "url": "https://api.888intelligenceautomation.in/privacy-policy"
     },
     termsOfService: {
       "@context": "https://schema.org",
@@ -417,7 +417,7 @@ export const LEGAL_CONTENT = {
       "datePublished": "2025-01-01",
       "dateModified": "2025-01-01",
       "inLanguage": "en-US",
-      "url": "https://instagram-backend.888intelligenceautomation.in/terms-of-service"
+      "url": "https://api.888intelligenceautomation.in/terms-of-service"
     }
   };
   
@@ -428,20 +428,20 @@ export const LEGAL_CONTENT = {
       description: "Comprehensive privacy policy covering Instagram API usage, data processing, and user rights. Meta Platform Terms compliant (February 3, 2025).",
       ogTitle: "Privacy Policy - Instagram Automation Platform",
       ogDescription: "Learn how we protect your data and comply with GDPR, CCPA, and Meta Platform Terms.",
-      ogUrl: "https://instagram-backend.888intelligenceautomation.in/privacy-policy"
+      ogUrl: "https://api.888intelligenceautomation.in/privacy-policy"
     },
     termsOfService: {
       title: "Terms and Conditions - Instagram Automation Platform | 888 Intelligence",
       description: "Terms of service for Instagram business automation platform. Acceptable use policy and Meta compliance.",
       ogTitle: "Terms and Conditions - Instagram Automation Platform",
       ogDescription: "Review our terms of service and acceptable use policy for Instagram automation.",
-      ogUrl: "https://instagram-backend.888intelligenceautomation.in/terms-of-service"
+      ogUrl: "https://api.888intelligenceautomation.in/terms-of-service"
     },
     dataDeletion: {
       title: "Data Deletion Policy - Instagram Automation Platform | 888 Intelligence",
       description: "Comprehensive data deletion procedures compliant with GDPR Article 17 and CCPA Section 1798.105.",
       ogTitle: "Data Deletion Policy - Instagram Automation Platform",
       ogDescription: "Learn how to delete your data and exercise your privacy rights.",
-      ogUrl: "https://instagram-backend.888intelligenceautomation.in/data-deletion"
+      ogUrl: "https://api.888intelligenceautomation.in/data-deletion"
     }
   };

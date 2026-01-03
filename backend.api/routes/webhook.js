@@ -328,7 +328,7 @@ router.get('/n8n-status', (req, res) => {
       hub_webhook: process.env.N8N_HUB_WEBHOOK ? '✅ Set' : '❌ Not set'
     },
     backend_ready: true,
-    cloudflare_tunnel: 'https://instagram-backend.888intelligenceautomation.in',
+    cloudflare_tunnel: 'https://api.888intelligenceautomation.in',
     environment_variables: {
       webhook_verify_token: process.env.WEBHOOK_VERIFY_TOKEN ? '✅ Set' : '❌ Not set',
       meta_app_secret: process.env.META_APP_SECRET ? '✅ Set' : '❌ Not set'

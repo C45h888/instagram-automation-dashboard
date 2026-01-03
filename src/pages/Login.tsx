@@ -763,7 +763,7 @@ const Login: React.FC = () => {
             >
               I have read and agree to the{' '}
               <a
-                href="https://instagram-backend.888intelligenceautomation.in/legal/privacy-policy"
+                href="https://api.888intelligenceautomation.in/legal/privacy-policy"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-blue-400 hover:text-blue-300 underline underline-offset-2
@@ -774,7 +774,7 @@ const Login: React.FC = () => {
               </a>
               {' '}and{' '}
               <a
-                href="https://instagram-backend.888intelligenceautomation.in/legal/terms-of-service"
+                href="https://api.888intelligenceautomation.in/legal/terms-of-service"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-blue-400 hover:text-blue-300 underline underline-offset-2
@@ -801,7 +801,7 @@ const Login: React.FC = () => {
             <p>
               You can request data deletion at any time through our{' '}
               <a
-                href="https://instagram-backend.888intelligenceautomation.in/legal/data-deletion"
+                href="https://api.888intelligenceautomation.in/legal/data-deletion"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-blue-400 hover:text-blue-300 underline"

@@ -34,12 +34,12 @@ Disallow: /api/
 # ========================================
 # Update these URLs to match your actual deployment
 
-Sitemap: https://instagram-backend.888intelligenceautomation.in/sitemap.xml
+Sitemap: https://api.888intelligenceautomation.in/sitemap.xml
 
 # ========================================
 # ADDITIONAL INFO
 # ========================================
 # Legal Documents (publicly accessible):
-# - Privacy Policy: https://instagram-backend.888intelligenceautomation.in/legal/privacy-policy
-# - Terms of Service: https://instagram-backend.888intelligenceautomation.in/legal/terms-of-service
-# - Data Deletion: https://instagram-backend.888intelligenceautomation.in/legal/data-deletion
+# - Privacy Policy: https://api.888intelligenceautomation.in/legal/privacy-policy
+# - Terms of Service: https://api.888intelligenceautomation.in/legal/terms-of-service
+# - Data Deletion: https://api.888intelligenceautomation.in/legal/data-deletion

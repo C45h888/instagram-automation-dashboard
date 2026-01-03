@@ -1,7 +1,8 @@
 // src/services/webhooks.ts - FIXED VERSION FOR VITE + TYPESCRIPT
 import axios, { type AxiosResponse } from 'axios';
 // Vite environment variables (properly typed)
-const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'https://instagram-backend.888intelligenceautomation.in';
+// Fallback to localhost for development when env vars not set
+const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:3001';
 const WEBHOOK_VERIFY_TOKEN = (import.meta as any).env?.VITE_WEBHOOK_VERIFY_TOKEN || 'instagram_automation_cf_token_2024';
 
 // Configure axios defaults

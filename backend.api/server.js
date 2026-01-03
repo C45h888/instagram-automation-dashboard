@@ -25,24 +25,38 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // =============================================================================
-// CORS CONFIGURATION - PRODUCTION READY
+// CORS CONFIGURATION - PRODUCTION READY (IMPROVED)
 // =============================================================================
+// Key improvements:
+// 1. Filter empty/undefined values from origins array (safety net)
+// 2. Pre-flight wildcard handler for instant OPTIONS responses
+// 3. Environment variable support for dynamic origin configuration
+
+// Build raw origins array with env var support
+const rawOrigins = [
+  process.env.FRONTEND_URL,                    // Dynamic: production frontend
+  process.env.ALLOWED_ORIGIN_1,                // Dynamic: additional origin
+  process.env.ALLOWED_ORIGIN_2,                // Dynamic: additional origin
+  'http://localhost:5173',                     // Vite dev server
+  'http://localhost:3000',                     // CRA dev server
+  'http://localhost:5174',                     // Vite alt port
+  'https://888intelligenceautomation.in',      // Production root
+  'https://www.888intelligenceautomation.in',  // Production www
+  'https://api.888intelligenceautomation.in',  // Production API
+  'https://app.888intelligenceautomation.in'   // Production app
+];
+
+// SAFETY NET: Filter out undefined/null/empty strings to prevent CORS errors
+const allowedOrigins = rawOrigins.filter(Boolean);
+
+console.log('🔒 CORS Allowed Origins:', allowedOrigins);
 
 const corsOptions = {
   origin: function (origin, callback) {
-    const allowedOrigins = [
-      'http://localhost:5173',
-      'http://localhost:3000',
-      'http://localhost:5174',
-      'https://888intelligenceautomation.in',
-      'https://www.888intelligenceautomation.in',
-      'https://instagram-backend.888intelligenceautomation.in'
-    ];
-    
-    // Allow requests with no origin (mobile apps, postman, etc)
+    // Allow requests with no origin (mobile apps, postman, curl, etc)
     if (!origin) return callback(null, true);
-    
-    // Check if origin is allowed
+
+    // Check if origin is in allowed list or matches domain pattern
     if (allowedOrigins.includes(origin) || origin.includes('888intelligenceautomation.in')) {
       callback(null, true);
     } else {
@@ -62,6 +76,11 @@ const corsOptions = {
   ]
 };
 
+// PRE-FLIGHT WILDCARD: Handle all OPTIONS requests instantly
+// This answers every OPTIONS preflight request so browser stops blocking
+app.options('*', cors(corsOptions));
+
+// Apply CORS middleware to all routes
 app.use(cors(corsOptions));
 
 // =============================================================================
@@ -398,7 +417,7 @@ app.get('/api', (req, res) => {
     version: '2.0.0',
     description: 'Optimized backend with direct Supabase connection',
     architecture: {
-      api_tunnel: 'instagram-backend.888intelligenceautomation.in',
+      api_tunnel: 'api.888intelligenceautomation.in',
       database: 'Direct connection to Supabase (uromexjprcrjfmhkmgxa.supabase.co)',
       security: 'Static IP whitelisting on Supabase firewall',
       removed: 'Database tunnel (Tunnel B) - eliminated due to proxy issues'
@@ -550,7 +569,7 @@ async function startServer() {
     console.log('='.repeat(60));
     console.log('\n📍 Access Points:');
     console.log(`   Local: http://localhost:${PORT}`);
-    console.log(`   Tunnel: https://instagram-backend.888intelligenceautomation.in`);
+    console.log(`   Tunnel: https://api.888intelligenceautomation.in`);
     console.log('\n🔗 Key Endpoints:');
     console.log('   Health: /health');
     console.log('   Database: /health/database');

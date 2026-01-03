@@ -83,8 +83,8 @@ module.exports = {
       cron_restart: '*/5 * * * *',  // Every 5 minutes
       env: {
         NODE_ENV: 'production',
-        HEALTH_CHECK_URL: 'https://instagram-backend.888intelligenceautomation.in/health',
-        WEBHOOK_STATUS_URL: 'https://instagram-backend.888intelligenceautomation.in/webhook/n8n-status'
+        HEALTH_CHECK_URL: 'https://api.888intelligenceautomation.in/health',
+        WEBHOOK_STATUS_URL: 'https://api.888intelligenceautomation.in/webhook/n8n-status'
       },
       error_file: './logs/monitor-error.log',
       out_file: './logs/monitor-out.log',

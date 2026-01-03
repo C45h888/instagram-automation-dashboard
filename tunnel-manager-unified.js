@@ -27,7 +27,7 @@ class UnifiedTunnelManager {
     this.tunnelA = {
       name: 'instagram-automation-backend',
       token: process.env.CLOUDFLARE_TUNNEL_TOKEN,
-      url: 'https://instagram-backend.888intelligenceautomation.in',
+      url: 'https://api.888intelligenceautomation.in',
       localPort: process.env.LOCAL_PORT || 3001,
       process: null,
       isActive: false,
@@ -789,7 +789,7 @@ INSTAGRAM_BASIC_DISPLAY_SECRET=${process.env.INSTAGRAM_BASIC_DISPLAY_SECRET || '
     console.log('   1. Go to Cloudflare Zero Trust → Access → Tunnels');
     console.log('   2. Find tunnel: instagram-automation-backend');
     console.log('   3. Verify Public Hostname:');
-    console.log('      - Hostname: instagram-backend.888intelligenceautomation.in');
+    console.log('      - Hostname: api.888intelligenceautomation.in');
     console.log('      - Service: http://localhost:3001 (HTTP, NOT HTTPS!)');
     
     if (this.mode === 'dual') {

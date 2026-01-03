@@ -1,203 +1,77 @@
-Initiating Facebook OAuth via official SDK...
-Login.tsx:535    ✅ User consent verified and logged
-useFacebookSDK.ts:168 🔵 facebookLogin called with scopes: (8) ['instagram_basic', 'instagram_manage_insights', 'instagram_manage_messages', 'instagram_content_publish', 'instagram_manage_comments', 'pages_show_list', 'pages_read_engagement', 'public_profile']
-useFacebookSDK.ts:192 🔄 Calling FB.login()...
-useFacebookSDK.ts:215 ✅ FB.login() called without throwing
-sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:94  GET https://www.facebook.com/platform/impression.php/fa1b8b877e364e60f/?api_key=1449604936071207&lid=117&payload=%7B%22payload%22%3A%7B%22cbt_delta%22%3A0%2C%22logger_id%22%3A%22fb83d5284510c86f1%22%2C%22action%22%3A%22client_login_start%22%2C%22client_funnel_version%22%3A1%7D%2C%22source%22%3A%22jssdk%22%7D net::ERR_BLOCKED_BY_ADBLOCKER
-s @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:94
-e @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:94
-c @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:94
-s @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:111
-c @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:151
-transform @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:151
-prepareCall @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:151
-e @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:152
-s @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:112
-login @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:153
-(anonymous) @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:78
-(anonymous) @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:68
-(anonymous) @ useFacebookSDK.ts:194
-ve @ useFacebookSDK.ts:167
-(anonymous) @ Login.tsx:561
-r @ auth-BApmZONt.js:1
-Promise.then
-h @ auth-BApmZONt.js:1
-(anonymous) @ auth-BApmZONt.js:1
-f @ auth-BApmZONt.js:1
-te @ Login.tsx:498
-Zf @ react-dom.production.min.js:54
-qf @ react-dom.production.min.js:54
-bf @ react-dom.production.min.js:55
-Si @ react-dom.production.min.js:105
-ia @ react-dom.production.min.js:106
-(anonymous) @ react-dom.production.min.js:117
-Io @ react-dom.production.min.js:273
-Rs @ react-dom.production.min.js:52
-Wl @ react-dom.production.min.js:109
-so @ react-dom.production.min.js:74
-vc @ react-dom.production.min.js:73
-sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:94  Uncaught (in promise) TypeError: Failed to fetch
-    at s (sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:94:956)
-    at e (sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:94:794)
-    at Object.c [as log] (sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:94:1678)
-    at Object.s [as logEvent] (sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:111:957)
-    at c (sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:151:2905)
-    at transform (sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:151:4141)
-    at Object.prepareCall (sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:151:8019)
-    at e (sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:152:1076)
-    at Object.s [as login] (sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:112:617)
-    at Object.login (sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:153:774)
-s @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:94
-e @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:94
-c @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:94
-s @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:111
-c @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:151
-transform @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:151
-prepareCall @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:151
-e @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:152
-s @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:112
-login @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:153
-(anonymous) @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:78
-(anonymous) @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:68
-(anonymous) @ useFacebookSDK.ts:194
-ve @ useFacebookSDK.ts:167
-(anonymous) @ Login.tsx:561
-r @ auth-BApmZONt.js:1
-Promise.then
-h @ auth-BApmZONt.js:1
-(anonymous) @ auth-BApmZONt.js:1
-f @ auth-BApmZONt.js:1
-te @ Login.tsx:498
-Zf @ react-dom.production.min.js:54
-qf @ react-dom.production.min.js:54
-bf @ react-dom.production.min.js:55
-Si @ react-dom.production.min.js:105
-ia @ react-dom.production.min.js:106
-(anonymous) @ react-dom.production.min.js:117
-Io @ react-dom.production.min.js:273
-Rs @ react-dom.production.min.js:52
-Wl @ react-dom.production.min.js:109
-so @ react-dom.production.min.js:74
-vc @ react-dom.production.min.js:73
-sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:49 You are overriding current access token, that means some other app is expecting different access token and you will probably break things. Please consider passing access_token directly to API parameters instead of overriding the global settings.
-s @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:49
-setAccessToken @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:134
-(anonymous) @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:191
-o @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:61
-inform @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:61
-(anonymous) @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:66
-d @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:112
-(anonymous) @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:112
-_xdRecv @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:151
-(anonymous) @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:151
-b @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:148
-(anonymous) @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:148
-useFacebookSDK.ts:195 📥 FB.login callback received
-useFacebookSDK.ts:196    Response status: connected
-useFacebookSDK.ts:199 ✅ Facebook login successful
-useFacebookSDK.ts:200    Access Token: EAAUmaHNHeCcBQc50XKZ...
-useFacebookSDK.ts:201    User ID: 122098096448937004
-useFacebookSDK.ts:202    Granted Scopes: read_insights,pages_show_list,instagram_basic,instagram_manage_comments,instagram_manage_insights,instagram_content_publish,instagram_manage_messages,pages_read_engagement
-Login.tsx:564 ✅ Facebook OAuth successful!
-Login.tsx:565    Access Token received
-Login.tsx:566    Facebook User ID: 122098096448937004
-Login.tsx:585 🌉 SDK Bridge: Authenticating via backend...
-sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:94  GET https://www.facebook.com/platform/impression.php/f3dee262459f22b1f/?api_key=1449604936071207&lid=117&payload=%7B%22payload%22%3A%7B%22cbt_delta%22%3A6850%2C%22logger_id%22%3A%22fb83d5284510c86f1%22%2C%22action%22%3A%22client_login_end%22%2C%22client_funnel_version%22%3A1%7D%2C%22source%22%3A%22jssdk%22%7D net::ERR_BLOCKED_BY_ADBLOCKER
-s @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:94
-e @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:94
-c @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:94
-s @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:111
-u @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:111
-g @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:112
-(anonymous) @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:112
-_xdRecv @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:151
-(anonymous) @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:151
-b @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:148
-(anonymous) @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:148
-sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:94  Uncaught (in promise) TypeError: Failed to fetch
-    at s (sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:94:956)
-    at e (sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:94:794)
-    at Object.c [as log] (sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:94:1678)
-    at s (sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:111:957)
-    at Object.u [as logLoginEvent] (sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:111:1158)
-    at g (sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:112:5746)
-    at sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:112:5558
-    at Object._xdRecv (sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:151:14671)
-    at sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:151:14084
-    at b (sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:148:2269)
-s @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:94
-e @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:94
-c @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:94
-s @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:111
-u @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:111
-g @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:112
-(anonymous) @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:112
-_xdRecv @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:151
-(anonymous) @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:151
-b @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:148
-(anonymous) @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:148
-Login.tsx:702 ❌ SDK Bridge authentication error: Error: Backend returned empty response
-    at Login.tsx:607:19
-    at Generator.next (<anonymous>)
-    at r (auth-BApmZONt.js:1:493)
-(anonymous) @ Login.tsx:702
-r @ auth-BApmZONt.js:1
-Promise.then
-h @ auth-BApmZONt.js:1
-r @ auth-BApmZONt.js:1
-Promise.then
-h @ auth-BApmZONt.js:1
-r @ auth-BApmZONt.js:1
-Promise.then
-h @ auth-BApmZONt.js:1
-r @ auth-BApmZONt.js:1
-Promise.then
-h @ auth-BApmZONt.js:1
-(anonymous) @ auth-BApmZONt.js:1
-f @ auth-BApmZONt.js:1
-te @ Login.tsx:498
-Zf @ react-dom.production.min.js:54
-qf @ react-dom.production.min.js:54
-bf @ react-dom.production.min.js:55
-Si @ react-dom.production.min.js:105
-ia @ react-dom.production.min.js:106
-(anonymous) @ react-dom.production.min.js:117
-Io @ react-dom.production.min.js:273
-Rs @ react-dom.production.min.js:52
-Wl @ react-dom.production.min.js:109
-so @ react-dom.production.min.js:74
-vc @ react-dom.production.min.js:73
-sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:94  GET https://www.facebook.com/platform/impression.php/fd107894103740360/?api_key=1449604936071207&lid=117&payload=%7B%22payload%22%3A%7B%22cbt_delta%22%3A11853%2C%22logger_id%22%3A%22fb83d5284510c86f1%22%2C%22action%22%3A%22client_login_complete_heartbeat%22%2C%22client_funnel_version%22%3A1%7D%2C%22source%22%3A%22jssdk%22%7D net::ERR_BLOCKED_BY_ADBLOCKER
-s @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:94
-e @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:94
-c @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:94
-s @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:111
-u @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:111
-(anonymous) @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:112
-setTimeout
-g @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:112
-(anonymous) @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:112
-_xdRecv @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:151
-(anonymous) @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:151
-b @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:148
-(anonymous) @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:148
-sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:94  Uncaught (in promise) TypeError: Failed to fetch
-    at s (sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:94:956)
-    at e (sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:94:794)
-    at Object.c [as log] (sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:94:1678)
-    at s (sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:111:957)
-    at Object.u [as logLoginEvent] (sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:111:1158)
-    at sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:112:5816
-s @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:94
-e @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:94
-c @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:94
-s @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:111
-u @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:111
-(anonymous) @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:112
-setTimeout
-g @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:112
-(anonymous) @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:112
-_xdRecv @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:151
-(anonymous) @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:151
-b @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:148
-(anonymous) @ sdk.js?hash=c22f576d6369595ddd1b7cb365464e2d:148
+ Provider token refreshed, updating...
+authStore.ts:744 🔄 Auth state changed: INITIAL_SESSION
+authStore.ts:753 📦 Provider token captured from initial session
+FacebookCallback.tsx:64 ✅ Supabase session established
+FacebookCallback.tsx:65    User ID (UUID): 7e631172-2287-4d95-994c-53a5c61a3af8
+FacebookCallback.tsx:66    Email: kamran@888intelligence.org
+FacebookCallback.tsx:79 ✅ Provider token extracted
+FacebookCallback.tsx:80    Token prefix: EAAUmaHNHeCcBQTAWQZC...
+FacebookCallback.tsx:90 🔄 Calling Instagram token exchange...
+FacebookCallback.tsx:64 ✅ Supabase session established
+FacebookCallback.tsx:65    User ID (UUID): 7e631172-2287-4d95-994c-53a5c61a3af8
+FacebookCallback.tsx:66    Email: kamran@888intelligence.org
+FacebookCallback.tsx:79 ✅ Provider token extracted
+FacebookCallback.tsx:80    Token prefix: EAAUmaHNHeCcBQTAWQZC...
+FacebookCallback.tsx:90 🔄 Calling Instagram token exchange...
+:3000/auth/callback#_=_:1 Access to fetch at 'https://instagram-backend.888intelligenceautomation.in/api/instagram/exchange-token' from origin 'http://localhost:3000' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource.
+FacebookCallback.tsx:91  POST https://instagram-backend.888intelligenceautomation.in/api/instagram/exchange-token net::ERR_FAILED
+handleOAuthCallback @ FacebookCallback.tsx:91
+await in handleOAuthCallback
+(anonymous) @ FacebookCallback.tsx:197
+commitHookEffectListMount @ react-dom.development.js:23189
+commitPassiveMountOnFiber @ react-dom.development.js:24965
+commitPassiveMountEffects_complete @ react-dom.development.js:24930
+commitPassiveMountEffects_begin @ react-dom.development.js:24917
+commitPassiveMountEffects @ react-dom.development.js:24905
+flushPassiveEffectsImpl @ react-dom.development.js:27078
+flushPassiveEffects @ react-dom.development.js:27023
+(anonymous) @ react-dom.development.js:26808
+workLoop @ scheduler.development.js:266
+flushWork @ scheduler.development.js:239
+performWorkUntilDeadline @ scheduler.development.js:533
+FacebookCallback.tsx:190 ❌ OAuth callback error: TypeError: Failed to fetch
+    at handleOAuthCallback (FacebookCallback.tsx:91:40)
+handleOAuthCallback @ FacebookCallback.tsx:190
+await in handleOAuthCallback
+(anonymous) @ FacebookCallback.tsx:197
+commitHookEffectListMount @ react-dom.development.js:23189
+commitPassiveMountOnFiber @ react-dom.development.js:24965
+commitPassiveMountEffects_complete @ react-dom.development.js:24930
+commitPassiveMountEffects_begin @ react-dom.development.js:24917
+commitPassiveMountEffects @ react-dom.development.js:24905
+flushPassiveEffectsImpl @ react-dom.development.js:27078
+flushPassiveEffects @ react-dom.development.js:27023
+(anonymous) @ react-dom.development.js:26808
+workLoop @ scheduler.development.js:266
+flushWork @ scheduler.development.js:239
+performWorkUntilDeadline @ scheduler.development.js:533
+:3000/auth/callback#_=_:1 Access to fetch at 'https://instagram-backend.888intelligenceautomation.in/api/instagram/exchange-token' from origin 'http://localhost:3000' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource.
+FacebookCallback.tsx:91  POST https://instagram-backend.888intelligenceautomation.in/api/instagram/exchange-token net::ERR_FAILED
+handleOAuthCallback @ FacebookCallback.tsx:91
+await in handleOAuthCallback
+(anonymous) @ FacebookCallback.tsx:197
+commitHookEffectListMount @ react-dom.development.js:23189
+invokePassiveEffectMountInDEV @ react-dom.development.js:25193
+invokeEffectsInDev @ react-dom.development.js:27390
+commitDoubleInvokeEffectsInDEV @ react-dom.development.js:27369
+flushPassiveEffectsImpl @ react-dom.development.js:27095
+flushPassiveEffects @ react-dom.development.js:27023
+(anonymous) @ react-dom.development.js:26808
+workLoop @ scheduler.development.js:266
+flushWork @ scheduler.development.js:239
+performWorkUntilDeadline @ scheduler.development.js:533
+FacebookCallback.tsx:190 ❌ OAuth callback error: TypeError: Failed to fetch
+    at handleOAuthCallback (FacebookCallback.tsx:91:40)
+handleOAuthCallback @ FacebookCallback.tsx:190
+await in handleOAuthCallback
+(anonymous) @ FacebookCallback.tsx:197
+commitHookEffectListMount @ react-dom.development.js:23189
+invokePassiveEffectMountInDEV @ react-dom.development.js:25193
+invokeEffectsInDev @ react-dom.development.js:27390
+commitDoubleInvokeEffectsInDEV @ react-dom.development.js:27369
+flushPassiveEffectsImpl @ react-dom.development.js:27095
+flushPassiveEffects @ react-dom.development.js:27023
+(anonymous) @ react-dom.development.js:26808
+workLoop @ scheduler.development.js:266
+flushWork @ scheduler.development.js:239
+performWorkUntilDeadline @ scheduler.development.js:533

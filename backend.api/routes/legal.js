@@ -56,7 +56,7 @@ const generateLegalHTML = (type, content) => {
     <!-- Open Graph Meta Tags for Meta/Facebook -->
     <meta property="og:title" content="${content.title}">
     <meta property="og:type" content="article">
-    <meta property="og:url" content="https://instagram-backend.888intelligenceautomation.in/legal/${type}">
+    <meta property="og:url" content="https://api.888intelligenceautomation.in/legal/${type}">
     <meta property="og:description" content="Comprehensive ${type} policy covering Instagram API usage, data processing, and user rights.">
     <meta property="og:site_name" content="888 Intelligence Automation">
     
@@ -152,7 +152,7 @@ const generateLegalHTML = (type, content) => {
         <section class="section">
             <h2>Full Policy Document</h2>
             <p>For the complete ${type} policy, please visit our application at:</p>
-            <p><a href="https://instagram-backend.888intelligenceautomation.in/${type === 'privacy' ? 'privacy-policy' : type === 'terms' ? 'terms-of-service' : 'data-deletion'}">
+            <p><a href="https://app.888intelligenceautomation.in/${type === 'privacy' ? 'privacy-policy' : type === 'terms' ? 'terms-of-service' : 'data-deletion'}">
                 View Full ${content.title}
             </a></p>
         </section>
@@ -400,7 +400,7 @@ router.post('/data-deletion', rateLimitDeletionRequests, async (req, res) => {
   console.log(`🔐 Generated confirmation code: ${confirmationCode}`);
 
   // ===== STEP 7: Store deletion request in database =====
-  const baseUrl = process.env.VITE_API_BASE_URL || 'https://instagram-backend.888intelligenceautomation.in';
+  const baseUrl = process.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
   const statusUrl = `${baseUrl}/legal/deletion-status?code=${confirmationCode}`;
 
   try {
@@ -988,7 +988,7 @@ router.get('/data-deletion-instructions', (req, res) => {
     instructions: {
       method_1: {
         name: "Dashboard Self-Service",
-        url: "https://instagram-backend.888intelligenceautomation.in/dashboard/privacy-controls",
+        url: "https://app.888intelligenceautomation.in/dashboard/privacy-controls",
         steps: [
           "1. Login to your account",
           "2. Navigate to Privacy Controls",
