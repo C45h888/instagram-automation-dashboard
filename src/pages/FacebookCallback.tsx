@@ -117,6 +117,73 @@ useEffect(() => {
         console.log('   Page:', exchangeResult.pageName);
 
         // ============================================
+        // STEP 3.5: SCOPE VALIDATION (Phase 2 - BLOCKER-02 FIX)
+        // Verify Meta actually granted all requested scopes
+        // Reference: current-work.md Phase 2
+        // ============================================
+        console.log('🔍 Validating granted scopes...');
+
+        try {
+          // Fetch granted permissions from Meta Graph API v22.0
+          const scopeCheckUrl = `https://graph.facebook.com/v22.0/me/permissions?access_token=${providerToken}`;
+          const scopeResponse = await fetch(scopeCheckUrl);
+
+          if (!scopeResponse.ok) {
+            console.warn('⚠️ Could not validate scopes (non-blocking)');
+          } else {
+            const scopeData = await scopeResponse.json();
+            const grantedScopes = scopeData.data
+              .filter((p: { status: string }) => p.status === 'granted')
+              .map((p: { permission: string }) => p.permission);
+
+            console.log('✅ Granted scopes:', grantedScopes);
+            console.log('   Total granted:', grantedScopes.length);
+
+            // Define required scopes (must match Login.tsx CORE scopes)
+            const requiredScopes = [
+              'instagram_basic',
+              'pages_show_list',
+              'business_management',
+              'pages_manage_metadata',
+              'instagram_manage_insights',
+              'pages_read_engagement'
+            ];
+
+            // Check for missing critical scopes
+            const missingScopes = requiredScopes.filter(s => !grantedScopes.includes(s));
+
+            // Check for explicitly declined scopes
+            const declinedScopes = scopeData.data
+              .filter((p: { status: string }) => p.status === 'declined')
+              .map((p: { permission: string }) => p.permission);
+
+            if (declinedScopes.length > 0) {
+              console.warn('⚠️ User declined scopes:', declinedScopes);
+              console.warn('   Impact: Features requiring these scopes will be unavailable');
+
+              // If critical scopes were declined, this is a blocker
+              const declinedCritical = declinedScopes.filter((s: string) => requiredScopes.includes(s));
+              if (declinedCritical.length > 0) {
+                console.error('❌ Critical permissions declined:', declinedCritical);
+                // Don't throw - allow flow to continue but log warning
+                setStatusMessage('Warning: Some permissions were declined. Some features may not work.');
+              }
+            }
+
+            if (missingScopes.length > 0) {
+              console.warn('⚠️ Missing scopes (may need App Review):', missingScopes);
+              console.warn('   Tip: Use Development Mode or complete App Review for these scopes');
+              // Don't throw - allow flow to continue for dev/test purposes
+            } else {
+              console.log('✅ All required scopes granted');
+            }
+          }
+        } catch (scopeError) {
+          console.error('❌ Scope validation error:', scopeError);
+          console.warn('⚠️ Continuing despite scope validation failure');
+        }
+
+        // ============================================
         // STEP 4: UPDATE AUTH STORE
         // ============================================
         // Set business account data

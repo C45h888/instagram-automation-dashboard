@@ -1,23 +1,19 @@
- Provider token refreshed, updating...
+ Auth state changed: SIGNED_IN
 authStore.ts:744 🔄 Auth state changed: INITIAL_SESSION
-authStore.ts:753 📦 Provider token captured from initial session
-FacebookCallback.tsx:64 ✅ Supabase session established
-FacebookCallback.tsx:65    User ID (UUID): 7e631172-2287-4d95-994c-53a5c61a3af8
-FacebookCallback.tsx:66    Email: kamran@888intelligence.org
-FacebookCallback.tsx:79 ✅ Provider token extracted
-FacebookCallback.tsx:80    Token prefix: EAAUmaHNHeCcBQTAWQZC...
-FacebookCallback.tsx:90 🔄 Calling Instagram token exchange...
-FacebookCallback.tsx:64 ✅ Supabase session established
-FacebookCallback.tsx:65    User ID (UUID): 7e631172-2287-4d95-994c-53a5c61a3af8
-FacebookCallback.tsx:66    Email: kamran@888intelligence.org
-FacebookCallback.tsx:79 ✅ Provider token extracted
-FacebookCallback.tsx:80    Token prefix: EAAUmaHNHeCcBQTAWQZC...
-FacebookCallback.tsx:90 🔄 Calling Instagram token exchange...
-:3000/auth/callback#_=_:1 Access to fetch at 'https://instagram-backend.888intelligenceautomation.in/api/instagram/exchange-token' from origin 'http://localhost:3000' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource.
-FacebookCallback.tsx:91  POST https://instagram-backend.888intelligenceautomation.in/api/instagram/exchange-token net::ERR_FAILED
-handleOAuthCallback @ FacebookCallback.tsx:91
-await in handleOAuthCallback
-(anonymous) @ FacebookCallback.tsx:197
+realtimeService.ts:59 🚀 Starting real-time polling every 3000 ms
+realtimeService.ts:106 👂 Subscribed to any events
+2useInstagramAccount.ts:37 🔍 Fetching business accounts for UUID: 7e631172-2287-4d95-994c-53a5c61a3af8
+useTokenValidation.ts:110 [Token Validation] Skipping validation - no user or businessAccountId
+realtimeService.ts:95 ⏹️ Stopped real-time polling
+realtimeService.ts:116 🔇 Unsubscribed from any events
+realtimeService.ts:59 🚀 Starting real-time polling every 3000 ms
+realtimeService.ts:106 👂 Subscribed to any events
+2useInstagramAccount.ts:37 🔍 Fetching business accounts for UUID: 7e631172-2287-4d95-994c-53a5c61a3af8
+useTokenValidation.ts:110 [Token Validation] Skipping validation - no user or businessAccountId
+2useInstagramAccount.ts:45 ⚠️ No Instagram accounts connected
+fetchAccounts @ useInstagramAccount.ts:45
+await in fetchAccounts
+(anonymous) @ useInstagramAccount.ts:63
 commitHookEffectListMount @ react-dom.development.js:23189
 commitPassiveMountOnFiber @ react-dom.development.js:24965
 commitPassiveMountEffects_complete @ react-dom.development.js:24930
@@ -29,27 +25,10 @@ flushPassiveEffects @ react-dom.development.js:27023
 workLoop @ scheduler.development.js:266
 flushWork @ scheduler.development.js:239
 performWorkUntilDeadline @ scheduler.development.js:533
-FacebookCallback.tsx:190 ❌ OAuth callback error: TypeError: Failed to fetch
-    at handleOAuthCallback (FacebookCallback.tsx:91:40)
-handleOAuthCallback @ FacebookCallback.tsx:190
-await in handleOAuthCallback
-(anonymous) @ FacebookCallback.tsx:197
-commitHookEffectListMount @ react-dom.development.js:23189
-commitPassiveMountOnFiber @ react-dom.development.js:24965
-commitPassiveMountEffects_complete @ react-dom.development.js:24930
-commitPassiveMountEffects_begin @ react-dom.development.js:24917
-commitPassiveMountEffects @ react-dom.development.js:24905
-flushPassiveEffectsImpl @ react-dom.development.js:27078
-flushPassiveEffects @ react-dom.development.js:27023
-(anonymous) @ react-dom.development.js:26808
-workLoop @ scheduler.development.js:266
-flushWork @ scheduler.development.js:239
-performWorkUntilDeadline @ scheduler.development.js:533
-:3000/auth/callback#_=_:1 Access to fetch at 'https://instagram-backend.888intelligenceautomation.in/api/instagram/exchange-token' from origin 'http://localhost:3000' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource.
-FacebookCallback.tsx:91  POST https://instagram-backend.888intelligenceautomation.in/api/instagram/exchange-token net::ERR_FAILED
-handleOAuthCallback @ FacebookCallback.tsx:91
-await in handleOAuthCallback
-(anonymous) @ FacebookCallback.tsx:197
+2useInstagramAccount.ts:45 ⚠️ No Instagram accounts connected
+fetchAccounts @ useInstagramAccount.ts:45
+await in fetchAccounts
+(anonymous) @ useInstagramAccount.ts:63
 commitHookEffectListMount @ react-dom.development.js:23189
 invokePassiveEffectMountInDEV @ react-dom.development.js:25193
 invokeEffectsInDev @ react-dom.development.js:27390
@@ -60,18 +39,4 @@ flushPassiveEffects @ react-dom.development.js:27023
 workLoop @ scheduler.development.js:266
 flushWork @ scheduler.development.js:239
 performWorkUntilDeadline @ scheduler.development.js:533
-FacebookCallback.tsx:190 ❌ OAuth callback error: TypeError: Failed to fetch
-    at handleOAuthCallback (FacebookCallback.tsx:91:40)
-handleOAuthCallback @ FacebookCallback.tsx:190
-await in handleOAuthCallback
-(anonymous) @ FacebookCallback.tsx:197
-commitHookEffectListMount @ react-dom.development.js:23189
-invokePassiveEffectMountInDEV @ react-dom.development.js:25193
-invokeEffectsInDev @ react-dom.development.js:27390
-commitDoubleInvokeEffectsInDEV @ react-dom.development.js:27369
-flushPassiveEffectsImpl @ react-dom.development.js:27095
-flushPassiveEffects @ react-dom.development.js:27023
-(anonymous) @ react-dom.development.js:26808
-workLoop @ scheduler.development.js:266
-flushWork @ scheduler.development.js:239
-performWorkUntilDeadline @ scheduler.development.js:533
+6authStore.ts:744 🔄 Auth state changed: SIGNED_IN

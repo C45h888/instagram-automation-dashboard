@@ -543,18 +543,31 @@ const Login: React.FC = () => {
 
       // ============================================
       // STEP 4: DEFINE INSTAGRAM BUSINESS SCOPES
+      // Updated: v1.3 - Added business_management + pages_manage_metadata
+      // Reference: current-work.md Phase 1 (BLOCKER-01 FIX)
       // ============================================
       const scopes = [
-        'instagram_basic',
-        'instagram_manage_insights',
-        'instagram_manage_messages',
-        'instagram_content_publish',
-        'instagram_manage_comments',
-        'pages_show_list',
-        'pages_read_engagement'
+        // Instagram permissions (Core - REQUIRED)
+        'instagram_basic',                    // Basic profile info (REQUIRED for IG Business)
+        'instagram_manage_insights',          // Analytics & metrics (REQUIRED for data pulls)
+        'instagram_manage_messages',          // DM automation
+        'instagram_content_publish',          // Post scheduling
+        'instagram_manage_comments',          // Comment management
+
+        // Facebook Business permissions (CRITICAL - NEWLY ADDED)
+        'pages_show_list',                    // List connected pages (REQUIRED)
+        'pages_read_engagement',              // Read page metrics (REQUIRED)
+        'business_management',                // Access business account lists (REQUIRED for /me/accounts)
+        'pages_manage_metadata',              // Manage page metadata (REQUIRED for IG linkage)
+
+        // Optional but recommended (for advanced features)
+        'pages_read_user_content',            // Read user-generated content
+        'pages_manage_posts'                  // Broader page management
       ].join(',');
 
-      console.log('   Requested scopes:', scopes);
+      console.log('📋 Requesting OAuth scopes:', scopes);
+      console.log('   Total scopes:', scopes.split(',').length);
+      console.log('   Core required: 9 | Optional advanced: 2');
 
       // ============================================
       // STEP 5: NATIVE SUPABASE OAUTH

@@ -2,7 +2,8 @@
 // BUG-FREE + VIEWPORT OPTIMIZED VERSION + TOKEN VALIDATION
 // Fixes TypeScript errors while maintaining spacing optimizations
 // ✅ UPDATED: Added token validation with lazy validation strategy
-import React from 'react';
+// ✅ PHASE 5: Added LinkAccountModal integration for error handling
+import React, { useState, useEffect } from 'react';
 import { useDashboardData } from '../hooks/useDashboardData';
 import DashboardHeader from '../components/dashboard/DashboardHeader';
 import DashboardHeaderSkeleton from '../components/dashboard/DashboardHeaderSkeleton';
@@ -22,6 +23,9 @@ import { useInstagramProfile } from '../hooks/useInstagramProfile';
 // ✅ NEW: Token validation imports
 import { useTokenValidation } from '../hooks/useTokenValidation';
 import TokenExpiredBanner from '../components/dashboard/TokenExpiredBanner';
+// ✅ PHASE 5: LinkAccountModal integration
+import { LinkAccountModal } from '../components/modals';
+import { useInstagramAccount } from '../hooks/useInstagramAccount';
 
 // Real-time Test Panel Component
 const RealtimeTestPanel: React.FC = () => {
@@ -110,6 +114,17 @@ const Dashboard: React.FC = () => {
   // ✅ NEW: Token validation - Lazy validation on dashboard load
   const { isExpired, expirationDetails } = useTokenValidation();
 
+  // ✅ PHASE 5: LinkAccountModal integration - Use isLoading for dynamic retry state
+  const { error: accountError, refetch: refetchAccount, isLoading: isAccountLoading } = useInstagramAccount();
+  const [showLinkModal, setShowLinkModal] = useState(false);
+
+  // Show modal when no Instagram accounts are connected
+  useEffect(() => {
+    if (accountError && accountError.includes('No Instagram accounts')) {
+      setShowLinkModal(true);
+    }
+  }, [accountError]);
+
   // ✅ NEW: Handle reconnect button click - Redirect to OAuth flow
   const handleReconnect = () => {
     console.log('🔄 Redirecting to Instagram OAuth flow...');
@@ -146,6 +161,17 @@ const Dashboard: React.FC = () => {
           expirationDetails={expirationDetails}
         />
       )}
+
+      {/* ✅ PHASE 5: LinkAccountModal - Shows when no Instagram accounts are connected */}
+      <LinkAccountModal
+        isOpen={showLinkModal}
+        onClose={() => setShowLinkModal(false)}
+        onRetry={() => {
+          setShowLinkModal(false);
+          refetchAccount();
+        }}
+        isRetrying={isAccountLoading}
+      />
 
       {/* Real-time Test Panel - BUG-FREE VERSION */}
       <RealtimeTestPanel />

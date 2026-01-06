@@ -1,8 +1,15 @@
-// src/services/realtimeService.ts - NEW FILE
+// src/services/realtimeService.ts
+// ============================================
+// PHASE 4: OPTIMIZED WITH CONDITIONAL POLLING
+// Fixes: BLOCKER-04 (unconditional polling every 3s)
+// Added: Only poll when businessAccountId exists
+// Reference: current-work.md Phase 4
+// ============================================
 import React from 'react';
 import axios from 'axios';
+import { useAuthStore } from '../stores/authStore';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL;'http://localhost:3001';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
 
 export interface RealtimeEvent {
   type: 'new_response' | 'metrics_update' | 'urgent_alert';
@@ -48,14 +55,31 @@ class RealtimeService {
 
   // Start polling for real-time updates
   startPolling(intervalMs: number = 3000) {
+    // ============================================
+    // PHASE 4: CONDITIONAL POLLING (BLOCKER-04 FIX)
+    // Only poll if user has a businessAccountId
+    // Prevents wasting API rate limit budget
+    // ============================================
+
     if (this.isPolling) {
       console.log('🔄 Already polling for updates');
       return;
     }
 
+    // Check if businessAccountId exists before polling
+    const { businessAccountId } = useAuthStore.getState();
+
+    if (!businessAccountId) {
+      console.warn('⚠️ Skipping real-time polling - no Instagram Business Account connected yet');
+      console.warn('   Polling will start automatically once account is connected');
+      return;
+    }
+
+    console.log('✅ Business Account ID found:', businessAccountId);
+
     this.stopPolling(); // Clear any existing interval
     this.isPolling = true;
-    
+
     console.log('🚀 Starting real-time polling every', intervalMs, 'ms');
     
     this.pollingInterval = setInterval(async () => {
@@ -201,6 +225,59 @@ class RealtimeService {
 
 // Export singleton instance
 export const realtimeService = new RealtimeService();
+
+// ============================================
+// SUBSCRIPTION CLEANUP (Memory Leak Prevention)
+// Store unsubscribe function for proper cleanup
+// ============================================
+let authStoreUnsubscribe: (() => void) | null = null;
+
+// ============================================
+// AUTO-START POLLING WHEN ACCOUNT CONNECTS
+// Subscribe to authStore changes and start polling when businessAccountId is set
+// Reference: current-work.md Phase 4
+// ============================================
+if (typeof window !== 'undefined') {
+  // Track previous value for comparison
+  let previousBusinessAccountId: string | null = useAuthStore.getState().businessAccountId;
+
+  // Watch for businessAccountId changes - STORE the unsubscribe function
+  authStoreUnsubscribe = useAuthStore.subscribe((state) => {
+    const currentBusinessAccountId = state.businessAccountId;
+
+    if (currentBusinessAccountId && !previousBusinessAccountId) {
+      // Account just connected - start polling
+      console.log('✅ Business Account connected - starting real-time polling');
+      realtimeService.startPolling(3000);
+    } else if (!currentBusinessAccountId && previousBusinessAccountId) {
+      // Account disconnected - stop polling
+      console.log('⚠️ Business Account disconnected - stopping polling');
+      realtimeService.stopPolling();
+    }
+
+    // Update previous value
+    previousBusinessAccountId = currentBusinessAccountId;
+  });
+}
+
+/**
+ * Cleanup function for realtime service
+ * - Unsubscribes from auth store changes
+ * - Stops any active polling
+ *
+ * Use cases:
+ * - Test cleanup between test runs
+ * - Hot module reload scenarios
+ * - Manual service shutdown
+ */
+export const cleanupRealtimeService = () => {
+  if (authStoreUnsubscribe) {
+    authStoreUnsubscribe();
+    authStoreUnsubscribe = null;
+    console.log('🧹 Cleaned up auth store subscription');
+  }
+  realtimeService.stopPolling();
+};
 
 // React Hook for easy usage
 export const useRealtimeUpdates = () => {

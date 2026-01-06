@@ -1,5 +1,12 @@
 // src/hooks/useInstagramAccount.ts
-import { useState, useEffect } from 'react';
+// ============================================
+// PHASE 3: MODERNIZED WITH TANSTACK QUERY
+// Fixes: BLOCKER-03 (no retry logic)
+// Added: Retry (3x), caching (5min), better errors
+// Reference: current-work.md Phase 3
+// ============================================
+
+import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../stores/authStore';
 import { DatabaseService } from '../services/databaseservices';
 import type { Database } from '../lib/database.types';
@@ -17,52 +24,83 @@ interface UseInstagramAccountResult {
 
 export const useInstagramAccount = (): UseInstagramAccountResult => {
   const userId = useAuthStore(state => state.user?.id);
-  const [accounts, setAccounts] = useState<InstagramBusinessAccount[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  const fetchAccounts = async () => {
-    if (!userId) {
-      setIsLoading(false);
-      setError('User not authenticated');
-      return;
-    }
+  // ============================================
+  // TANSTACK QUERY SETUP (Replaces manual useState/useEffect)
+  // ============================================
+  const {
+    data: accounts = [],
+    error: queryError,
+    isLoading,
+    refetch
+  } = useQuery({
+    // Unique key for this query (invalidate when userId changes)
+    queryKey: ['instagram-accounts', userId],
 
-    try {
-      setIsLoading(true);
-      setError(null);
+    // Query function - async fetch logic
+    queryFn: async () => {
+      if (!userId) {
+        throw new Error('User not authenticated');
+      }
 
-      // IMPORTANT: userId here is user.id (UUID from Supabase Auth)
-      // user.facebook_id is ONLY for Meta Graph API calls, NEVER for database queries
       console.log('🔍 Fetching business accounts for UUID:', userId);
 
+      // Fetch from database service
       const result = await DatabaseService.getBusinessAccounts(userId);
 
-      if (result.success && result.data) {
-        setAccounts(result.data);
+      // Log raw response for debugging
+      console.log('📦 Raw API response:', JSON.stringify(result, null, 2));
 
-        if (result.data.length === 0) {
-          console.warn('⚠️ No Instagram accounts connected');
-          setError('No Instagram accounts connected. Please connect an account first.');
-        } else {
-          console.log(`✅ Found ${result.data.length} Instagram account(s)`);
-        }
-      } else {
-        console.error('❌ Failed to fetch business accounts:', result.error);
-        setError(result.error || 'Failed to fetch Instagram accounts');
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to fetch accounts');
       }
-    } catch (err: any) {
-      console.error('❌ Failed to fetch Instagram accounts:', err);
-      setError(err.message || 'An error occurred while fetching accounts');
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
-  useEffect(() => {
-    fetchAccounts();
-  }, [userId]);
+      if (!result.data || result.data.length === 0) {
+        // Detailed error logging for troubleshooting
+        console.warn('⚠️ No Instagram accounts connected');
+        console.warn('   Possible causes:');
+        console.warn('   1. Missing OAuth scopes (business_management, pages_manage_metadata)');
+        console.warn('   2. Instagram Business Account not linked to Facebook Page');
+        console.warn('   3. Token exchange failed - check backend logs');
+        console.warn('   4. User declined required permissions during OAuth');
 
+        throw new Error(
+          'No Instagram accounts found. Please ensure:\n' +
+          '1. Your Facebook Page is connected to an Instagram Business Account\n' +
+          '2. You granted all required permissions during login'
+        );
+      }
+
+      console.log(`✅ Found ${result.data.length} Instagram account(s)`);
+      return result.data;
+    },
+
+    // ============================================
+    // TANSTACK QUERY OPTIONS (BLOCKER-03 FIX)
+    // ============================================
+
+    // Retry failed requests 3 times with exponential backoff
+    // Backoff: 1s, 2s, 4s (total 7s max wait)
+    retry: 3,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+
+    // Cache data for 5 minutes (reduces API calls)
+    staleTime: 5 * 60 * 1000,
+
+    // Keep data in cache for 10 minutes even if component unmounts
+    // NOTE: TanStack Query v5 renamed cacheTime → gcTime (garbage collection time)
+    gcTime: 10 * 60 * 1000,
+
+    // Don't refetch on window focus (too aggressive for this use case)
+    refetchOnWindowFocus: false,
+
+    // Only run query if userId exists
+    enabled: !!userId,
+  });
+
+  // ============================================
+  // DERIVE STATE FROM QUERY
+  // ============================================
   // Use first account as primary (future: allow user to select)
   const primaryAccount = accounts[0];
 
@@ -71,7 +109,10 @@ export const useInstagramAccount = (): UseInstagramAccountResult => {
     businessAccountId: primaryAccount?.id || null,  // UUID for backend
     instagramBusinessId: primaryAccount?.instagram_business_id || null,  // For API :accountId
     isLoading,
-    error,
-    refetch: fetchAccounts
+    error: queryError ? (queryError as Error).message : null,
+    refetch: () => {
+      console.log('🔄 Manual refetch triggered');
+      refetch();
+    }
   };
 };

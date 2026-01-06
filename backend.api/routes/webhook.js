@@ -1,8 +1,141 @@
 // backend/routes/webhook.js - COMPLETE N8N INTEGRATION
+// ✅ PHASE 6: Enhanced with retry logic, monitoring, and HMAC signature verification
 
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
+const crypto = require('crypto');
+
+// ============================================
+// PHASE 6: CONFIGURATION CONSTANTS
+// ============================================
+const MAX_RETRY_ATTEMPTS = 3;
+const RETRY_DELAYS = [1000, 2000, 4000]; // ms (exponential backoff)
+const RATE_LIMIT_BACKOFF = 30000; // 30s backoff for 429 responses
+const MAX_EVENTS_CACHE = 50; // Bounded to prevent memory bloat
+
+// ============================================
+// PHASE 6: WEBHOOK METRICS STORAGE
+// ============================================
+
+/**
+ * Webhook metrics storage - bounded to prevent memory issues
+ * @type {Object}
+ */
+const webhookMetrics = {
+  events: [],
+  successCount: 0,
+  failureCount: 0,
+  retryCount: 0,
+  rateLimitCount: 0,
+  lastEventTime: null
+};
+
+/**
+ * Logs webhook events for monitoring and debugging
+ * Maintains bounded event cache and aggregated metrics
+ * @param {string} eventType - Type of webhook event
+ * @param {string} status - Event status ('success', 'failed', 'retry', 'skipped', 'rate_limited')
+ * @param {string|null} error - Error message if applicable
+ * @param {Object} metadata - Additional event metadata (latency, attempt, etc.)
+ */
+function logWebhookEvent(eventType, status, error = null, metadata = {}) {
+  const event = {
+    eventType,
+    status,
+    error,
+    timestamp: new Date().toISOString(),
+    ...metadata
+  };
+
+  // Update aggregated metrics
+  if (status === 'success') webhookMetrics.successCount++;
+  if (status === 'failed') webhookMetrics.failureCount++;
+  if (status === 'retry') webhookMetrics.retryCount++;
+  if (status === 'rate_limited') webhookMetrics.rateLimitCount++;
+  webhookMetrics.lastEventTime = event.timestamp;
+
+  // Keep last 50 events for debugging (bounded memory)
+  webhookMetrics.events.push(event);
+  if (webhookMetrics.events.length > MAX_EVENTS_CACHE) {
+    webhookMetrics.events.shift();
+  }
+
+  // Log to console with structured JSON format (for log aggregation tools)
+  console.log(JSON.stringify({
+    type: 'WEBHOOK_EVENT',
+    ...event
+  }));
+}
+
+// ============================================
+// PHASE 6: SIGNATURE VERIFICATION (MANDATORY - Meta Compliance)
+// ============================================
+
+/**
+ * Verifies Meta webhook signature using HMAC-SHA256
+ * MANDATORY for Meta compliance - prevents spoofed events
+ * @see https://developers.facebook.com/docs/messenger-platform/webhooks#security
+ */
+function verifyMetaWebhookSignature(req, res, next) {
+  const signature = req.headers['x-hub-signature-256'];
+
+  if (!signature) {
+    console.warn('⚠️ Webhook received without signature - rejecting');
+    logWebhookEvent('signature_check', 'rejected', 'Missing signature header');
+    return res.status(401).send('Missing signature');
+  }
+
+  // Use raw body if available (for accurate signature verification)
+  const body = req.rawBody || JSON.stringify(req.body);
+
+  const hmac = crypto.createHmac('sha256', process.env.META_APP_SECRET || '');
+  hmac.update(body);
+  const expectedSignature = `sha256=${hmac.digest('hex')}`;
+
+  // Use timing-safe comparison to prevent timing attacks
+  try {
+    if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))) {
+      console.warn('❌ Invalid webhook signature');
+      logWebhookEvent('signature_check', 'rejected', 'Invalid signature');
+      return res.status(401).send('Invalid signature');
+    }
+  } catch (error) {
+    // Buffer length mismatch
+    console.warn('❌ Signature comparison failed:', error.message);
+    logWebhookEvent('signature_check', 'rejected', 'Signature comparison error');
+    return res.status(401).send('Invalid signature');
+  }
+
+  console.log('✅ Webhook signature verified');
+  logWebhookEvent('signature_check', 'success');
+  next();
+}
+
+// ============================================
+// PHASE 6: METRICS ENDPOINT AUTHENTICATION
+// ============================================
+
+/**
+ * Simple API key validation middleware for metrics endpoint
+ * Uses METRICS_API_KEY from environment - prevents public access
+ */
+function validateMetricsApiKey(req, res, next) {
+  const apiKey = req.headers['x-metrics-api-key'] || req.query.api_key;
+  const expectedKey = process.env.METRICS_API_KEY;
+
+  // In development, allow access without key (for testing)
+  if (process.env.NODE_ENV === 'development' && !expectedKey) {
+    return next();
+  }
+
+  if (!apiKey || apiKey !== expectedKey) {
+    console.warn('⚠️ Unauthorized metrics access attempt');
+    return res.status(401).json({ error: 'Unauthorized - valid API key required' });
+  }
+
+  next();
+}
 
 // Import Fixie proxy for static IP (Phase 5)
 const { createProxiedHttpClient } = require('../config/fixie-proxy');
@@ -16,8 +149,9 @@ const proxiedAxios = createProxiedHttpClient({
   }
 });
 
-// ✅ Import webhook signature verification middleware
-const { verifyInstagramWebhookSignature } = require('../middleware/webhook-verification');
+// ✅ PHASE 6: Using inline verifyMetaWebhookSignature instead
+// Legacy middleware (kept for reference, replaced with enhanced version above)
+// const { verifyInstagramWebhookSignature } = require('../middleware/webhook-verification');
 
 // ===== META INSTAGRAM WEBHOOKS (Incoming from Meta) =====
 
@@ -43,8 +177,9 @@ router.get('/instagram', (req, res) => {
 });
 
 // Instagram event handler (Meta sends events here)
+// ✅ PHASE 6: Using enhanced signature verification with structured logging
 // Middleware will verify signature BEFORE calling the handler function
-router.post('/instagram', verifyInstagramWebhookSignature, async (req, res) => {
+router.post('/instagram', verifyMetaWebhookSignature, async (req, res) => {
   // ✅ Signature already verified by middleware at this point
   // If we reach here, the webhook is authentic and came from Instagram
   const body = req.body;
@@ -130,33 +265,77 @@ router.post('/instagram', verifyInstagramWebhookSignature, async (req, res) => {
   }
 });
 
-// Helper function to forward events to N8N
-async function forwardToN8N(eventType, { webhook_url, data }) {
+// ============================================
+// PHASE 6: ENHANCED FORWARD TO N8N WITH RETRY
+// ============================================
+
+/**
+ * Forwards webhook events to N8N with retry logic and rate limit handling
+ * @param {string} eventType - Type of event (comment, mention, dm, order)
+ * @param {Object} options - Webhook URL and data payload
+ * @returns {Promise<Object>} Result with success status and metadata
+ */
+async function forwardToN8NWithRetry(eventType, { webhook_url, data }) {
   if (!webhook_url) {
     console.log(`❌ No N8N webhook URL configured for ${eventType}`);
-    return;
+    logWebhookEvent(eventType, 'skipped', 'No webhook URL configured');
+    return { success: false, reason: 'no_webhook_url' };
   }
 
-  try {
-    console.log(`📤 Forwarding ${eventType} to N8N:`, webhook_url);
+  let lastError = null;
 
-    const response = await proxiedAxios.post(webhook_url, data, {
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'Instagram-Backend-Forwarder/1.0'
-      },
-      timeout: 10000 // 10 second timeout
-    });
+  for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
+    try {
+      console.log(`📤 [Attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS}] Forwarding ${eventType} to N8N`);
 
-    console.log(`✅ Successfully forwarded ${eventType} to N8N:`, response.status);
-  } catch (error) {
-    console.error(`❌ Failed to forward ${eventType} to N8N:`, {
-      url: webhook_url,
-      error: error.message,
-      status: error.response?.status,
-      data: error.response?.data
-    });
+      const startTime = Date.now();
+      const response = await proxiedAxios.post(webhook_url, data, {
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Instagram-Backend-Forwarder/2.0',
+          'X-Retry-Attempt': String(attempt + 1)
+        },
+        timeout: 10000
+      });
+
+      const latency = Date.now() - startTime;
+
+      logWebhookEvent(eventType, 'success', null, { latency, attempt: attempt + 1 });
+      console.log(`✅ [${latency}ms] Successfully forwarded ${eventType} to N8N`);
+
+      return { success: true, latency, attempts: attempt + 1 };
+
+    } catch (error) {
+      lastError = error;
+
+      // Handle rate limiting (429) with longer backoff
+      const status = error.response?.status;
+      if (status === 429) {
+        console.warn(`⚠️ Rate limited (429) - backing off for ${RATE_LIMIT_BACKOFF / 1000}s`);
+        logWebhookEvent(eventType, 'rate_limited', 'HTTP 429', { attempt: attempt + 1 });
+        await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_BACKOFF));
+        continue; // Retry after longer backoff
+      }
+
+      logWebhookEvent(eventType, 'retry', error.message, { attempt: attempt + 1, status });
+
+      if (attempt < MAX_RETRY_ATTEMPTS - 1) {
+        const delay = RETRY_DELAYS[attempt];
+        console.warn(`⚠️ Attempt ${attempt + 1} failed (${status || 'network error'}), retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
   }
+
+  logWebhookEvent(eventType, 'failed', lastError?.message, { attempts: MAX_RETRY_ATTEMPTS });
+  console.error(`❌ All ${MAX_RETRY_ATTEMPTS} attempts failed for ${eventType}`);
+
+  return { success: false, error: lastError?.message, attempts: MAX_RETRY_ATTEMPTS };
+}
+
+// Legacy alias for backward compatibility (calls new retry version)
+async function forwardToN8N(eventType, options) {
+  return forwardToN8NWithRetry(eventType, options);
 }
 
 // ===== N8N RESPONSE WEBHOOKS (N8N sends responses back to your system) =====
@@ -348,8 +527,43 @@ router.get('/test', (req, res) => {
       'POST /webhook/n8n-response (N8N responses)',
       'POST /webhook/trigger-content (Manual content trigger)',
       'POST /webhook/trigger-hub (Manual hub trigger)',
-      'GET /webhook/realtime-updates (Frontend updates)'
+      'GET /webhook/realtime-updates (Frontend updates)',
+      'GET /webhook/metrics (Webhook metrics - auth required)'
     ],
+    timestamp: new Date().toISOString()
+  });
+});
+
+// ============================================
+// PHASE 6: AUTH-PROTECTED METRICS ENDPOINT
+// ============================================
+
+/**
+ * Webhook metrics endpoint - AUTH PROTECTED
+ * Returns aggregated metrics, success rates, and recent events
+ * @requires X-Metrics-Api-Key header or ?api_key query param
+ */
+router.get('/metrics', validateMetricsApiKey, (req, res) => {
+  const uptime = process.uptime();
+  const totalAttempts = webhookMetrics.successCount + webhookMetrics.failureCount;
+  const successRate = totalAttempts > 0
+    ? (webhookMetrics.successCount / totalAttempts * 100).toFixed(2)
+    : 100;
+
+  res.json({
+    status: 'healthy',
+    metrics: {
+      totalSuccess: webhookMetrics.successCount,
+      totalFailed: webhookMetrics.failureCount,
+      totalRetries: webhookMetrics.retryCount,
+      totalRateLimited: webhookMetrics.rateLimitCount,
+      successRate: `${successRate}%`,
+      lastEventTime: webhookMetrics.lastEventTime,
+      eventsInCache: webhookMetrics.events.length,
+      maxEventsCache: MAX_EVENTS_CACHE
+    },
+    recentEvents: webhookMetrics.events.slice(-10),
+    uptime: `${Math.floor(uptime / 3600)}h ${Math.floor((uptime % 3600) / 60)}m`,
     timestamp: new Date().toISOString()
   });
 });

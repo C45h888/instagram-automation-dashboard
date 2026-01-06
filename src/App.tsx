@@ -1,7 +1,8 @@
 // src/App.tsx - Optimized with Lazy Loading
-import React, { lazy } from 'react';
+import React, { lazy, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { startTokenRefreshInterval } from './services/tokenRefreshService';
 
 // ==========================================
 // EAGER IMPORTS (Critical - Always Needed)
@@ -272,6 +273,42 @@ const Audience: React.FC = () => (
 );
 
 // ==========================================
+// TOKEN REFRESH MANAGER
+// ==========================================
+
+/**
+ * TokenRefreshManager - Initializes and manages background token refresh
+ *
+ * Responsibilities:
+ * - Starts automatic token refresh interval on app mount
+ * - Runs `refreshAllExpiringTokens()` immediately and every 24 hours
+ * - Cleans up interval on app unmount to prevent memory leaks
+ *
+ * @security Backend handles actual token storage - frontend only triggers refresh
+ * @see src/services/tokenRefreshService.ts for implementation details
+ */
+const TokenRefreshManager: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    // Start token refresh interval on mount
+    console.log('🔄 Initializing token refresh service...');
+    intervalRef.current = startTokenRefreshInterval();
+
+    // Cleanup on unmount - prevents memory leaks and duplicate intervals
+    return () => {
+      if (intervalRef.current) {
+        console.log('⏹️ Stopping token refresh service');
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, []);
+
+  return <>{children}</>;
+};
+
+// ==========================================
 // QUERY CLIENT CONFIGURATION
 // ==========================================
 
@@ -308,8 +345,9 @@ const PageLoader: React.FC = () => (
 // Main App Component with Protected Routes
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <Router>
+    <TokenRefreshManager>
+      <QueryClientProvider client={queryClient}>
+        <Router>
         {/* 
           React.Suspense wraps ALL routes to handle lazy loading
           fallback={<PageLoader />} shows loading spinner while chunks download
@@ -390,8 +428,9 @@ function App() {
             <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>
         </React.Suspense>
-      </Router>
-    </QueryClientProvider>
+        </Router>
+      </QueryClientProvider>
+    </TokenRefreshManager>
   );
 }
 
