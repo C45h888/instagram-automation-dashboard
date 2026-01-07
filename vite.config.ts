@@ -250,17 +250,18 @@ const config: UserConfig = {
   
   server: {
     // Development server port
-    port: 3000,
-    
+    // Use 5173 (Vite default) to avoid conflicts with backend port 3001
+    port: 5173,
+
     // Listen on all network interfaces
     host: true,
-    
+
     // Auto-open browser on server start
     open: true,
-    
+
     // Enable CORS for development
     cors: true,
-    
+
     // Strict port - fail if port is already in use
     strictPort: false,
   },
