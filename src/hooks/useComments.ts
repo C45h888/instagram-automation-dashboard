@@ -61,7 +61,7 @@ export const useComments = (mediaId?: string): UseCommentsResult => {
 
     try {
       // ✅ UPDATED: Use VITE_API_BASE_URL from environment
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
 
       // ✅ UPDATED: Build endpoint with full URL and required query parameters
       const endpoint = mediaId
@@ -115,7 +115,7 @@ export const useComments = (mediaId?: string): UseCommentsResult => {
 
     try {
       // ✅ UPDATED: Use VITE_API_BASE_URL and add required query parameters
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
       const response = await fetch(
         `${apiBaseUrl}/api/instagram/comments/${commentId}/reply?userId=${user.id}&businessAccountId=${businessAccountId}`,
         {

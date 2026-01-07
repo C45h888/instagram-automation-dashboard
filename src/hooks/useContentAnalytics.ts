@@ -58,7 +58,7 @@ export const useContentAnalytics = (): UseContentAnalyticsResult => {
 
     try {
       // ✅ REAL API CALL - Meta Graph API v23.0
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
       const response = await fetch(
         `${apiBaseUrl}/api/instagram/media/${instagramBusinessId}?userId=${user.id}&businessAccountId=${businessAccountId}&limit=50`,
         {

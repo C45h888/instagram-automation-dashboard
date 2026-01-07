@@ -33,7 +33,7 @@ export const TestConnection: React.FC = () => {
       
       // Test 2: Backend API
       addResult('Testing backend API...');
-      const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const backendUrl = import.meta.env.VITE_API_URL || 'https://api.888intelligenceautomation.in';
       const backendResponse = await fetch(`${backendUrl}/health`);
       addResult(
         backendResponse.ok 
@@ -82,7 +82,7 @@ export const TestConnection: React.FC = () => {
   
   const testDataInsertion = async () => {
     try {
-      const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const backendUrl = import.meta.env.VITE_API_URL || 'https://api.888intelligenceautomation.in';
       const response = await fetch(`${backendUrl}/api/test/insert-test`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

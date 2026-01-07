@@ -3,7 +3,7 @@ import axios  from 'axios';
 
 // Environment configuration
 // Fallback to localhost for development when env vars not set
-const WEBHOOK_BASE_URL = (import.meta as any).env?.VITE_WEBHOOK_URL || 'http://localhost:3001';
+const WEBHOOK_BASE_URL = (import.meta as any).env?.VITE_WEBHOOK_URL || 'https://api.888intelligenceautomation.in';
 const VERIFY_TOKEN = (import.meta as any).env?.VITE_WEBHOOK_VERIFY_TOKEN || 'instagram_automation_cf_token_2024';
 const META_APP_SECRET = (import.meta as any).env?.VITE_META_APP_SECRET;
 

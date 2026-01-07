@@ -85,7 +85,7 @@ useEffect(() => {
         setStatus('exchanging');
         setStatusMessage('Connecting your Instagram Business account...');
 
-        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
 
         console.log('🔄 Calling Instagram token exchange...');
         const exchangeResponse = await fetch(`${API_BASE_URL}/api/instagram/exchange-token`, {

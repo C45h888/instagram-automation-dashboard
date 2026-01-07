@@ -78,7 +78,7 @@ export const useVisitorPosts = (): UseVisitorPostsResult => {
 
     try {
       // ✅ REFACTORED: Now queries database (data synced via /sync/ugc)
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
       const response = await fetch(
         `${apiBaseUrl}/api/instagram/visitor-posts?businessAccountId=${businessAccountId}&limit=50`,
         {
@@ -118,7 +118,7 @@ export const useVisitorPosts = (): UseVisitorPostsResult => {
   const toggleFeatured = async (postId: string, featured: boolean): Promise<void> => {
     try {
       // ✅ REAL API CALL to update featured status
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
       const response = await fetch(`${apiBaseUrl}/api/instagram/ugc/${postId}/feature`, {
         method: 'PATCH',
         headers: {
@@ -176,7 +176,7 @@ export const useVisitorPosts = (): UseVisitorPostsResult => {
 
     try {
       // ✅ REAL API CALL to request permission
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
       const response = await fetch(`${apiBaseUrl}/api/instagram/ugc/request-permission`, {
         method: 'POST',
         headers: {

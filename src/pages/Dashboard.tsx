@@ -129,7 +129,7 @@ const Dashboard: React.FC = () => {
   const handleReconnect = () => {
     console.log('🔄 Redirecting to Instagram OAuth flow...');
     // Get API base URL from environment
-    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
     // Redirect to OAuth endpoint to get a new token
     window.location.href = `${apiBaseUrl}/api/auth/instagram`;
   };

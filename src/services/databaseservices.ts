@@ -747,7 +747,7 @@ export class DatabaseService {
     workflow: Types.Database['public']['Tables']['automation_workflows']['Row']
   ): Promise<void> {
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://api.888intelligenceautomation.in';
       
       const response = await fetch(`${apiUrl}/webhook/trigger-workflow`, {
         method: 'POST',

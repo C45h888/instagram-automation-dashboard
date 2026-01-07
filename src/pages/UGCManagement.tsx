@@ -93,7 +93,7 @@ const UGCManagement: React.FC = () => {
     setIsReposting(true);
 
     try {
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
       const response = await fetch(`${apiBaseUrl}/api/instagram/ugc/repost`, {
         method: 'POST',
         headers: {

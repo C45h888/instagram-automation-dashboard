@@ -1,19 +1,45 @@
- Auth state changed: SIGNED_IN
+Download the React DevTools for a better development experience: https://reactjs.org/link/react-devtools
+FacebookCallback.tsx:45 📥 OAuth callback received, processing...
+App.tsx:295 🔄 Initializing token refresh service...
+tokenRefreshService.ts:273 🚀 Starting automatic token refresh service...
+tokenRefreshService.ts:274    Check interval: Every 24 hours
+tokenRefreshService.ts:275    Refresh threshold: 7 days before expiration
+tokenRefreshService.ts:212 🔄 Starting automatic token refresh job...
+App.tsx:301 ⏹️ Stopping token refresh service
+FacebookCallback.tsx:45 📥 OAuth callback received, processing...
+App.tsx:295 🔄 Initializing token refresh service...
+tokenRefreshService.ts:273 🚀 Starting automatic token refresh service...
+tokenRefreshService.ts:274    Check interval: Every 24 hours
+tokenRefreshService.ts:275    Refresh threshold: 7 days before expiration
+tokenRefreshService.ts:212 🔄 Starting automatic token refresh job...
+authStore.ts:744 🔄 Auth state changed: SIGNED_IN
+authStore.ts:768 📦 Provider token captured from OAuth sign-in
+authStore.ts:769    Token prefix: EAAUmaHNHeCcBQReVTh7...
+authStore.ts:777    ✅ Provider token backed up to localStorage
+FacebookCallback.tsx:29 🔄 Provider token refreshed, updating...
+authStore.ts:744 🔄 Auth state changed: SIGNED_IN
+authStore.ts:768 📦 Provider token captured from OAuth sign-in
+authStore.ts:769    Token prefix: EAAUmaHNHeCcBQReVTh7...
+authStore.ts:777    ✅ Provider token backed up to localStorage
+FacebookCallback.tsx:29 🔄 Provider token refreshed, updating...
 authStore.ts:744 🔄 Auth state changed: INITIAL_SESSION
-realtimeService.ts:59 🚀 Starting real-time polling every 3000 ms
-realtimeService.ts:106 👂 Subscribed to any events
-2useInstagramAccount.ts:37 🔍 Fetching business accounts for UUID: 7e631172-2287-4d95-994c-53a5c61a3af8
-useTokenValidation.ts:110 [Token Validation] Skipping validation - no user or businessAccountId
-realtimeService.ts:95 ⏹️ Stopped real-time polling
-realtimeService.ts:116 🔇 Unsubscribed from any events
-realtimeService.ts:59 🚀 Starting real-time polling every 3000 ms
-realtimeService.ts:106 👂 Subscribed to any events
-2useInstagramAccount.ts:37 🔍 Fetching business accounts for UUID: 7e631172-2287-4d95-994c-53a5c61a3af8
-useTokenValidation.ts:110 [Token Validation] Skipping validation - no user or businessAccountId
-2useInstagramAccount.ts:45 ⚠️ No Instagram accounts connected
-fetchAccounts @ useInstagramAccount.ts:45
-await in fetchAccounts
-(anonymous) @ useInstagramAccount.ts:63
+authStore.ts:753 📦 Provider token captured from initial session
+FacebookCallback.tsx:64 ✅ Supabase session established
+FacebookCallback.tsx:65    User ID (UUID): 7e631172-2287-4d95-994c-53a5c61a3af8
+FacebookCallback.tsx:66    Email: kamran@888intelligence.org
+FacebookCallback.tsx:79 ✅ Provider token extracted
+FacebookCallback.tsx:80    Token prefix: EAAUmaHNHeCcBQReVTh7...
+FacebookCallback.tsx:90 🔄 Calling Instagram token exchange...
+FacebookCallback.tsx:64 ✅ Supabase session established
+FacebookCallback.tsx:65    User ID (UUID): 7e631172-2287-4d95-994c-53a5c61a3af8
+FacebookCallback.tsx:66    Email: kamran@888intelligence.org
+FacebookCallback.tsx:79 ✅ Provider token extracted
+FacebookCallback.tsx:80    Token prefix: EAAUmaHNHeCcBQReVTh7...
+FacebookCallback.tsx:90 🔄 Calling Instagram token exchange...
+FacebookCallback.tsx:91  POST http://localhost:3001/api/instagram/exchange-token 404 (Not Found)
+handleOAuthCallback @ FacebookCallback.tsx:91
+await in handleOAuthCallback
+(anonymous) @ FacebookCallback.tsx:264
 commitHookEffectListMount @ react-dom.development.js:23189
 commitPassiveMountOnFiber @ react-dom.development.js:24965
 commitPassiveMountEffects_complete @ react-dom.development.js:24930
@@ -25,10 +51,41 @@ flushPassiveEffects @ react-dom.development.js:27023
 workLoop @ scheduler.development.js:266
 flushWork @ scheduler.development.js:239
 performWorkUntilDeadline @ scheduler.development.js:533
-2useInstagramAccount.ts:45 ⚠️ No Instagram accounts connected
-fetchAccounts @ useInstagramAccount.ts:45
-await in fetchAccounts
-(anonymous) @ useInstagramAccount.ts:63
+FacebookCallback.tsx:104 ❌ Instagram exchange failed: {}
+handleOAuthCallback @ FacebookCallback.tsx:104
+await in handleOAuthCallback
+(anonymous) @ FacebookCallback.tsx:264
+commitHookEffectListMount @ react-dom.development.js:23189
+commitPassiveMountOnFiber @ react-dom.development.js:24965
+commitPassiveMountEffects_complete @ react-dom.development.js:24930
+commitPassiveMountEffects_begin @ react-dom.development.js:24917
+commitPassiveMountEffects @ react-dom.development.js:24905
+flushPassiveEffectsImpl @ react-dom.development.js:27078
+flushPassiveEffects @ react-dom.development.js:27023
+(anonymous) @ react-dom.development.js:26808
+workLoop @ scheduler.development.js:266
+flushWork @ scheduler.development.js:239
+performWorkUntilDeadline @ scheduler.development.js:533
+FacebookCallback.tsx:257 ❌ OAuth callback error: Error: Instagram connection failed: 404
+    at handleOAuthCallback (FacebookCallback.tsx:105:17)
+handleOAuthCallback @ FacebookCallback.tsx:257
+await in handleOAuthCallback
+(anonymous) @ FacebookCallback.tsx:264
+commitHookEffectListMount @ react-dom.development.js:23189
+commitPassiveMountOnFiber @ react-dom.development.js:24965
+commitPassiveMountEffects_complete @ react-dom.development.js:24930
+commitPassiveMountEffects_begin @ react-dom.development.js:24917
+commitPassiveMountEffects @ react-dom.development.js:24905
+flushPassiveEffectsImpl @ react-dom.development.js:27078
+flushPassiveEffects @ react-dom.development.js:27023
+(anonymous) @ react-dom.development.js:26808
+workLoop @ scheduler.development.js:266
+flushWork @ scheduler.development.js:239
+performWorkUntilDeadline @ scheduler.development.js:533
+FacebookCallback.tsx:91  POST http://localhost:3001/api/instagram/exchange-token 404 (Not Found)
+handleOAuthCallback @ FacebookCallback.tsx:91
+await in handleOAuthCallback
+(anonymous) @ FacebookCallback.tsx:264
 commitHookEffectListMount @ react-dom.development.js:23189
 invokePassiveEffectMountInDEV @ react-dom.development.js:25193
 invokeEffectsInDev @ react-dom.development.js:27390
@@ -39,4 +96,42 @@ flushPassiveEffects @ react-dom.development.js:27023
 workLoop @ scheduler.development.js:266
 flushWork @ scheduler.development.js:239
 performWorkUntilDeadline @ scheduler.development.js:533
-6authStore.ts:744 🔄 Auth state changed: SIGNED_IN
+FacebookCallback.tsx:104 ❌ Instagram exchange failed: {}
+handleOAuthCallback @ FacebookCallback.tsx:104
+await in handleOAuthCallback
+(anonymous) @ FacebookCallback.tsx:264
+commitHookEffectListMount @ react-dom.development.js:23189
+invokePassiveEffectMountInDEV @ react-dom.development.js:25193
+invokeEffectsInDev @ react-dom.development.js:27390
+commitDoubleInvokeEffectsInDEV @ react-dom.development.js:27369
+flushPassiveEffectsImpl @ react-dom.development.js:27095
+flushPassiveEffects @ react-dom.development.js:27023
+(anonymous) @ react-dom.development.js:26808
+workLoop @ scheduler.development.js:266
+flushWork @ scheduler.development.js:239
+performWorkUntilDeadline @ scheduler.development.js:533
+FacebookCallback.tsx:257 ❌ OAuth callback error: Error: Instagram connection failed: 404
+    at handleOAuthCallback (FacebookCallback.tsx:105:17)
+handleOAuthCallback @ FacebookCallback.tsx:257
+await in handleOAuthCallback
+(anonymous) @ FacebookCallback.tsx:264
+commitHookEffectListMount @ react-dom.development.js:23189
+invokePassiveEffectMountInDEV @ react-dom.development.js:25193
+invokeEffectsInDev @ react-dom.development.js:27390
+commitDoubleInvokeEffectsInDEV @ react-dom.development.js:27369
+flushPassiveEffectsImpl @ react-dom.development.js:27095
+flushPassiveEffects @ react-dom.development.js:27023
+(anonymous) @ react-dom.development.js:26808
+workLoop @ scheduler.development.js:266
+flushWork @ scheduler.development.js:239
+performWorkUntilDeadline @ scheduler.development.js:533
+tokenRefreshService.ts:216    Found 0 tokens to refresh
+tokenRefreshService.ts:251 ✅ Token refresh job complete
+tokenRefreshService.ts:252    Succeeded: 0
+tokenRefreshService.ts:253    Failed: 0
+tokenRefreshService.ts:254    Require Reconnect: 0
+tokenRefreshService.ts:216    Found 0 tokens to refresh
+tokenRefreshService.ts:251 ✅ Token refresh job complete
+tokenRefreshService.ts:252    Succeeded: 0
+tokenRefreshService.ts:253    Failed: 0
+tokenRefreshService.ts:254    Require Reconnect: 0

@@ -49,7 +49,7 @@ export const useInstagramProfile = (): UseInstagramProfileResult => {
 
     try {
       // ✅ UPDATED: Use VITE_API_BASE_URL from environment
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
 
       // ✅ UPDATED: Build URL with full base URL and required query parameters
       const response = await fetch(

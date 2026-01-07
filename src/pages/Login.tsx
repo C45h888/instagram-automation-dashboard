@@ -322,7 +322,7 @@ const Login: React.FC = () => {
     console.log('   User ID (UUID):', userId);
 
     try {
-      const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+      const backendUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
 
       // ──────────────────────────────────────────────────────────────
       // STEP 1: Call the FIXED /exchange-token endpoint

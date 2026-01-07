@@ -74,7 +74,7 @@ export async function refreshAccessToken(
     console.log('   Business Account ID:', businessAccountId);
 
     // Call backend endpoint to refresh token
-    const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+    const backendUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
     const response = await fetch(`${backendUrl}/api/instagram/refresh-token`, {
       method: 'POST',
       headers: {
