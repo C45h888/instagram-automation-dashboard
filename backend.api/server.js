@@ -34,7 +34,7 @@ const PORT = process.env.PORT || 3001;
 
 // Build raw origins array with environment-aware configuration
 // CRITICAL: Only include localhost origins in development mode
-const developmentOrigins = process.env.NODE_ENV !== 'production' ? [
+const developmentOrigins = process.env.NODE_ENV !== 'development' ? [
   'http://localhost:5173',                     // Vite dev server
   'http://localhost:3000',                     // CRA dev server
   'http://localhost:5174',                     // Vite alt port
