@@ -32,27 +32,16 @@ const PORT = process.env.PORT || 3001;
 // 2. Pre-flight wildcard handler for instant OPTIONS responses
 // 3. Environment variable support for dynamic origin configuration
 
-// Build raw origins array with environment-aware configuration
-// CRITICAL: Only include localhost origins in development mode
-const developmentOrigins = process.env.NODE_ENV !== 'development' ? [
-  'http://localhost:5173',                     // Vite dev server
-  'http://localhost:3000',                     // CRA dev server
-  'http://localhost:5174',                     // Vite alt port
-] : [];
-
-const productionOrigins = [
-  'https://888intelligenceautomation.in',      // Production root
-  'https://www.888intelligenceautomation.in',  // Production www
-  'https://api.888intelligenceautomation.in',  // Production API
-  'https://app.888intelligenceautomation.in'   // Production app
-];
-
+// Build origins array with production URLs only
+// NO LOCALHOST - prevents production builds from accepting localhost requests
 const rawOrigins = [
   process.env.FRONTEND_URL,                    // Dynamic: production frontend
   process.env.ALLOWED_ORIGIN_1,                // Dynamic: additional origin
   process.env.ALLOWED_ORIGIN_2,                // Dynamic: additional origin
-  ...developmentOrigins,                       // Localhost (dev only)
-  ...productionOrigins                         // Production domains
+  'https://888intelligenceautomation.in',      // Production root
+  'https://www.888intelligenceautomation.in',  // Production www
+  'https://api.888intelligenceautomation.in',  // Production API
+  'https://app.888intelligenceautomation.in'   // Production app
 ];
 
 // SAFETY NET: Filter out undefined/null/empty strings to prevent CORS errors
@@ -577,8 +566,8 @@ async function startServer() {
     console.log('✅ Server Successfully Started!');
     console.log('='.repeat(60));
     console.log('\n📍 Access Points:');
-    console.log(`   Local: http://localhost:${PORT}`);
-    console.log(`   Tunnel: https://api.888intelligenceautomation.in`);
+    console.log(`   Production: https://api.888intelligenceautomation.in`);
+    console.log(`   Port: ${PORT}`);
     console.log('\n🔗 Key Endpoints:');
     console.log('   Health: /health');
     console.log('   Database: /health/database');
