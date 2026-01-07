@@ -29,7 +29,7 @@ export const useDashboardData = (businessAccountId?: string): DashboardData => {
     if (!businessAccountId) return;
 
     try {
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
 
       // Trigger sync in background (don't wait for response)
       fetch(`${apiBaseUrl}/api/instagram/sync/posts`, {

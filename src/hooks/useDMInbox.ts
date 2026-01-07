@@ -59,7 +59,7 @@ export const useDMInbox = (): UseDMInboxResult => {
 
     try {
       // ✅ UPDATED: Use VITE_API_BASE_URL from environment
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
 
       // ✅ UPDATED: Build URL with full base URL and required query parameters
       const response = await fetch(
@@ -110,7 +110,7 @@ export const useDMInbox = (): UseDMInboxResult => {
 
     try {
       // ✅ UPDATED: Use VITE_API_BASE_URL and add required query parameters
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
       const response = await fetch(
         `${apiBaseUrl}/api/instagram/conversations/${conversationId}/messages?userId=${user.id}&businessAccountId=${businessAccountId}`,
         {
@@ -165,7 +165,7 @@ export const useDMInbox = (): UseDMInboxResult => {
 
     try {
       // ✅ UPDATED: Use VITE_API_BASE_URL and add required query parameters
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
       const response = await fetch(
         `${apiBaseUrl}/api/instagram/conversations/${selectedConversationId}/send?userId=${user.id}&businessAccountId=${businessAccountId}`,
         {
