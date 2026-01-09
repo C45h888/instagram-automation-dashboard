@@ -165,20 +165,19 @@ interface ImportMetaEnv {
    *
    * @type {string}
    * @required false
-   * @default 'https://888intelligenceautomation.in/auth/callback'
+   * @default `${window.location.origin}/auth/callback`
    *
-   * The URL where Supabase redirects after OAuth authentication completes.
-   * CRITICAL: NEVER use window.location.origin as it could be localhost in dev.
-   * Must match exactly with URLs configured in Meta Developer Console and Supabase.
+   * Override the default OAuth callback URL if using a custom authentication flow.
+   * Must match exactly with URLs configured in Meta Developer Console.
    *
    * Format: Must be a complete HTTPS URL (HTTP allowed for localhost only)
    *
    * @example
-   * // Production callback (RECOMMENDED)
-   * VITE_OAUTH_REDIRECT_URI=https://888intelligenceautomation.in/auth/callback
+   * // Production custom callback
+   * VITE_OAUTH_REDIRECT_URI=https://api.yourdomain.com/auth/instagram/callback
    *
    * @example
-   * // Local development (use only for local testing)
+   * // Local development
    * VITE_OAUTH_REDIRECT_URI=http://localhost:5173/auth/callback
    *
    * @validation Must match Meta Developer Console configuration

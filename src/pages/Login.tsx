@@ -580,15 +580,10 @@ const Login: React.FC = () => {
       // - Creates Supabase session with UUID
       // - Stores provider_token in auth.identities
       // - Redirects back to our app with session
-
-      // CRITICAL FIX: Use environment variable or production URL for redirectTo
-      // Never use window.location.origin as it could be localhost in dev
-      const redirectUrl = import.meta.env.VITE_OAUTH_REDIRECT_URI || 'https://888intelligenceautomation.in/auth/callback';
-
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'facebook',
         options: {
-          redirectTo: redirectUrl,
+          redirectTo: `${window.location.origin}/auth/callback`,
           scopes: scopes,
           queryParams: {
             // Request fresh permissions dialog
