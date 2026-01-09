@@ -416,7 +416,7 @@ async function storePageToken({ userId, igBusinessAccountId, pageAccessToken, pa
         last_refreshed_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }, {
-        onConflict: 'user_id,business_account_id,token_type'
+        onConflict: 'user_id,business_account_id'
       })
       .select();
 
