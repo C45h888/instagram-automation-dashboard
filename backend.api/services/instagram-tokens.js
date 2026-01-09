@@ -331,7 +331,16 @@ async function storePageToken({ userId, igBusinessAccountId, pageAccessToken, pa
       };
     }
 
-    // ===== STEP 2: Create/Update business account record FIRST =====
+    // ===== STEP 2: Validate required fields =====
+    if (!pageName) {
+      console.error('❌ Missing required field: pageName');
+      return {
+        success: false,
+        error: 'pageName is required but was not provided'
+      };
+    }
+
+    // ===== STEP 3: Create/Update business account record FIRST =====
     console.log('📝 Creating/updating Instagram business account record...');
 
     const { data: businessAccount, error: accountError } = await supabase
@@ -339,14 +348,13 @@ async function storePageToken({ userId, igBusinessAccountId, pageAccessToken, pa
       .upsert({
         user_id: userId,
         instagram_business_id: igBusinessAccountId,
-        page_id: pageId,
-        page_name: pageName,
+        name: pageName, // FIXED: Added required 'name' field
         username: pageName, // Use page name as username initially
         is_connected: true,
         last_sync_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }, {
-        onConflict: 'user_id,instagram_business_id',
+        onConflict: 'instagram_business_id', // FIXED: Only instagram_business_id has unique constraint
         ignoreDuplicates: false
       })
       .select()
@@ -363,7 +371,7 @@ async function storePageToken({ userId, igBusinessAccountId, pageAccessToken, pa
     console.log('✅ Business account record created/updated');
     console.log('   Business Account UUID:', businessAccount.id);
 
-    // ===== STEP 3: Encrypt page token using Supabase function =====
+    // ===== STEP 4: Encrypt page token using Supabase function =====
     console.log('🔐 Encrypting page token...');
 
     const { data: encryptedToken, error: encryptError } = await supabase
@@ -386,13 +394,13 @@ async function storePageToken({ userId, igBusinessAccountId, pageAccessToken, pa
 
     console.log('✅ Token encrypted successfully');
 
-    // ===== STEP 4: Calculate expiration timestamp =====
+    // ===== STEP 5: Calculate expiration timestamp =====
     const expiresIn = 5184000; // 60 days in seconds
     const expiresAt = new Date(Date.now() + (expiresIn * 1000));
 
     console.log('📅 Token expiration:', expiresAt.toISOString());
 
-    // ===== STEP 5: Upsert to instagram_credentials table =====
+    // ===== STEP 6: Upsert to instagram_credentials table =====
     // Now we have a valid business_account_id (UUID) to use
     const { data: credentialData, error: credentialError } = await supabase
       .from('instagram_credentials')

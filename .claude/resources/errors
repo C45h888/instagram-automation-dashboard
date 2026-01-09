@@ -1,137 +1,60 @@
-Download the React DevTools for a better development experience: https://reactjs.org/link/react-devtools
-FacebookCallback.tsx:45 📥 OAuth callback received, processing...
-App.tsx:295 🔄 Initializing token refresh service...
-tokenRefreshService.ts:273 🚀 Starting automatic token refresh service...
-tokenRefreshService.ts:274    Check interval: Every 24 hours
-tokenRefreshService.ts:275    Refresh threshold: 7 days before expiration
-tokenRefreshService.ts:212 🔄 Starting automatic token refresh job...
-App.tsx:301 ⏹️ Stopping token refresh service
-FacebookCallback.tsx:45 📥 OAuth callback received, processing...
-App.tsx:295 🔄 Initializing token refresh service...
-tokenRefreshService.ts:273 🚀 Starting automatic token refresh service...
-tokenRefreshService.ts:274    Check interval: Every 24 hours
-tokenRefreshService.ts:275    Refresh threshold: 7 days before expiration
-tokenRefreshService.ts:212 🔄 Starting automatic token refresh job...
+FacebookCallback.tsx:91 
+ POST https://api.888intelligenceautomation.in/api/instagram/exchange-token 500 (Internal Server Error)
+(anonymous)	@	FacebookCallback.tsx:91
+i	@	index-CMW0-Gnl.js:2
+Promise.then		
+f	@	index-CMW0-Gnl.js:2
+(anonymous)	@	index-CMW0-Gnl.js:2
+v	@	index-CMW0-Gnl.js:2
+(anonymous)	@	FacebookCallback.tsx:43
+al	@	react-dom.production.min.js:243
+Zt	@	react-dom.production.min.js:285
+(anonymous)	@	react-dom.production.min.js:281
+E	@	scheduler.production.min.js:13
+sn	@	scheduler.production.min.js:14
+FacebookCallback.tsx:104 ❌ Instagram exchange failed: 
+{success: false, error: 'Failed to store credentials', details: "Failed to create business account: Could not find …'instagram_business_accounts' in the schema cache", code: 'STORAGE_FAILED'}
+(anonymous)	@	FacebookCallback.tsx:104
+i	@	index-CMW0-Gnl.js:2
+Promise.then		
+f	@	index-CMW0-Gnl.js:2
+i	@	index-CMW0-Gnl.js:2
+Promise.then		
+f	@	index-CMW0-Gnl.js:2
+i	@	index-CMW0-Gnl.js:2
+Promise.then		
+f	@	index-CMW0-Gnl.js:2
+(anonymous)	@	index-CMW0-Gnl.js:2
+v	@	index-CMW0-Gnl.js:2
+(anonymous)	@	FacebookCallback.tsx:43
+al	@	react-dom.production.min.js:243
+Zt	@	react-dom.production.min.js:285
+(anonymous)	@	react-dom.production.min.js:281
+E	@	scheduler.production.min.js:13
+sn	@	scheduler.production.min.js:14
+FacebookCallback.tsx:257 ❌ OAuth callback error: Error: Failed to store credentials
+    at FacebookCallback.tsx:105:17
+    at Generator.next (<anonymous>)
+    at i (index-CMW0-Gnl.js:2:54)
+(anonymous)	@	FacebookCallback.tsx:257
+i	@	index-CMW0-Gnl.js:2
+Promise.then		
+f	@	index-CMW0-Gnl.js:2
+i	@	index-CMW0-Gnl.js:2
+Promise.then		
+f	@	index-CMW0-Gnl.js:2
+i	@	index-CMW0-Gnl.js:2
+Promise.then		
+f	@	index-CMW0-Gnl.js:2
+(anonymous)	@	index-CMW0-Gnl.js:2
+v	@	index-CMW0-Gnl.js:2
+(anonymous)	@	FacebookCallback.tsx:43
+al	@	react-dom.production.min.js:243
+Zt	@	react-dom.production.min.js:285
+(anonymous)	@	react-dom.production.min.js:281
+E	@	scheduler.production.min.js:13
+sn	@	scheduler.production.min.js:14
+authStore.ts:744 🔄 Auth state changed: TOKEN_REFRESHED
 authStore.ts:744 🔄 Auth state changed: SIGNED_IN
-authStore.ts:768 📦 Provider token captured from OAuth sign-in
-authStore.ts:769    Token prefix: EAAUmaHNHeCcBQReVTh7...
-authStore.ts:777    ✅ Provider token backed up to localStorage
-FacebookCallback.tsx:29 🔄 Provider token refreshed, updating...
-authStore.ts:744 🔄 Auth state changed: SIGNED_IN
-authStore.ts:768 📦 Provider token captured from OAuth sign-in
-authStore.ts:769    Token prefix: EAAUmaHNHeCcBQReVTh7...
-authStore.ts:777    ✅ Provider token backed up to localStorage
-FacebookCallback.tsx:29 🔄 Provider token refreshed, updating...
-authStore.ts:744 🔄 Auth state changed: INITIAL_SESSION
-authStore.ts:753 📦 Provider token captured from initial session
-FacebookCallback.tsx:64 ✅ Supabase session established
-FacebookCallback.tsx:65    User ID (UUID): 7e631172-2287-4d95-994c-53a5c61a3af8
-FacebookCallback.tsx:66    Email: kamran@888intelligence.org
-FacebookCallback.tsx:79 ✅ Provider token extracted
-FacebookCallback.tsx:80    Token prefix: EAAUmaHNHeCcBQReVTh7...
-FacebookCallback.tsx:90 🔄 Calling Instagram token exchange...
-FacebookCallback.tsx:64 ✅ Supabase session established
-FacebookCallback.tsx:65    User ID (UUID): 7e631172-2287-4d95-994c-53a5c61a3af8
-FacebookCallback.tsx:66    Email: kamran@888intelligence.org
-FacebookCallback.tsx:79 ✅ Provider token extracted
-FacebookCallback.tsx:80    Token prefix: EAAUmaHNHeCcBQReVTh7...
-FacebookCallback.tsx:90 🔄 Calling Instagram token exchange...
-FacebookCallback.tsx:91  POST http://localhost:3001/api/instagram/exchange-token 404 (Not Found)
-handleOAuthCallback @ FacebookCallback.tsx:91
-await in handleOAuthCallback
-(anonymous) @ FacebookCallback.tsx:264
-commitHookEffectListMount @ react-dom.development.js:23189
-commitPassiveMountOnFiber @ react-dom.development.js:24965
-commitPassiveMountEffects_complete @ react-dom.development.js:24930
-commitPassiveMountEffects_begin @ react-dom.development.js:24917
-commitPassiveMountEffects @ react-dom.development.js:24905
-flushPassiveEffectsImpl @ react-dom.development.js:27078
-flushPassiveEffects @ react-dom.development.js:27023
-(anonymous) @ react-dom.development.js:26808
-workLoop @ scheduler.development.js:266
-flushWork @ scheduler.development.js:239
-performWorkUntilDeadline @ scheduler.development.js:533
-FacebookCallback.tsx:104 ❌ Instagram exchange failed: {}
-handleOAuthCallback @ FacebookCallback.tsx:104
-await in handleOAuthCallback
-(anonymous) @ FacebookCallback.tsx:264
-commitHookEffectListMount @ react-dom.development.js:23189
-commitPassiveMountOnFiber @ react-dom.development.js:24965
-commitPassiveMountEffects_complete @ react-dom.development.js:24930
-commitPassiveMountEffects_begin @ react-dom.development.js:24917
-commitPassiveMountEffects @ react-dom.development.js:24905
-flushPassiveEffectsImpl @ react-dom.development.js:27078
-flushPassiveEffects @ react-dom.development.js:27023
-(anonymous) @ react-dom.development.js:26808
-workLoop @ scheduler.development.js:266
-flushWork @ scheduler.development.js:239
-performWorkUntilDeadline @ scheduler.development.js:533
-FacebookCallback.tsx:257 ❌ OAuth callback error: Error: Instagram connection failed: 404
-    at handleOAuthCallback (FacebookCallback.tsx:105:17)
-handleOAuthCallback @ FacebookCallback.tsx:257
-await in handleOAuthCallback
-(anonymous) @ FacebookCallback.tsx:264
-commitHookEffectListMount @ react-dom.development.js:23189
-commitPassiveMountOnFiber @ react-dom.development.js:24965
-commitPassiveMountEffects_complete @ react-dom.development.js:24930
-commitPassiveMountEffects_begin @ react-dom.development.js:24917
-commitPassiveMountEffects @ react-dom.development.js:24905
-flushPassiveEffectsImpl @ react-dom.development.js:27078
-flushPassiveEffects @ react-dom.development.js:27023
-(anonymous) @ react-dom.development.js:26808
-workLoop @ scheduler.development.js:266
-flushWork @ scheduler.development.js:239
-performWorkUntilDeadline @ scheduler.development.js:533
-FacebookCallback.tsx:91  POST http://localhost:3001/api/instagram/exchange-token 404 (Not Found)
-handleOAuthCallback @ FacebookCallback.tsx:91
-await in handleOAuthCallback
-(anonymous) @ FacebookCallback.tsx:264
-commitHookEffectListMount @ react-dom.development.js:23189
-invokePassiveEffectMountInDEV @ react-dom.development.js:25193
-invokeEffectsInDev @ react-dom.development.js:27390
-commitDoubleInvokeEffectsInDEV @ react-dom.development.js:27369
-flushPassiveEffectsImpl @ react-dom.development.js:27095
-flushPassiveEffects @ react-dom.development.js:27023
-(anonymous) @ react-dom.development.js:26808
-workLoop @ scheduler.development.js:266
-flushWork @ scheduler.development.js:239
-performWorkUntilDeadline @ scheduler.development.js:533
-FacebookCallback.tsx:104 ❌ Instagram exchange failed: {}
-handleOAuthCallback @ FacebookCallback.tsx:104
-await in handleOAuthCallback
-(anonymous) @ FacebookCallback.tsx:264
-commitHookEffectListMount @ react-dom.development.js:23189
-invokePassiveEffectMountInDEV @ react-dom.development.js:25193
-invokeEffectsInDev @ react-dom.development.js:27390
-commitDoubleInvokeEffectsInDEV @ react-dom.development.js:27369
-flushPassiveEffectsImpl @ react-dom.development.js:27095
-flushPassiveEffects @ react-dom.development.js:27023
-(anonymous) @ react-dom.development.js:26808
-workLoop @ scheduler.development.js:266
-flushWork @ scheduler.development.js:239
-performWorkUntilDeadline @ scheduler.development.js:533
-FacebookCallback.tsx:257 ❌ OAuth callback error: Error: Instagram connection failed: 404
-    at handleOAuthCallback (FacebookCallback.tsx:105:17)
-handleOAuthCallback @ FacebookCallback.tsx:257
-await in handleOAuthCallback
-(anonymous) @ FacebookCallback.tsx:264
-commitHookEffectListMount @ react-dom.development.js:23189
-invokePassiveEffectMountInDEV @ react-dom.development.js:25193
-invokeEffectsInDev @ react-dom.development.js:27390
-commitDoubleInvokeEffectsInDEV @ react-dom.development.js:27369
-flushPassiveEffectsImpl @ react-dom.development.js:27095
-flushPassiveEffects @ react-dom.development.js:27023
-(anonymous) @ react-dom.development.js:26808
-workLoop @ scheduler.development.js:266
-flushWork @ scheduler.development.js:239
-performWorkUntilDeadline @ scheduler.development.js:533
-tokenRefreshService.ts:216    Found 0 tokens to refresh
-tokenRefreshService.ts:251 ✅ Token refresh job complete
-tokenRefreshService.ts:252    Succeeded: 0
-tokenRefreshService.ts:253    Failed: 0
-tokenRefreshService.ts:254    Require Reconnect: 0
-tokenRefreshService.ts:216    Found 0 tokens to refresh
-tokenRefreshService.ts:251 ✅ Token refresh job complete
-tokenRefreshService.ts:252    Succeeded: 0
-tokenRefreshService.ts:253    Failed: 0
-tokenRefreshService.ts:254    Require Reconnect: 0
+﻿
+
