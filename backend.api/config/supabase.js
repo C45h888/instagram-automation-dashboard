@@ -448,6 +448,7 @@ async function logApiRequest(userId, endpoint, method, responseTime, statusCode,
     
     await admin.from('api_usage').upsert({
       user_id: userId,
+      business_account_id: null,  // FIXED: Added to match 5-column unique constraint
       endpoint: endpoint,
       method: method,
       response_time_ms: responseTime,
@@ -457,7 +458,7 @@ async function logApiRequest(userId, endpoint, method, responseTime, statusCode,
       request_count: 1,
       created_at: new Date().toISOString()
     }, {
-      onConflict: 'user_id,endpoint,method,hour_bucket'
+      onConflict: 'user_id,business_account_id,endpoint,method,hour_bucket'  // FIXED: 5 columns to match constraint
     });
   } catch (error) {
     console.error('API logging error:', error);

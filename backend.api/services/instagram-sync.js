@@ -64,30 +64,31 @@ async function syncTaggedPosts(businessAccountId, igUserId, pageToken) {
         const { data: existing } = await supabase
           .from('ugc_content')
           .select('repost_permission_granted, repost_permission_requested')
-          .eq('instagram_media_id', post.id)
+          .eq('visitor_post_id', post.id)
           .single();
 
         // STEP 2: UPSERT with fresh media URLs (prevents CDN link rot)
+        // Column names aligned to database schema (ugc_content table)
         const { error } = await supabase.from('ugc_content').upsert({
-          instagram_media_id: post.id,
+          visitor_post_id: post.id,                    // FIXED: was instagram_media_id
           business_account_id: businessAccountId,
-          media_url: post.media_url,  // ✅ Always refresh (link rot fix)
-          thumbnail_url: post.thumbnail_url,  // ✅ Required for VIDEO support
-          caption: post.caption || '',
-          timestamp: post.timestamp,
+          author_id: post.username,                    // Required NOT NULL field (using username as ID)
           author_username: post.username,
+          media_url: post.media_url,                   // ✅ Always refresh (link rot fix)
+          thumbnail_url: post.thumbnail_url,           // ✅ Required for VIDEO support
+          message: post.caption || '',                 // FIXED: was caption
+          created_time: post.timestamp,                // FIXED: was timestamp
           media_type: post.media_type,
-          permalink: post.permalink,
+          permalink_url: post.permalink,               // FIXED: was permalink
           like_count: post.like_count || 0,
-          comments_count: post.comments_count || 0,
+          comment_count: post.comments_count || 0,     // FIXED: was comments_count (singular)
           // ✅ Preserve existing permission status if post exists
           repost_permission_granted: existing?.repost_permission_granted ?? null,
           repost_permission_requested: existing?.repost_permission_requested ?? false,
           sentiment: null,
           featured: false,
-          source: 'instagram_tags_api',
           updated_at: new Date().toISOString()
-        }, { onConflict: 'instagram_media_id' });
+        }, { onConflict: 'business_account_id,visitor_post_id' });  // FIXED: matches database constraint
 
         if (error) {
           console.error(`[Sync] Failed to upsert post ${post.id}:`, error.message);
