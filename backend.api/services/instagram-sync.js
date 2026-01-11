@@ -156,7 +156,6 @@ async function syncBusinessPosts(businessAccountId, igUserId, pageToken) {
           media_url: post.media_url,
           thumbnail_url: post.thumbnail_url,
           caption: post.caption || '',
-          timestamp: post.timestamp,
           media_type: post.media_type,
           permalink: post.permalink,
           like_count: post.like_count || 0,

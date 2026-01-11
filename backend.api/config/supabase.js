@@ -421,7 +421,7 @@ async function logAudit(eventType, userId = null, eventData = {}, req = null) {
       resource_type: eventData.resource_type,
       resource_id: eventData.resource_id,
       details: eventData,
-      ip_address: req?.ip || req?.connection?.remoteAddress || 'unknown',
+      ip_address: req?.ip || req?.connection?.remoteAddress || null,
       user_agent: req?.headers?.['user-agent'] || 'unknown',
       success: eventData.success !== false,
       created_at: new Date().toISOString()

@@ -1,0 +1,92 @@
+here are the logs from the console tab of dev tab: POST https://api.888intelligenceautomation.in/api/instagram/exchange-token 500 (Internal Server Error)
+useTokenValidation.ts:184 [Token Validation] ❌ Validation error: Internal server error during token validation
+(anonymous)	@	useTokenValidation.ts:184
+o	@	user-pages-D4qhdhJ9.js:1
+Promise.then		
+c	@	user-pages-D4qhdhJ9.js:1
+o	@	user-pages-D4qhdhJ9.js:1
+Promise.then		
+c	@	user-pages-D4qhdhJ9.js:1
+(anonymous)	@	user-pages-D4qhdhJ9.js:1
+T	@	user-pages-D4qhdhJ9.js:1
+(anonymous)	@	useTokenValidation.ts:107
+(anonymous)	@	useTokenValidation.ts:216
+al	@	react-dom.production.min.js:243
+Zt	@	react-dom.production.min.js:285
+Rd	@	react-dom.production.min.js:282
+wt	@	react-dom.production.min.js:280
+Zi	@	react-dom.production.min.js:272
+vt	@	react-dom.production.min.js:127
+(anonymous)	@	react-dom.production.min.js:266
+setTimeout		
+is	@	notifyManager.js:2
+o	@	notifyManager.js:26
+batch	@	notifyManager.js:44
+X	@	query.js:375
+setData	@	query.js:53
+(anonymous)	@	query.js:271
+a	@	4-query-CqcCI7W6.js:1
+Promise.then		
+h	@	4-query-CqcCI7W6.js:1
+(anonymous)	@	4-query-CqcCI7W6.js:1
+ct	@	4-query-CqcCI7W6.js:1
+fetch	@	query.js:157
+At	@	queryObserver.js:175
+onSubscribe	@	queryObserver.js:51
+subscribe	@	subscribable.js:9
+(anonymous)	@	useBaseQuery.js:58
+_a	@	react-dom.production.min.js:167
+al	@	react-dom.production.min.js:243
+Zt	@	react-dom.production.min.js:285
+(anonymous)	@	react-dom.production.min.js:281
+E	@	scheduler.production.min.js:13
+sn	@	scheduler.production.min.js:14
+useInstagramProfile.ts:77 ✅ Profile fetched: archve.001
+react-dom.production.min.js:188 TypeError: Cannot read properties of undefined (reading 'toLocaleString')
+    at ProfileStats.tsx:76:27
+    at Array.map (<anonymous>)
+    at zF (ProfileStats.tsx:62:14)
+    at No (react-dom.production.min.js:160:137)
+    at sf (react-dom.production.min.js:289:337)
+    at lf (react-dom.production.min.js:279:389)
+    at Td (react-dom.production.min.js:279:320)
+    at qr (react-dom.production.min.js:279:180)
+    at Qu (react-dom.production.min.js:270:88)
+    at tf (react-dom.production.min.js:267:429)
+Mu	@	react-dom.production.min.js:188
+Ua.n.callback	@	react-dom.production.min.js:188
+Ri	@	react-dom.production.min.js:156
+Yi	@	react-dom.production.min.js:261
+ef	@	react-dom.production.min.js:259
+Pd	@	react-dom.production.min.js:258
+Rd	@	react-dom.production.min.js:282
+wt	@	react-dom.production.min.js:280
+tf	@	react-dom.production.min.js:268
+E	@	scheduler.production.min.js:13
+sn	@	scheduler.production.min.js:14
+react-dom.production.min.js:282 Uncaught TypeError: Cannot read properties of undefined (reading 'toLocaleString')
+    at ProfileStats.tsx:76:27
+    at Array.map (<anonymous>)
+    at zF (ProfileStats.tsx:62:14)
+    at No (react-dom.production.min.js:160:137)
+    at sf (react-dom.production.min.js:289:337)
+    at lf (react-dom.production.min.js:279:389)
+    at Td (react-dom.production.min.js:279:320)
+    at qr (react-dom.production.min.js:279:180)
+    at Qu (react-dom.production.min.js:270:88)
+    at tf (react-dom.production.min.js:267:429)
+(anonymous)	@	ProfileStats.tsx:76
+zF	@	ProfileStats.tsx:62
+No	@	react-dom.production.min.js:160
+sf	@	react-dom.production.min.js:289
+lf	@	react-dom.production.min.js:279
+Td	@	react-dom.production.min.js:279
+qr	@	react-dom.production.min.js:279
+Qu	@	react-dom.production.min.js:270
+tf	@	react-dom.production.min.js:267
+E	@	scheduler.production.min.js:13
+sn	@	scheduler.production.min.js:14
+App.tsx:301 ⏹️ Stopping token refresh service
+realtimeService.ts:140 🔇 Unsubscribed from any events
+﻿
+

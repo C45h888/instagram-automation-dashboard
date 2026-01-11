@@ -34,9 +34,9 @@ export interface InstagramProfileData {
   name: string;
   account_type: 'business' | 'creator' | 'personal';
   profile_picture_url?: string;
-  followers_count: number;
-  following_count: number;
-  media_count: number;
+  followers_count?: number | null;
+  following_count?: number | null;
+  media_count?: number | null;
   biography?: string;
   website?: string;
   is_verified?: boolean;

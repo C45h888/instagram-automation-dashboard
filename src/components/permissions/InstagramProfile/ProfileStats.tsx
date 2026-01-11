@@ -10,9 +10,9 @@ import { motion } from 'framer-motion';
 import type { LucideIcon } from 'lucide-react';
 
 interface ProfileStatsProps {
-  followers: number;
-  following: number;
-  posts: number;
+  followers?: number | null;
+  following?: number | null;
+  posts?: number | null;
   className?: string;
 }
 
@@ -40,19 +40,19 @@ export const ProfileStats: React.FC<ProfileStatsProps> = ({
     {
       icon: Users,
       label: 'Followers',
-      value: followers,
+      value: followers ?? 0,
       color: 'purple'
     },
     {
       icon: Users,
       label: 'Following',
-      value: following,
+      value: following ?? 0,
       color: 'pink'
     },
     {
       icon: Image,
       label: 'Posts',
-      value: posts,
+      value: posts ?? 0,
       color: 'blue'
     }
   ];
@@ -73,7 +73,7 @@ export const ProfileStats: React.FC<ProfileStatsProps> = ({
           >
             <Icon className={`w-5 h-5 ${colorClass} mx-auto mb-1`} />
             <p className="text-2xl font-bold text-white">
-              {stat.value.toLocaleString()}
+              {(stat.value ?? 0).toLocaleString()}
             </p>
             <p className="text-xs text-gray-400">{stat.label}</p>
           </motion.div>
