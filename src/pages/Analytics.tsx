@@ -171,12 +171,12 @@ const Analytics: React.FC = () => {
         
         {/* Chart area */}
         <div className="ml-14 h-full relative">
-          <svg className="w-full h-full">
+          <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
             {data.datasets.map((dataset, idx) => {
               const points = dataset.data.map((value, index) => {
                 const x = (index / (data.labels.length - 1)) * 100;
                 const y = 100 - (value / maxValue) * 100;
-                return `${x}%,${y}%`;
+                return `${x},${y}`;
               });
               
               return (

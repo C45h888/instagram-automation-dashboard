@@ -76,6 +76,47 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 // =====================================
+// CUSTOM FETCH WITH RETRY LOGIC FOR NETWORK RESILIENCE
+// =====================================
+/**
+ * Custom fetch implementation with exponential backoff retry
+ * Handles transient network errors (ERR_NETWORK_CHANGED, connection issues)
+ * without treating them as authentication failures
+ */
+const fetchWithRetry = async (url: RequestInfo | URL, options: RequestInit = {}): Promise<Response> => {
+  const MAX_RETRIES = 3;
+  const INITIAL_DELAY_MS = 1000;
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const response = await fetch(url, options);
+      return response;
+    } catch (error: any) {
+      const isLastAttempt = attempt === MAX_RETRIES;
+      const isNetworkError =
+        error?.message?.includes('network') ||
+        error?.message?.includes('ERR_NETWORK_CHANGED') ||
+        error?.message?.includes('Failed to fetch') ||
+        error?.name === 'TypeError' && error?.message === 'Failed to fetch';
+
+      // Only retry on network errors, not on auth/server errors
+      if (!isNetworkError || isLastAttempt) {
+        throw error;
+      }
+
+      // Exponential backoff: 1s, 2s, 4s
+      const delayMs = INITIAL_DELAY_MS * Math.pow(2, attempt);
+      console.log(`🔄 Network error detected (attempt ${attempt + 1}/${MAX_RETRIES + 1}), retrying in ${delayMs}ms...`);
+
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+  }
+
+  // Should never reach here, but TypeScript requires a return
+  throw new Error('Max retries exceeded');
+};
+
+// =====================================
 // STEP 4: Create typed Supabase client using the imported Database type
 // =====================================
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
@@ -101,7 +142,9 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
       'X-Client-Info': 'instagram-automation-dashboard',
       'X-Client-Version': '1.0.0',
       'X-Client-Platform': 'web-frontend'
-    }
+    },
+    // ✅ NEW: Use custom fetch with retry logic for all Supabase requests
+    fetch: fetchWithRetry
   }
 });
 

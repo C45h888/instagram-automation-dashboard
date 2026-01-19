@@ -112,9 +112,9 @@ useEffect(() => {
         }
 
         console.log('✅ Instagram token exchange successful');
-        console.log('   Business Account ID:', exchangeResult.businessAccountId);
-        console.log('   Instagram ID:', exchangeResult.instagramBusinessId);
-        console.log('   Page:', exchangeResult.pageName);
+        console.log('   Business Account ID:', exchangeResult.data?.businessAccountId);
+        console.log('   Instagram ID:', exchangeResult.data?.instagramBusinessId);
+        console.log('   Page:', exchangeResult.data?.pageName);
 
         // ============================================
         // STEP 3.5: SCOPE VALIDATION (Phase 2 - BLOCKER-02 FIX)
@@ -188,10 +188,10 @@ useEffect(() => {
         // ============================================
         // Set business account data
         setBusinessAccount({
-          businessAccountId: exchangeResult.businessAccountId,
-          instagramBusinessId: exchangeResult.instagramBusinessId,
-          pageId: exchangeResult.pageId,
-          pageName: exchangeResult.pageName
+          businessAccountId: exchangeResult.data?.businessAccountId,
+          instagramBusinessId: exchangeResult.data?.instagramBusinessId,
+          pageId: exchangeResult.data?.pageId,
+          pageName: exchangeResult.data?.pageName
         });
 
         // Login to auth store with user data

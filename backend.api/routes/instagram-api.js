@@ -615,45 +615,122 @@ router.get('/comments/:mediaId', async (req, res) => {
       });
     }
 
+    // ===== DETERMINE IF mediaId IS ACTUALLY AN igUserId =====
+    // Check if we need to fetch all comments (when mediaId is actually the igUserId)
+    // We'll try to fetch media first to see if this is an account-level request
+    const supabase = getSupabaseAdmin();
+
+    let allComments = [];
+    let isAccountLevelFetch = false;
+
+    // Try to fetch media for this account to determine if mediaId is an igUserId
+    const { data: mediaItems } = await supabase
+      .from('instagram_media')
+      .select('instagram_media_id')
+      .eq('business_account_id', businessAccountId)
+      .limit(100); // Limit to prevent excessive API calls
+
+    // If we have media items and mediaId looks like an igUserId (not in our media table),
+    // treat this as an account-level fetch
+    if (mediaItems && mediaItems.length > 0) {
+      const mediaIdInDatabase = mediaItems.some(m => m.instagram_media_id === mediaId);
+      if (!mediaIdInDatabase) {
+        // mediaId is likely an igUserId, fetch comments for all media
+        isAccountLevelFetch = true;
+        console.log(`📊 Fetching comments for all media (${mediaItems.length} items)`);
+      }
+    }
+
     // ===== GRAPH API CALL =====
     const fields = 'id,text,username,timestamp,like_count,replies{id,text,username,timestamp}';
-    const graphApiUrl = `https://graph.facebook.com/${GRAPH_API_VERSION}/${mediaId}/comments`;
 
     try {
-      const response = await axios.get(graphApiUrl, {
-        params: {
-          fields,
-          access_token: pageToken
-        },
-        timeout: 10000
-      });
+      if (isAccountLevelFetch && mediaItems) {
+        // Fetch comments for all media items
+        const commentPromises = mediaItems.map(async (media) => {
+          try {
+            const graphApiUrl = `https://graph.facebook.com/${GRAPH_API_VERSION}/${media.instagram_media_id}/comments`;
+            const response = await axios.get(graphApiUrl, {
+              params: {
+                fields,
+                access_token: pageToken
+              },
+              timeout: 10000
+            });
+            return response.data.data || [];
+          } catch (err) {
+            console.error(`❌ Failed to fetch comments for media ${media.instagram_media_id}:`, err.message);
+            return []; // Continue with other media even if one fails
+          }
+        });
 
-      const responseTime = Date.now() - requestStartTime;
+        const commentsArrays = await Promise.all(commentPromises);
+        allComments = commentsArrays.flat(); // Flatten all comment arrays into one
 
-      await logAudit('instagram_comments_fetched', userId, {
-        action: 'fetch_comments',
-        business_account_id: businessAccountId,
-        media_id: mediaId,
-        comment_count: response.data.data?.length || 0,
-        response_time_ms: responseTime
-      });
+        const responseTime = Date.now() - requestStartTime;
 
-      // ===== SUCCESS RESPONSE =====
-      res.json({
-        success: true,
-        data: response.data.data || [],
-        paging: response.data.paging || {},
-        rate_limit: {
-          remaining: req.rateLimitRemaining || 'unknown',
-          limit: 200,
-          window: '1 hour'
-        },
-        meta: {
-          count: response.data.data?.length || 0,
+        await logAudit('instagram_comments_fetched', userId, {
+          action: 'fetch_all_comments',
+          business_account_id: businessAccountId,
+          media_count: mediaItems.length,
+          comment_count: allComments.length,
           response_time_ms: responseTime
-        }
-      });
+        });
 
+        // ===== SUCCESS RESPONSE =====
+        res.json({
+          success: true,
+          data: allComments,
+          paging: {}, // No paging for aggregated results
+          rate_limit: {
+            remaining: req.rateLimitRemaining || 'unknown',
+            limit: 200,
+            window: '1 hour'
+          },
+          meta: {
+            total_comments: allComments.length,
+            media_processed: mediaItems.length,
+            response_time_ms: responseTime
+          }
+        });
+      } else {
+        // Fetch comments for specific media (original behavior)
+        const graphApiUrl = `https://graph.facebook.com/${GRAPH_API_VERSION}/${mediaId}/comments`;
+
+        const response = await axios.get(graphApiUrl, {
+          params: {
+            fields,
+            access_token: pageToken
+          },
+          timeout: 10000
+        });
+
+        const responseTime = Date.now() - requestStartTime;
+
+        await logAudit('instagram_comments_fetched', userId, {
+          action: 'fetch_comments',
+          business_account_id: businessAccountId,
+          media_id: mediaId,
+          comment_count: response.data.data?.length || 0,
+          response_time_ms: responseTime
+        });
+
+        // ===== SUCCESS RESPONSE =====
+        res.json({
+          success: true,
+          data: response.data.data || [],
+          paging: response.data.paging || {},
+          rate_limit: {
+            remaining: req.rateLimitRemaining || 'unknown',
+            limit: 200,
+            window: '1 hour'
+          },
+          meta: {
+            count: response.data.data?.length || 0,
+            response_time_ms: responseTime
+          }
+        });
+      }
     } catch (apiError) {
       if (apiError.response) {
         const { status, data } = apiError.response;
@@ -675,7 +752,6 @@ router.get('/comments/:mediaId', async (req, res) => {
 
       throw apiError;
     }
-
   } catch (error) {
     const responseTime = Date.now() - requestStartTime;
     console.error('❌ Comments fetch error:', error.message);
@@ -2632,9 +2708,18 @@ router.post('/validate-token', async (req, res) => {
     // ===== STEP 1: Fetch credentials from database =====
     const { data: credentials, error: fetchError } = await supabase
       .from('instagram_credentials')
-      .select('page_access_token, instagram_business_id')
+      .select(`
+        access_token_encrypted,
+        expires_at,
+        is_active,
+        instagram_business_accounts!inner (
+          instagram_business_id
+        )
+      `)
       .eq('user_id', userId)
       .eq('business_account_id', businessAccountId)
+      .eq('token_type', 'page')
+      .eq('is_active', true)
       .single();
 
     if (fetchError || !credentials) {
@@ -2647,15 +2732,46 @@ router.post('/validate-token', async (req, res) => {
       });
     }
 
-    // ===== STEP 2: Validate token by calling Meta's /me endpoint =====
+    // ===== STEP 2: Decrypt the token =====
+    const { data: decryptedToken, error: decryptError } = await supabase
+      .rpc('decrypt_instagram_token', {
+        encrypted_token: credentials.access_token_encrypted
+      });
+
+    if (decryptError || !decryptedToken) {
+      console.error('[Token Validation] ❌ Token decryption failed:', decryptError);
+      return res.status(500).json({
+        success: false,
+        status: 'error',
+        error: 'Failed to decrypt access token',
+        code: 'DECRYPTION_FAILED'
+      });
+    }
+
+    console.log('[Token Validation] ✅ Token decrypted successfully');
+
+    // ===== STEP 3: Get instagram_business_id from joined data =====
+    if (!credentials?.instagram_business_accounts?.instagram_business_id) {
+      console.error('[Token Validation] ❌ Instagram business account not linked');
+      return res.status(404).json({
+        success: false,
+        status: 'not_found',
+        error: 'Instagram business account not linked to credentials',
+        code: 'BUSINESS_ACCOUNT_NOT_LINKED'
+      });
+    }
+
+    const instagramBusinessId = credentials.instagram_business_accounts.instagram_business_id;
+
+    // ===== STEP 4: Validate token by calling Meta's /me endpoint =====
     // This is a lightweight "ping" to check if the token is still valid
-    const graphUrl = `https://graph.facebook.com/${GRAPH_API_VERSION}/${credentials.instagram_business_id}`;
+    const graphUrl = `https://graph.facebook.com/${GRAPH_API_VERSION}/${instagramBusinessId}`;
 
     try {
       const response = await axios.get(graphUrl, {
         params: {
           fields: 'id', // Minimal fields - we just need to confirm the token works
-          access_token: credentials.page_access_token
+          access_token: decryptedToken
         },
         timeout: 5000 // Fast timeout for quick validation
       });

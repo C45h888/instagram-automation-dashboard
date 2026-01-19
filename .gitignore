@@ -15,6 +15,7 @@ dist-ssr
 *.local
 .claudeconfig.json
 .claudeconfig
+.mcp-config.json
 current-work.md
 requirements.md
 technical-summary.md
