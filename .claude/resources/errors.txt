@@ -4,14 +4,15 @@ tokenRefreshService.ts:273 🚀 Starting automatic token refresh service...
 tokenRefreshService.ts:274    Check interval: Every 24 hours
 tokenRefreshService.ts:275    Refresh threshold: 7 days before expiration
 tokenRefreshService.ts:212 🔄 Starting automatic token refresh job...
+webpage_content_reporter.js:1 Uncaught SyntaxError: Unexpected token 'export' (at webpage_content_reporter.js:1:115558)
 authStore.ts:744 🔄 Auth state changed: SIGNED_IN
 authStore.ts:768 📦 Provider token captured from OAuth sign-in
-authStore.ts:769    Token prefix: EAAUmaHNHeCcBQUwGmpu...
+authStore.ts:769    Token prefix: EAAUmaHNHeCcBQQzVMxD...
 authStore.ts:777    ✅ Provider token backed up to localStorage
 FacebookCallback.tsx:29 🔄 Provider token refreshed, updating...
 authStore.ts:744 🔄 Auth state changed: SIGNED_IN
 authStore.ts:768 📦 Provider token captured from OAuth sign-in
-authStore.ts:769    Token prefix: EAAUmaHNHeCcBQUwGmpu...
+authStore.ts:769    Token prefix: EAAUmaHNHeCcBQQzVMxD...
 authStore.ts:777    ✅ Provider token backed up to localStorage
 FacebookCallback.tsx:29 🔄 Provider token refreshed, updating...
 authStore.ts:744 🔄 Auth state changed: INITIAL_SESSION
@@ -20,7 +21,7 @@ FacebookCallback.tsx:64 ✅ Supabase session established
 FacebookCallback.tsx:65    User ID (UUID): 7e631172-2287-4d95-994c-53a5c61a3af8
 FacebookCallback.tsx:66    Email: kamran@888intelligence.org
 FacebookCallback.tsx:79 ✅ Provider token extracted
-FacebookCallback.tsx:80    Token prefix: EAAUmaHNHeCcBQUwGmpu...
+FacebookCallback.tsx:80    Token prefix: EAAUmaHNHeCcBQQzVMxD...
 FacebookCallback.tsx:90 🔄 Calling Instagram token exchange...
 tokenRefreshService.ts:216    Found 0 tokens to refresh
 tokenRefreshService.ts:251 ✅ Token refresh job complete
@@ -28,31 +29,31 @@ tokenRefreshService.ts:252    Succeeded: 0
 tokenRefreshService.ts:253    Failed: 0
 tokenRefreshService.ts:254    Require Reconnect: 0
 FacebookCallback.tsx:114 ✅ Instagram token exchange successful
-FacebookCallback.tsx:115    Business Account ID: undefined
-FacebookCallback.tsx:116    Instagram ID: undefined
-FacebookCallback.tsx:117    Page: undefined
+FacebookCallback.tsx:115    Business Account ID: 0882b710-4258-47cf-85c8-1fa82a3de763
+FacebookCallback.tsx:116    Instagram ID: 17841475450533073
+FacebookCallback.tsx:117    Page: Archive 555
 FacebookCallback.tsx:124 🔍 Validating granted scopes...
 FacebookCallback.tsx:139 ✅ Granted scopes: (14) ['email', 'read_insights', 'pages_show_list', 'business_management', 'instagram_basic', 'instagram_manage_comments', 'instagram_manage_insights', 'instagram_content_publish', 'instagram_manage_messages', 'pages_read_engagement', 'pages_manage_metadata', 'pages_read_user_content', 'pages_manage_posts', 'public_profile']
 FacebookCallback.tsx:140    Total granted: 14
 FacebookCallback.tsx:161 ⚠️ User declined scopes: ['pages_manage_engagement']
 (anonymous) @ FacebookCallback.tsx:161
-i @ index-cRFGTfz1.js:2
+i @ index-Cu1zO5kg.js:2
 Promise.then
-f @ index-cRFGTfz1.js:2
-i @ index-cRFGTfz1.js:2
+f @ index-Cu1zO5kg.js:2
+i @ index-Cu1zO5kg.js:2
 Promise.then
-f @ index-cRFGTfz1.js:2
-i @ index-cRFGTfz1.js:2
+f @ index-Cu1zO5kg.js:2
+i @ index-Cu1zO5kg.js:2
 Promise.then
-f @ index-cRFGTfz1.js:2
-i @ index-cRFGTfz1.js:2
+f @ index-Cu1zO5kg.js:2
+i @ index-Cu1zO5kg.js:2
 Promise.then
-f @ index-cRFGTfz1.js:2
-i @ index-cRFGTfz1.js:2
+f @ index-Cu1zO5kg.js:2
+i @ index-Cu1zO5kg.js:2
 Promise.then
-f @ index-cRFGTfz1.js:2
-(anonymous) @ index-cRFGTfz1.js:2
-v @ index-cRFGTfz1.js:2
+f @ index-Cu1zO5kg.js:2
+(anonymous) @ index-Cu1zO5kg.js:2
+v @ index-Cu1zO5kg.js:2
 (anonymous) @ FacebookCallback.tsx:43
 al @ react-dom.production.min.js:243
 Zt @ react-dom.production.min.js:285
@@ -61,23 +62,23 @@ E @ scheduler.production.min.js:13
 sn @ scheduler.production.min.js:14
 FacebookCallback.tsx:162    Impact: Features requiring these scopes will be unavailable
 (anonymous) @ FacebookCallback.tsx:162
-i @ index-cRFGTfz1.js:2
+i @ index-Cu1zO5kg.js:2
 Promise.then
-f @ index-cRFGTfz1.js:2
-i @ index-cRFGTfz1.js:2
+f @ index-Cu1zO5kg.js:2
+i @ index-Cu1zO5kg.js:2
 Promise.then
-f @ index-cRFGTfz1.js:2
-i @ index-cRFGTfz1.js:2
+f @ index-Cu1zO5kg.js:2
+i @ index-Cu1zO5kg.js:2
 Promise.then
-f @ index-cRFGTfz1.js:2
-i @ index-cRFGTfz1.js:2
+f @ index-Cu1zO5kg.js:2
+i @ index-Cu1zO5kg.js:2
 Promise.then
-f @ index-cRFGTfz1.js:2
-i @ index-cRFGTfz1.js:2
+f @ index-Cu1zO5kg.js:2
+i @ index-Cu1zO5kg.js:2
 Promise.then
-f @ index-cRFGTfz1.js:2
-(anonymous) @ index-cRFGTfz1.js:2
-v @ index-cRFGTfz1.js:2
+f @ index-Cu1zO5kg.js:2
+(anonymous) @ index-Cu1zO5kg.js:2
+v @ index-Cu1zO5kg.js:2
 (anonymous) @ FacebookCallback.tsx:43
 al @ react-dom.production.min.js:243
 Zt @ react-dom.production.min.js:285
@@ -85,28 +86,14 @@ Zt @ react-dom.production.min.js:285
 E @ scheduler.production.min.js:13
 sn @ scheduler.production.min.js:14
 FacebookCallback.tsx:178 ✅ All required scopes granted
-authStore.ts:695 📦 Setting business account in authStore: {businessAccountId: undefined, instagramBusinessId: undefined, pageId: undefined, pageName: undefined}
+authStore.ts:695 📦 Setting business account in authStore: {businessAccountId: '0882b710-4258-47cf-85c8-1fa82a3de763', instagramBusinessId: '17841475450533073', pageId: '632688196603930', pageName: 'Archive 555'}
 authStore.ts:704 ✅ Business account data stored in authStore
 authStore.ts:312 ✅ Legacy login successful: Kamesh Intel
 FacebookCallback.tsx:209 ✅ Auth store updated
 FacebookCallback.tsx:236 ✅ Consent persisted to database
 FacebookCallback.tsx:250 ✅ OAuth flow complete, redirecting to dashboard
-realtimeService.ts:73 ⚠️ Skipping real-time polling - no Instagram Business Account connected yet
-startPolling @ realtimeService.ts:73
-(anonymous) @ realtimeService.ts:290
-al @ react-dom.production.min.js:243
-Zt @ react-dom.production.min.js:285
-(anonymous) @ react-dom.production.min.js:281
-E @ scheduler.production.min.js:13
-sn @ scheduler.production.min.js:14
-realtimeService.ts:74    Polling will start automatically once account is connected
-startPolling @ realtimeService.ts:74
-(anonymous) @ realtimeService.ts:290
-al @ react-dom.production.min.js:243
-Zt @ react-dom.production.min.js:285
-(anonymous) @ react-dom.production.min.js:281
-E @ scheduler.production.min.js:13
-sn @ scheduler.production.min.js:14
+realtimeService.ts:78 ✅ Business Account ID found: 0882b710-4258-47cf-85c8-1fa82a3de763
+realtimeService.ts:83 🚀 Starting real-time polling every 3000 ms
 realtimeService.ts:130 👂 Subscribed to any events
 useInstagramAccount.ts:46 🔍 Fetching business accounts for UUID: 7e631172-2287-4d95-994c-53a5c61a3af8
 useTokenValidation.ts:110 [Token Validation] Skipping validation - no user or businessAccountId
@@ -129,7 +116,7 @@ useInstagramAccount.ts:52 📦 Raw API response: {
       "media_count": 0,
       "is_connected": true,
       "connection_status": "active",
-      "last_sync_at": "2026-01-11T15:24:01.659+00:00",
+      "last_sync_at": "2026-01-19T17:48:27.02+00:00",
       "category": null,
       "contact_email": null,
       "phone_number": null,
@@ -137,7 +124,7 @@ useInstagramAccount.ts:52 📦 Raw API response: {
       "granted_permissions": [],
       "required_permissions": [],
       "created_at": "2026-01-09T08:54:42.522729+00:00",
-      "updated_at": "2026-01-11T15:24:01.837955+00:00"
+      "updated_at": "2026-01-19T17:48:27.26644+00:00"
     }
   ],
   "count": 1
@@ -146,8 +133,8 @@ useInstagramAccount.ts:74 ✅ Found 1 Instagram account(s)
 useTokenValidation.ts:130 [Token Validation] Validating token for user: 7e631172-2287-4d95-994c-53a5c61a3af8
 useTokenValidation.ts:133  POST https://api.888intelligenceautomation.in/api/instagram/validate-token 500 (Internal Server Error)
 (anonymous) @ useTokenValidation.ts:133
-(anonymous) @ user-pages-CTvFpyL7.js:1
-T @ user-pages-CTvFpyL7.js:1
+(anonymous) @ user-pages-BjNfP3CQ.js:1
+T @ user-pages-BjNfP3CQ.js:1
 (anonymous) @ useTokenValidation.ts:107
 (anonymous) @ useTokenValidation.ts:216
 al @ react-dom.production.min.js:243
@@ -181,71 +168,10 @@ Zt @ react-dom.production.min.js:285
 E @ scheduler.production.min.js:13
 sn @ scheduler.production.min.js:14
 useTokenValidation.ts:184 [Token Validation] ❌ Validation error: Internal server error during token validation
-(anonymous) @ useTokenValidation.ts:184
-o @ user-pages-CTvFpyL7.js:1
-Promise.then
-c @ user-pages-CTvFpyL7.js:1
-o @ user-pages-CTvFpyL7.js:1
-Promise.then
-c @ user-pages-CTvFpyL7.js:1
-(anonymous) @ user-pages-CTvFpyL7.js:1
-T @ user-pages-CTvFpyL7.js:1
-(anonymous) @ useTokenValidation.ts:107
-(anonymous) @ useTokenValidation.ts:216
-al @ react-dom.production.min.js:243
-Zt @ react-dom.production.min.js:285
-Rd @ react-dom.production.min.js:282
-wt @ react-dom.production.min.js:280
-Zi @ react-dom.production.min.js:272
-vt @ react-dom.production.min.js:127
-(anonymous) @ react-dom.production.min.js:266
-setTimeout
-is @ notifyManager.js:2
-o @ notifyManager.js:26
-batch @ notifyManager.js:44
-X @ query.js:375
-setData @ query.js:53
-(anonymous) @ query.js:271
-a @ 4-query-CqcCI7W6.js:1
-Promise.then
-h @ 4-query-CqcCI7W6.js:1
-(anonymous) @ 4-query-CqcCI7W6.js:1
-ct @ 4-query-CqcCI7W6.js:1
-fetch @ query.js:157
-At @ queryObserver.js:175
-onSubscribe @ queryObserver.js:51
-subscribe @ subscribable.js:9
-(anonymous) @ useBaseQuery.js:58
-_a @ react-dom.production.min.js:167
-al @ react-dom.production.min.js:243
-Zt @ react-dom.production.min.js:285
-(anonymous) @ react-dom.production.min.js:281
-E @ scheduler.production.min.js:13
-sn @ scheduler.production.min.js:14
-useInstagramProfile.ts:77 ✅ Profile fetched: archve.001
-react-dom.production.min.js:24 Error: <polyline> attribute points: Expected number, "0%,92.38095238095…".
-eo @ react-dom.production.min.js:24
-Ed @ react-dom.production.min.js:230
-uf @ react-dom.production.min.js:280
-lf @ react-dom.production.min.js:279
-Ld @ react-dom.production.min.js:279
-tf @ react-dom.production.min.js:267
-E @ scheduler.production.min.js:13
-sn @ scheduler.production.min.js:14
-react-dom.production.min.js:24 Error: <polyline> attribute points: Expected number, "0%,33.33333333333…".
-eo @ react-dom.production.min.js:24
-Ed @ react-dom.production.min.js:230
-uf @ react-dom.production.min.js:280
-lf @ react-dom.production.min.js:279
-Ld @ react-dom.production.min.js:279
-tf @ react-dom.production.min.js:267
-E @ scheduler.production.min.js:13
-sn @ scheduler.production.min.js:14
-realtimeService.ts:140 🔇 Unsubscribed from any events
 useComments.ts:71  GET https://api.888intelligenceautomation.in/api/instagram/comments/17841475450533073?userId=7e631172-2287-4d95-994c-53a5c61a3af8&businessAccountId=0882b710-4258-47cf-85c8-1fa82a3de763 400 (Bad Request)
 (anonymous) @ useComments.ts:71
-(anonymous) @ CommentManagement-DOWJVoOD.js:1
-j @ CommentManagement-DOWJVoOD.js:1
+(anonymous) @ CommentManagement-CIKJXfIR.js:1
+j @ CommentManagement-CIKJXfIR.js:1
 (anonymous) @ useComments.ts:51
 (anonymous) @ useComments.ts:152
 al @ react-dom.production.min.js:243
@@ -256,374 +182,4 @@ sn @ scheduler.production.min.js:14
 useComments.ts:93 ❌ Comments fetch failed: Error: (#100) Tried accessing nonexisting field (comments) on node type (IGUser)
     at useComments.ts:80:15
     at Generator.next (<anonymous>)
-    at d (CommentManagement-DOWJVoOD.js:1:54)
-(anonymous) @ useComments.ts:93
-d @ CommentManagement-DOWJVoOD.js:1
-Promise.then
-r @ CommentManagement-DOWJVoOD.js:1
-d @ CommentManagement-DOWJVoOD.js:1
-Promise.then
-r @ CommentManagement-DOWJVoOD.js:1
-(anonymous) @ CommentManagement-DOWJVoOD.js:1
-j @ CommentManagement-DOWJVoOD.js:1
-(anonymous) @ useComments.ts:51
-(anonymous) @ useComments.ts:152
-al @ react-dom.production.min.js:243
-Zt @ react-dom.production.min.js:285
-(anonymous) @ react-dom.production.min.js:281
-E @ scheduler.production.min.js:13
-sn @ scheduler.production.min.js:14
-useInstagramAccount.ts:46 🔍 Fetching business accounts for UUID: 7e631172-2287-4d95-994c-53a5c61a3af8
-authStore.ts:744 🔄 Auth state changed: TOKEN_REFRESHED
-useInstagramAccount.ts:52 📦 Raw API response: {
-  "success": true,
-  "data": [
-    {
-      "id": "0882b710-4258-47cf-85c8-1fa82a3de763",
-      "user_id": "7e631172-2287-4d95-994c-53a5c61a3af8",
-      "instagram_business_id": "17841475450533073",
-      "instagram_user_id": null,
-      "name": "Archive 555",
-      "username": "Archive 555",
-      "account_type": "business",
-      "biography": null,
-      "website": null,
-      "profile_picture_url": null,
-      "followers_count": 0,
-      "following_count": 0,
-      "media_count": 0,
-      "is_connected": true,
-      "connection_status": "active",
-      "last_sync_at": "2026-01-11T15:24:01.659+00:00",
-      "category": null,
-      "contact_email": null,
-      "phone_number": null,
-      "address": null,
-      "granted_permissions": [],
-      "required_permissions": [],
-      "created_at": "2026-01-09T08:54:42.522729+00:00",
-      "updated_at": "2026-01-11T15:24:01.837955+00:00"
-    }
-  ],
-  "count": 1
-}
-useInstagramAccount.ts:74 ✅ Found 1 Instagram account(s)
-useInstagramAccount.ts:46 🔍 Fetching business accounts for UUID: 7e631172-2287-4d95-994c-53a5c61a3af8
-helpers.js:87  POST https://uromexjprcrjfmhkmgxa.supabase.co/auth/v1/token?grant_type=refresh_token net::ERR_NETWORK_CHANGED
-(anonymous) @ helpers.js:87
-(anonymous) @ fetch.js:101
-(anonymous) @ 5-supabase-D1hm23dh.js:1
-u @ 5-supabase-D1hm23dh.js:1
-Ir @ fetch.js:97
-(anonymous) @ fetch.js:91
-(anonymous) @ 5-supabase-D1hm23dh.js:1
-u @ 5-supabase-D1hm23dh.js:1
-y @ fetch.js:77
-(anonymous) @ GoTrueClient.js:1574
-(anonymous) @ 5-supabase-D1hm23dh.js:1
-u @ 5-supabase-D1hm23dh.js:1
-(anonymous) @ GoTrueClient.js:1569
-(anonymous) @ helpers.js:177
-(anonymous) @ 5-supabase-D1hm23dh.js:1
-u @ 5-supabase-D1hm23dh.js:1
-(anonymous) @ helpers.js:174
-br @ helpers.js:171
-(anonymous) @ GoTrueClient.js:1569
-(anonymous) @ 5-supabase-D1hm23dh.js:1
-u @ 5-supabase-D1hm23dh.js:1
-_refreshAccessToken @ GoTrueClient.js:1563
-(anonymous) @ GoTrueClient.js:1727
-(anonymous) @ 5-supabase-D1hm23dh.js:1
-u @ 5-supabase-D1hm23dh.js:1
-_callRefreshToken @ GoTrueClient.js:1714
-(anonymous) @ GoTrueClient.js:1045
-n @ 5-supabase-D1hm23dh.js:1
-Promise.then
-a @ 5-supabase-D1hm23dh.js:1
-(anonymous) @ 5-supabase-D1hm23dh.js:1
-u @ 5-supabase-D1hm23dh.js:1
-__loadSession @ GoTrueClient.js:988
-(anonymous) @ GoTrueClient.js:976
-(anonymous) @ 5-supabase-D1hm23dh.js:1
-u @ 5-supabase-D1hm23dh.js:1
-_useSession @ GoTrueClient.js:972
-(anonymous) @ GoTrueClient.js:904
-(anonymous) @ 5-supabase-D1hm23dh.js:1
-u @ 5-supabase-D1hm23dh.js:1
-(anonymous) @ GoTrueClient.js:903
-(anonymous) @ GoTrueClient.js:938
-(anonymous) @ 5-supabase-D1hm23dh.js:1
-u @ 5-supabase-D1hm23dh.js:1
-(anonymous) @ GoTrueClient.js:934
-(anonymous) @ locks.js:89
-(anonymous) @ 5-supabase-D1hm23dh.js:1
-u @ 5-supabase-D1hm23dh.js:1
-(anonymous) @ locks.js:83
-fetch.js:104 TypeError: Failed to fetch
-    at helpers.js:87:25
-    at fetch.js:101:24
-    at Generator.next (<anonymous>)
-    at 5-supabase-D1hm23dh.js:1:196
-    at new Promise (<anonymous>)
-    at u (5-supabase-D1hm23dh.js:1:16)
-    at Ir (fetch.js:97:80)
-    at fetch.js:91:24
-    at Generator.next (<anonymous>)
-    at 5-supabase-D1hm23dh.js:1:196
-(anonymous) @ fetch.js:104
-o @ 5-supabase-D1hm23dh.js:1
-Promise.then
-a @ 5-supabase-D1hm23dh.js:1
-(anonymous) @ 5-supabase-D1hm23dh.js:1
-u @ 5-supabase-D1hm23dh.js:1
-Ir @ fetch.js:97
-(anonymous) @ fetch.js:91
-(anonymous) @ 5-supabase-D1hm23dh.js:1
-u @ 5-supabase-D1hm23dh.js:1
-y @ fetch.js:77
-(anonymous) @ GoTrueClient.js:1574
-(anonymous) @ 5-supabase-D1hm23dh.js:1
-u @ 5-supabase-D1hm23dh.js:1
-(anonymous) @ GoTrueClient.js:1569
-(anonymous) @ helpers.js:177
-(anonymous) @ 5-supabase-D1hm23dh.js:1
-u @ 5-supabase-D1hm23dh.js:1
-(anonymous) @ helpers.js:174
-br @ helpers.js:171
-(anonymous) @ GoTrueClient.js:1569
-(anonymous) @ 5-supabase-D1hm23dh.js:1
-u @ 5-supabase-D1hm23dh.js:1
-_refreshAccessToken @ GoTrueClient.js:1563
-(anonymous) @ GoTrueClient.js:1727
-(anonymous) @ 5-supabase-D1hm23dh.js:1
-u @ 5-supabase-D1hm23dh.js:1
-_callRefreshToken @ GoTrueClient.js:1714
-(anonymous) @ GoTrueClient.js:1045
-n @ 5-supabase-D1hm23dh.js:1
-Promise.then
-a @ 5-supabase-D1hm23dh.js:1
-(anonymous) @ 5-supabase-D1hm23dh.js:1
-u @ 5-supabase-D1hm23dh.js:1
-__loadSession @ GoTrueClient.js:988
-(anonymous) @ GoTrueClient.js:976
-(anonymous) @ 5-supabase-D1hm23dh.js:1
-u @ 5-supabase-D1hm23dh.js:1
-_useSession @ GoTrueClient.js:972
-(anonymous) @ GoTrueClient.js:904
-(anonymous) @ 5-supabase-D1hm23dh.js:1
-u @ 5-supabase-D1hm23dh.js:1
-(anonymous) @ GoTrueClient.js:903
-(anonymous) @ GoTrueClient.js:938
-(anonymous) @ 5-supabase-D1hm23dh.js:1
-u @ 5-supabase-D1hm23dh.js:1
-(anonymous) @ GoTrueClient.js:934
-(anonymous) @ locks.js:89
-(anonymous) @ 5-supabase-D1hm23dh.js:1
-u @ 5-supabase-D1hm23dh.js:1
-(anonymous) @ locks.js:83
-useInstagramAccount.ts:52 📦 Raw API response: {
-  "success": true,
-  "data": [],
-  "count": 0
-}
-useInstagramAccount.ts:60 ⚠️ No Instagram accounts connected
-(anonymous) @ useInstagramAccount.ts:60
-i @ components-J7JCp4d0.js:1
-Promise.then
-s @ components-J7JCp4d0.js:1
-(anonymous) @ components-J7JCp4d0.js:1
-ue @ components-J7JCp4d0.js:1
-queryFn @ useInstagramAccount.ts:41
-a @ query.js:215
-D @ retryer.js:77
-start @ retryer.js:119
-(anonymous) @ query.js:262
-(anonymous) @ 4-query-CqcCI7W6.js:1
-ct @ 4-query-CqcCI7W6.js:1
-fetch @ query.js:157
-At @ queryObserver.js:175
-fetch @ queryObserver.js:165
-refetch @ queryObserver.js:155
-onOnline @ query.js:123
-(anonymous) @ queryCache.js:89
-(anonymous) @ queryCache.js:88
-batch @ notifyManager.js:40
-onOnline @ queryCache.js:87
-(anonymous) @ queryClient.js:46
-a @ 4-query-CqcCI7W6.js:1
-Promise.then
-h @ 4-query-CqcCI7W6.js:1
-(anonymous) @ 4-query-CqcCI7W6.js:1
-ct @ 4-query-CqcCI7W6.js:1
-(anonymous) @ queryClient.js:43
-(anonymous) @ onlineManager.js:45
-setOnline @ onlineManager.js:44
-s @ onlineManager.js:12
-useInstagramAccount.ts:61    Possible causes:
-(anonymous) @ useInstagramAccount.ts:61
-i @ components-J7JCp4d0.js:1
-Promise.then
-s @ components-J7JCp4d0.js:1
-(anonymous) @ components-J7JCp4d0.js:1
-ue @ components-J7JCp4d0.js:1
-queryFn @ useInstagramAccount.ts:41
-a @ query.js:215
-D @ retryer.js:77
-start @ retryer.js:119
-(anonymous) @ query.js:262
-(anonymous) @ 4-query-CqcCI7W6.js:1
-ct @ 4-query-CqcCI7W6.js:1
-fetch @ query.js:157
-At @ queryObserver.js:175
-fetch @ queryObserver.js:165
-refetch @ queryObserver.js:155
-onOnline @ query.js:123
-(anonymous) @ queryCache.js:89
-(anonymous) @ queryCache.js:88
-batch @ notifyManager.js:40
-onOnline @ queryCache.js:87
-(anonymous) @ queryClient.js:46
-a @ 4-query-CqcCI7W6.js:1
-Promise.then
-h @ 4-query-CqcCI7W6.js:1
-(anonymous) @ 4-query-CqcCI7W6.js:1
-ct @ 4-query-CqcCI7W6.js:1
-(anonymous) @ queryClient.js:43
-(anonymous) @ onlineManager.js:45
-setOnline @ onlineManager.js:44
-s @ onlineManager.js:12
-useInstagramAccount.ts:62    1. Missing OAuth scopes (business_management, pages_manage_metadata)
-(anonymous) @ useInstagramAccount.ts:62
-i @ components-J7JCp4d0.js:1
-Promise.then
-s @ components-J7JCp4d0.js:1
-(anonymous) @ components-J7JCp4d0.js:1
-ue @ components-J7JCp4d0.js:1
-queryFn @ useInstagramAccount.ts:41
-a @ query.js:215
-D @ retryer.js:77
-start @ retryer.js:119
-(anonymous) @ query.js:262
-(anonymous) @ 4-query-CqcCI7W6.js:1
-ct @ 4-query-CqcCI7W6.js:1
-fetch @ query.js:157
-At @ queryObserver.js:175
-fetch @ queryObserver.js:165
-refetch @ queryObserver.js:155
-onOnline @ query.js:123
-(anonymous) @ queryCache.js:89
-(anonymous) @ queryCache.js:88
-batch @ notifyManager.js:40
-onOnline @ queryCache.js:87
-(anonymous) @ queryClient.js:46
-a @ 4-query-CqcCI7W6.js:1
-Promise.then
-h @ 4-query-CqcCI7W6.js:1
-(anonymous) @ 4-query-CqcCI7W6.js:1
-ct @ 4-query-CqcCI7W6.js:1
-(anonymous) @ queryClient.js:43
-(anonymous) @ onlineManager.js:45
-setOnline @ onlineManager.js:44
-s @ onlineManager.js:12
-useInstagramAccount.ts:63    2. Instagram Business Account not linked to Facebook Page
-(anonymous) @ useInstagramAccount.ts:63
-i @ components-J7JCp4d0.js:1
-Promise.then
-s @ components-J7JCp4d0.js:1
-(anonymous) @ components-J7JCp4d0.js:1
-ue @ components-J7JCp4d0.js:1
-queryFn @ useInstagramAccount.ts:41
-a @ query.js:215
-D @ retryer.js:77
-start @ retryer.js:119
-(anonymous) @ query.js:262
-(anonymous) @ 4-query-CqcCI7W6.js:1
-ct @ 4-query-CqcCI7W6.js:1
-fetch @ query.js:157
-At @ queryObserver.js:175
-fetch @ queryObserver.js:165
-refetch @ queryObserver.js:155
-onOnline @ query.js:123
-(anonymous) @ queryCache.js:89
-(anonymous) @ queryCache.js:88
-batch @ notifyManager.js:40
-onOnline @ queryCache.js:87
-(anonymous) @ queryClient.js:46
-a @ 4-query-CqcCI7W6.js:1
-Promise.then
-h @ 4-query-CqcCI7W6.js:1
-(anonymous) @ 4-query-CqcCI7W6.js:1
-ct @ 4-query-CqcCI7W6.js:1
-(anonymous) @ queryClient.js:43
-(anonymous) @ onlineManager.js:45
-setOnline @ onlineManager.js:44
-s @ onlineManager.js:12
-useInstagramAccount.ts:64    3. Token exchange failed - check backend logs
-(anonymous) @ useInstagramAccount.ts:64
-i @ components-J7JCp4d0.js:1
-Promise.then
-s @ components-J7JCp4d0.js:1
-(anonymous) @ components-J7JCp4d0.js:1
-ue @ components-J7JCp4d0.js:1
-queryFn @ useInstagramAccount.ts:41
-a @ query.js:215
-D @ retryer.js:77
-start @ retryer.js:119
-(anonymous) @ query.js:262
-(anonymous) @ 4-query-CqcCI7W6.js:1
-ct @ 4-query-CqcCI7W6.js:1
-fetch @ query.js:157
-At @ queryObserver.js:175
-fetch @ queryObserver.js:165
-refetch @ queryObserver.js:155
-onOnline @ query.js:123
-(anonymous) @ queryCache.js:89
-(anonymous) @ queryCache.js:88
-batch @ notifyManager.js:40
-onOnline @ queryCache.js:87
-(anonymous) @ queryClient.js:46
-a @ 4-query-CqcCI7W6.js:1
-Promise.then
-h @ 4-query-CqcCI7W6.js:1
-(anonymous) @ 4-query-CqcCI7W6.js:1
-ct @ 4-query-CqcCI7W6.js:1
-(anonymous) @ queryClient.js:43
-(anonymous) @ onlineManager.js:45
-setOnline @ onlineManager.js:44
-s @ onlineManager.js:12
-useInstagramAccount.ts:65    4. User declined required permissions during OAuth
-(anonymous) @ useInstagramAccount.ts:65
-i @ components-J7JCp4d0.js:1
-Promise.then
-s @ components-J7JCp4d0.js:1
-(anonymous) @ components-J7JCp4d0.js:1
-ue @ components-J7JCp4d0.js:1
-queryFn @ useInstagramAccount.ts:41
-a @ query.js:215
-D @ retryer.js:77
-start @ retryer.js:119
-(anonymous) @ query.js:262
-(anonymous) @ 4-query-CqcCI7W6.js:1
-ct @ 4-query-CqcCI7W6.js:1
-fetch @ query.js:157
-At @ queryObserver.js:175
-fetch @ queryObserver.js:165
-refetch @ queryObserver.js:155
-onOnline @ query.js:123
-(anonymous) @ queryCache.js:89
-(anonymous) @ queryCache.js:88
-batch @ notifyManager.js:40
-onOnline @ queryCache.js:87
-(anonymous) @ queryClient.js:46
-a @ 4-query-CqcCI7W6.js:1
-Promise.then
-h @ 4-query-CqcCI7W6.js:1
-(anonymous) @ 4-query-CqcCI7W6.js:1
-ct @ 4-query-CqcCI7W6.js:1
-(anonymous) @ queryClient.js:43
-(anonymous) @ onlineManager.js:45
-setOnline @ onlineManager.js:44
-s @ onlineManager.js:12
-useInstagramAccount.ts:46 🔍 Fetching business accounts for UUID: 7e631172-2287-4d95-994c-53a5c61a3af8
-authStore.ts:744 🔄 Auth state changed: TOKEN_REFRESHED
-authStore.ts:744 🔄 Auth state changed: SIGNED_IN
+    at d (CommentManagement-CIKJXfIR.js:1:54)

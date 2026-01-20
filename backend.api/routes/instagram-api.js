@@ -639,6 +639,37 @@ router.get('/comments/:mediaId', async (req, res) => {
         isAccountLevelFetch = true;
         console.log(`📊 Fetching comments for all media (${mediaItems.length} items)`);
       }
+    } else if (!mediaItems || mediaItems.length === 0) {
+      // ===== FIX: Handle case where no media exists =====
+      // When account has no media, return empty result instead of trying to fetch from IGUser ID
+      const responseTime = Date.now() - requestStartTime;
+
+      console.log('⚠️ No media items found for this account - returning empty comments array');
+
+      await logAudit('instagram_comments_fetched', userId, {
+        action: 'fetch_comments_no_media',
+        business_account_id: businessAccountId,
+        media_id: mediaId,
+        comment_count: 0,
+        response_time_ms: responseTime
+      });
+
+      return res.json({
+        success: true,
+        data: [],
+        message: 'No media items found for this account. Please sync your Instagram media first.',
+        paging: {},
+        rate_limit: {
+          remaining: req.rateLimitRemaining || 'unknown',
+          limit: 200,
+          window: '1 hour'
+        },
+        meta: {
+          total_comments: 0,
+          media_processed: 0,
+          response_time_ms: responseTime
+        }
+      });
     }
 
     // ===== GRAPH API CALL =====
@@ -2708,14 +2739,7 @@ router.post('/validate-token', async (req, res) => {
     // ===== STEP 1: Fetch credentials from database =====
     const { data: credentials, error: fetchError } = await supabase
       .from('instagram_credentials')
-      .select(`
-        access_token_encrypted,
-        expires_at,
-        is_active,
-        instagram_business_accounts!inner (
-          instagram_business_id
-        )
-      `)
+      .select('*')
       .eq('user_id', userId)
       .eq('business_account_id', businessAccountId)
       .eq('token_type', 'page')
@@ -2729,6 +2753,23 @@ router.post('/validate-token', async (req, res) => {
         status: 'not_found',
         error: 'Credentials not found for this user',
         code: 'CREDENTIALS_NOT_FOUND'
+      });
+    }
+
+    // ===== STEP 1.5: Fetch instagram_business_id separately =====
+    const { data: businessAccount, error: businessError } = await supabase
+      .from('instagram_business_accounts')
+      .select('instagram_business_id')
+      .eq('id', businessAccountId)
+      .single();
+
+    if (businessError || !businessAccount) {
+      console.error('[Token Validation] ❌ Instagram business account not found:', businessError?.message);
+      return res.status(404).json({
+        success: false,
+        status: 'not_found',
+        error: 'Instagram business account not linked to credentials',
+        code: 'BUSINESS_ACCOUNT_NOT_LINKED'
       });
     }
 
@@ -2750,18 +2791,8 @@ router.post('/validate-token', async (req, res) => {
 
     console.log('[Token Validation] ✅ Token decrypted successfully');
 
-    // ===== STEP 3: Get instagram_business_id from joined data =====
-    if (!credentials?.instagram_business_accounts?.instagram_business_id) {
-      console.error('[Token Validation] ❌ Instagram business account not linked');
-      return res.status(404).json({
-        success: false,
-        status: 'not_found',
-        error: 'Instagram business account not linked to credentials',
-        code: 'BUSINESS_ACCOUNT_NOT_LINKED'
-      });
-    }
-
-    const instagramBusinessId = credentials.instagram_business_accounts.instagram_business_id;
+    // ===== STEP 3: Use instagram_business_id from separate query =====
+    const instagramBusinessId = businessAccount.instagram_business_id;
 
     // ===== STEP 4: Validate token by calling Meta's /me endpoint =====
     // This is a lightweight "ping" to check if the token is still valid
