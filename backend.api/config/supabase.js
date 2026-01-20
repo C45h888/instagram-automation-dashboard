@@ -435,20 +435,24 @@ async function logAudit(eventType, userId = null, eventData = {}, req = null) {
 // API REQUEST LOGGING (For monitoring and billing)
 // =============================================================================
 
-async function logApiRequest(userId, endpoint, method, responseTime, statusCode, success) {
+async function logApiRequest(userId, endpoint, method, responseTime, statusCode, success, businessAccountId = null) {
   try {
     const admin = getSupabaseAdmin();
     if (!admin) {
       console.warn('⚠️  Cannot log API request - database not connected');
       return;
     }
-    
+
     const hourBucket = new Date();
     hourBucket.setMinutes(0, 0, 0);
-    
-    await admin.from('api_usage').upsert({
+
+    // Use sentinel UUID for NULL business_account_id to make unique constraint work with upserts
+    // PostgreSQL treats each NULL as distinct, breaking upsert logic
+    const SENTINEL_UUID = '00000000-0000-0000-0000-000000000000';
+
+    const { error } = await admin.from('api_usage').upsert({
       user_id: userId,
-      business_account_id: null,  // FIXED: Added to match 5-column unique constraint
+      business_account_id: businessAccountId || SENTINEL_UUID,
       endpoint: endpoint,
       method: method,
       response_time_ms: responseTime,
@@ -458,10 +462,15 @@ async function logApiRequest(userId, endpoint, method, responseTime, statusCode,
       request_count: 1,
       created_at: new Date().toISOString()
     }, {
-      onConflict: 'user_id,business_account_id,endpoint,method,hour_bucket'  // FIXED: 5 columns to match constraint
+      onConflict: 'user_id,business_account_id,endpoint,method,hour_bucket',
+      ignoreDuplicates: false  // Update existing rows
     });
+
+    if (error) {
+      console.error('API logging error:', error.message, error.details);
+    }
   } catch (error) {
-    console.error('API logging error:', error);
+    console.error('API logging exception:', error.message);
   }
 }
 

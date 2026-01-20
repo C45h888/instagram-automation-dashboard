@@ -2747,12 +2747,23 @@ router.post('/validate-token', async (req, res) => {
       .single();
 
     if (fetchError || !credentials) {
-      console.error('[Token Validation] ❌ Credentials not found:', fetchError?.message);
+      console.error('[Token Validation] ❌ Credentials not found:', {
+        error: fetchError?.message,
+        details: fetchError?.details,
+        hint: fetchError?.hint,
+        code: fetchError?.code,
+        userId,
+        businessAccountId
+      });
       return res.status(404).json({
         success: false,
         status: 'not_found',
         error: 'Credentials not found for this user',
-        code: 'CREDENTIALS_NOT_FOUND'
+        code: 'CREDENTIALS_NOT_FOUND',
+        details: process.env.NODE_ENV === 'development' ? {
+          error: fetchError?.message,
+          hint: fetchError?.hint
+        } : undefined
       });
     }
 
@@ -2764,12 +2775,19 @@ router.post('/validate-token', async (req, res) => {
       .single();
 
     if (businessError || !businessAccount) {
-      console.error('[Token Validation] ❌ Instagram business account not found:', businessError?.message);
+      console.error('[Token Validation] ❌ Instagram business account not found:', {
+        error: businessError?.message,
+        details: businessError?.details,
+        businessAccountId
+      });
       return res.status(404).json({
         success: false,
         status: 'not_found',
         error: 'Instagram business account not linked to credentials',
-        code: 'BUSINESS_ACCOUNT_NOT_LINKED'
+        code: 'BUSINESS_ACCOUNT_NOT_LINKED',
+        details: process.env.NODE_ENV === 'development' ? {
+          error: businessError?.message
+        } : undefined
       });
     }
 
@@ -2780,12 +2798,20 @@ router.post('/validate-token', async (req, res) => {
       });
 
     if (decryptError || !decryptedToken) {
-      console.error('[Token Validation] ❌ Token decryption failed:', decryptError);
+      console.error('[Token Validation] ❌ Token decryption failed:', {
+        error: decryptError?.message,
+        details: decryptError?.details,
+        hint: decryptError?.hint
+      });
       return res.status(500).json({
         success: false,
         status: 'error',
         error: 'Failed to decrypt access token',
-        code: 'DECRYPTION_FAILED'
+        code: 'DECRYPTION_FAILED',
+        details: process.env.NODE_ENV === 'development' ? {
+          error: decryptError?.message,
+          hint: decryptError?.hint
+        } : undefined
       });
     }
 
@@ -2794,9 +2820,26 @@ router.post('/validate-token', async (req, res) => {
     // ===== STEP 3: Use instagram_business_id from separate query =====
     const instagramBusinessId = businessAccount.instagram_business_id;
 
+    if (!instagramBusinessId) {
+      console.error('[Token Validation] ❌ Missing instagram_business_id');
+      return res.status(500).json({
+        success: false,
+        status: 'error',
+        error: 'Instagram business ID not found',
+        code: 'MISSING_BUSINESS_ID'
+      });
+    }
+
     // ===== STEP 4: Validate token by calling Meta's /me endpoint =====
     // This is a lightweight "ping" to check if the token is still valid
     const graphUrl = `https://graph.facebook.com/${GRAPH_API_VERSION}/${instagramBusinessId}`;
+
+    console.log('[Token Validation] 🔍 Calling Meta API:', {
+      url: graphUrl,
+      instagramBusinessId,
+      tokenLength: decryptedToken?.length,
+      hasToken: !!decryptedToken
+    });
 
     try {
       const response = await axios.get(graphUrl, {
@@ -2950,11 +2993,19 @@ router.post('/validate-token', async (req, res) => {
   } catch (error) {
     const responseTime = Date.now() - requestStartTime;
 
-    console.error('[Token Validation] ❌ Unexpected error:', error.message);
+    console.error('[Token Validation] ❌ Unexpected error:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+      code: error.code,
+      response: error.response?.data
+    });
 
     await logAudit('token_validation_error', req.body.userId, {
       action: 'validate_token',
       error: error.message,
+      error_name: error.name,
+      error_code: error.code,
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
       response_time_ms: responseTime
     });
@@ -2964,7 +3015,11 @@ router.post('/validate-token', async (req, res) => {
       status: 'error',
       error: 'Internal server error during token validation',
       code: 'INTERNAL_ERROR',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      details: process.env.NODE_ENV === 'development' ? {
+        message: error.message,
+        name: error.name,
+        code: error.code
+      } : undefined
     });
   }
 });
