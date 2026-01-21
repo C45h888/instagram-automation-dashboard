@@ -2722,6 +2722,9 @@ router.post('/validate-token', async (req, res) => {
   const requestStartTime = Date.now();
 
   try {
+    // ✅ Initialize Supabase client (was missing - caused 500 error)
+    const supabase = getSupabaseAdmin();
+
     const { userId, businessAccountId } = req.body;
 
     console.log('[Token Validation] Validating token for user:', userId);
