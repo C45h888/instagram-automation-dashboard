@@ -1,37 +1,93 @@
-POST https://api.888intelligenceautomation.in/api/instagram/validate-token 500 (Internal Server Error)
-(anonymous) @ useTokenValidation.ts:133
-(anonymous) @ user-pages-BjNfP3CQ.js:1
-T @ user-pages-BjNfP3CQ.js:1
-(anonymous) @ useTokenValidation.ts:107
-(anonymous) @ useTokenValidation.ts:216
-al @ react-dom.production.min.js:243
-Zt @ react-dom.production.min.js:285
-Rd @ react-dom.production.min.js:282
-wt @ react-dom.production.min.js:280
-Zi @ react-dom.production.min.js:272
-vt @ react-dom.production.min.js:127
-(anonymous) @ react-dom.production.min.js:266
-setTimeout
-is @ notifyManager.js:2
-o @ notifyManager.js:26
-batch @ notifyManager.js:44
-X @ query.js:375
-setData @ query.js:53
-(anonymous) @ query.js:271
-a @ 4-query-CqcCI7W6.js:1
-Promise.then
-h @ 4-query-CqcCI7W6.js:1
-(anonymous) @ 4-query-CqcCI7W6.js:1
-ct @ 4-query-CqcCI7W6.js:1
-fetch @ query.js:157
-At @ queryObserver.js:175
-onSubscribe @ queryObserver.js:51
-subscribe @ subscribable.js:9
-(anonymous) @ useBaseQuery.js:58
-_a @ react-dom.production.min.js:167
-al @ react-dom.production.min.js:243
-Zt @ react-dom.production.min.js:285
-(anonymous) @ react-dom.production.min.js:281
-E @ scheduler.production.min.js:13
-sn @ scheduler.production.min.js:14
-useTokenValidation.ts:184 [Token Validation] ❌ Validation error: Internal server error during token validation
+2026-01-22T10:22:24.004543154Z   npm audit fix --force
+2026-01-22T10:22:24.004544784Z 
+2026-01-22T10:22:24.004546974Z Run `npm audit` for details.
+2026-01-22T10:22:24.206134368Z 
+2026-01-22T10:22:24.206156798Z > instagram-automation-dashboard@0.0.0 build
+2026-01-22T10:22:24.206160088Z > npx vite build --config ./vite.config.ts
+2026-01-22T10:22:24.206162348Z 
+2026-01-22T10:22:24.662618453Z 
+2026-01-22T10:22:24.662642803Z 🔧 ========================================
+2026-01-22T10:22:24.662675054Z ✅ VITE CONFIG v2.4.0 LOADED
+2026-01-22T10:22:24.662681824Z ✅ React dedupe: ENABLED
+2026-01-22T10:22:24.662758176Z ✅ Chunk load order: FIXED (numeric prefixes)
+2026-01-22T10:22:24.662844948Z ✅ React alias: /opt/render/project/src/node_modules/react
+2026-01-22T10:22:24.662865578Z ========================================
+2026-01-22T10:22:24.662868948Z 
+2026-01-22T10:22:24.684161779Z vite v5.4.19 building for production...
+2026-01-22T10:22:24.734116333Z transforming...
+2026-01-22T10:22:24.965835812Z Browserslist: browsers data (caniuse-lite) is 7 months old. Please run:
+2026-01-22T10:22:24.965855752Z   npx update-browserslist-db@latest
+2026-01-22T10:22:24.965859002Z   Why you should do it regularly: https://github.com/browserslist/update-db#readme
+2026-01-22T10:22:26.408915034Z ✓ 63 modules transformed.
+2026-01-22T10:22:26.409706631Z x Build failed in 1.70s
+2026-01-22T10:22:26.409782923Z error during build:
+2026-01-22T10:22:26.409789393Z [vite:esbuild] Transform failed with 1 error:
+2026-01-22T10:22:26.409793213Z /opt/render/project/src/src/hooks/useInstagramInsights.ts:220:17: ERROR: Expected ">" but found "className"
+2026-01-22T10:22:26.409796673Z file: /opt/render/project/src/src/hooks/useInstagramInsights.ts:220:17
+2026-01-22T10:22:26.409799103Z 
+2026-01-22T10:22:26.409837824Z Expected ">" but found "className"
+2026-01-22T10:22:26.409841514Z 218|        changeLabel: 'vs previous 7 days',
+2026-01-22T10:22:26.409844314Z 219|        trend: trends.impressions.trend,
+2026-01-22T10:22:26.409847574Z 220|        icon: <Eye className="w-5 h-5" />,
+2026-01-22T10:22:26.409849404Z    |                   ^
+2026-01-22T10:22:26.409851084Z 221|        color: 'from-blue-500 to-cyan-500',
+2026-01-22T10:22:26.409852915Z 222|        tooltip: createTooltip(insights.impressions, 'impressions')
+2026-01-22T10:22:26.409854484Z 
+2026-01-22T10:22:26.409857024Z     at failureErrorWithLog (/opt/render/project/src/node_modules/esbuild/lib/main.js:1472:15)
+2026-01-22T10:22:26.409858835Z     at /opt/render/project/src/node_modules/esbuild/lib/main.js:755:50
+2026-01-22T10:22:26.409860935Z     at responseCallbacks.<computed> (/opt/render/project/src/node_modules/esbuild/lib/main.js:622:9)
+2026-01-22T10:22:26.409863665Z     at handleIncomingPacket (/opt/render/project/src/node_modules/esbuild/lib/main.js:677:12)
+2026-01-22T10:22:26.409866725Z     at Socket.readFromStdout (/opt/render/project/src/node_modules/esbuild/lib/main.js:600:7)
+2026-01-22T10:22:26.409869475Z     at Socket.emit (node:events:508:20)
+2026-01-22T10:22:26.409872825Z     at addChunk (node:internal/streams/readable:564:12)
+2026-01-22T10:22:26.409875525Z     at readableAddChunkPushByteMode (node:internal/streams/readable:515:3)
+2026-01-22T10:22:26.409877965Z     at Readable.push (node:internal/streams/readable:395:5)
+2026-01-22T10:22:26.409880395Z     at Pipe.onStreamRead (node:internal/stream_base_commons:189:23)
+2026-01-22T10:22:26.506355486Z ==> Build failed 😞
+2026-01-22T10:22:26.506372137Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys
+2026-01-22T10:22:26.632094064Z ==> Requesting Node.js version >=16.0.0
+2026-01-22T10:22:26.797663262Z ==> Using Node.js version 25.4.0 via /opt/render/project/src/package.json
+2026-01-22T10:22:26.822957251Z ==> Docs on specifying a Node.js version: https://render.com/docs/node-version
+here is the build fail from the npm run build from with the compiler take a look at both npm run build
+
+> instagram-automation-dashboard@0.0.0 build
+> npx vite build --config ./vite.config.ts
+
+
+🔧 ========================================
+✅ VITE CONFIG v2.4.0 LOADED
+✅ React dedupe: ENABLED
+✅ Chunk load order: FIXED (numeric prefixes)
+✅ React alias: /Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/react
+========================================
+
+NODE_ENV=production is not supported in the .env file. Only NODE_ENV=development is supported to create a development build of your project. If you need to set process.env.NODE_ENV, you can set it in the Vite config instead.
+vite v5.4.19 building for production...
+transforming (2) vite/modulepreload-polyfill.jsBrowserslist: browsers data (caniuse-lite) is 7 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+✓ 64 modules transformed.
+x Build failed in 991ms
+error during build:
+[vite:esbuild] Transform failed with 1 error:
+/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/src/hooks/useInstagramInsights.ts:220:17: ERROR: Expected ">" but found "className"
+file: /Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/src/hooks/useInstagramInsights.ts:220:17
+
+Expected ">" but found "className"
+218|        changeLabel: 'vs previous 7 days',
+219|        trend: trends.impressions.trend,
+220|        icon: <Eye className="w-5 h-5" />,
+   |                   ^
+221|        color: 'from-blue-500 to-cyan-500',
+222|        tooltip: createTooltip(insights.impressions, 'impressions')
+
+    at failureErrorWithLog (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/esbuild/lib/main.js:1472:15)
+    at /Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/esbuild/lib/main.js:755:50
+    at responseCallbacks.<computed> (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/esbuild/lib/main.js:622:9)
+    at handleIncomingPacket (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/esbuild/lib/main.js:677:12)
+    at Socket.readFromStdout (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/esbuild/lib/main.js:600:7)
+    at Socket.emit (node:events:518:28)
+    at addChunk (node:internal/streams/readable:561:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+    at Readable.push (node:internal/streams/readable:392:5)
+    at Pipe.onStreamRead (node:internal/stream_base_commons:189:23)
