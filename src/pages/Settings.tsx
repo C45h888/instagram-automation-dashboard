@@ -93,7 +93,7 @@ const TokenImportSection: React.FC = () => {
   };
 
   // ✅ v3 OPTIMIZATION: Enhanced client-side validation with regex
-  const isTokenValid = /^EAA[A-Za-z0-9_-]{50,}$/.test(pageAccessToken); // Meta token format
+  const isTokenValid = /^(EAA|IG)[A-Za-z0-9_-]{50,}$/.test(pageAccessToken); // Meta/Instagram token format
   const isBusinessIdValid = /^\d{14,20}$/.test(instagramBusinessId);
   const canSubmit = isTokenValid && isBusinessIdValid && !isSubmitting;
 
@@ -121,7 +121,7 @@ const TokenImportSection: React.FC = () => {
           rows={3}
         />
         {pageAccessToken && !isTokenValid && (
-          <p className="text-red-400 text-xs mt-1">Token format invalid (should start with EAA)</p>
+          <p className="text-red-400 text-xs mt-1">Token format invalid (should start with EAA or IG)</p>
         )}
       </div>
 
