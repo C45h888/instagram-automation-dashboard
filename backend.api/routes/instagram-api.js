@@ -254,7 +254,8 @@ router.get('/insights/:accountId', async (req, res) => {
       period = '7d',
       userId,
       businessAccountId,
-      metrics
+      metrics,
+      until  // ✅ FIXED: Now extracting until parameter for previous period queries
     } = req.query;
 
     console.log('📊 Insights request received');
@@ -262,6 +263,7 @@ router.get('/insights/:accountId', async (req, res) => {
     console.log('   Period:', period);
     console.log('   User ID:', userId || 'not provided');
     console.log('   Business Account ID:', businessAccountId || 'not provided');
+    console.log('   Until timestamp:', until || 'not provided (using current time)');
 
     // ===== STEP 1: Validate required query parameters =====
     if (!userId || !businessAccountId) {
@@ -286,7 +288,8 @@ router.get('/insights/:accountId', async (req, res) => {
     console.log('📊 Fetching insights from Instagram API...');
     const insights = await getAccountInsights(accountId, pageToken, {
       period,
-      metrics: metricsArray
+      metrics: metricsArray,
+      until: until ? parseInt(until) : undefined  // ✅ FIXED: Pass until to getAccountInsights
     });
 
     // ===== STEP 5: Return insights with rate limit info =====
@@ -2551,8 +2554,8 @@ router.post('/refresh-token', async (req, res) => {
       const response = await axios.get(refreshUrl, {
         params: {
           grant_type: 'fb_exchange_token',
-          client_id: process.env.FACEBOOK_APP_ID,
-          client_secret: process.env.FACEBOOK_APP_SECRET,
+          client_id: process.env.INSTAGRAM_APP_ID || process.env.FACEBOOK_APP_ID,  // ✅ v3: Use INSTAGRAM_APP_ID with fallback
+          client_secret: process.env.INSTAGRAM_APP_SECRET || process.env.FACEBOOK_APP_SECRET,  // ✅ v3: Use INSTAGRAM_APP_SECRET with fallback
           fb_exchange_token: pageToken
         },
         timeout: 10000
@@ -2690,6 +2693,132 @@ router.post('/refresh-token', async (req, res) => {
   }
 });
 
+// ============================================
+// HELPER FUNCTIONS FOR TOKEN VALIDATION (v3)
+// ============================================
+
+/**
+ * Validates a Meta access token by calling the Graph API
+ * @param {string} token - Access token to validate
+ * @param {string} instagramBusinessId - IG Business Account ID
+ * @returns {Promise<Object>} - { success: boolean, data?: object, error?: string }
+ */
+async function validateMetaToken(token, instagramBusinessId) {
+  try {
+    const response = await axios.get(
+      `https://graph.facebook.com/${GRAPH_API_VERSION}/${instagramBusinessId}`,
+      {
+        params: {
+          fields: 'id,username,name,profile_picture_url',
+          access_token: token
+        },
+        timeout: 10000
+      }
+    );
+
+    return {
+      success: true,
+      data: response.data
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.response?.data?.error?.message || error.message
+    };
+  }
+}
+
+/**
+ * Fetches dynamic scope from Meta debug_token API with caching
+ * @param {string} token - Access token to inspect
+ * @param {object} supabase - Supabase client
+ * @param {string} credentialId - Credential record ID for caching
+ * @returns {Promise<string[]>} - Array of scope strings
+ */
+async function fetchDynamicScope(token, supabase, credentialId = null) {
+  // ✅ v3 OPTIMIZATION: Check cache first
+  if (credentialId) {
+    const { data: cached } = await supabase
+      .from('instagram_credentials')
+      .select('scope_cache, scope_cache_updated_at')
+      .eq('id', credentialId)
+      .single();
+
+    // Use cache if less than 7 days old
+    if (cached?.scope_cache && cached?.scope_cache_updated_at) {
+      const cacheAge = Date.now() - new Date(cached.scope_cache_updated_at).getTime();
+      const sevenDays = 7 * 24 * 60 * 60 * 1000;
+
+      if (cacheAge < sevenDays) {
+        console.log('✅ Using cached scope (age: ' + Math.floor(cacheAge / 1000 / 60 / 60) + 'h)');
+        return cached.scope_cache;
+      }
+    }
+  }
+
+  // Fetch from Meta API
+  try {
+    const debugResponse = await axios.get(
+      `https://graph.facebook.com/${GRAPH_API_VERSION}/debug_token`,
+      {
+        params: {
+          input_token: token,
+          access_token: token // Self-debug
+        },
+        timeout: 5000
+      }
+    );
+
+    const detectedScope = debugResponse.data.data?.scopes || [];
+    console.log('✅ Detected scopes from Meta API:', detectedScope.join(', '));
+
+    // ✅ v3 OPTIMIZATION: Update cache
+    if (credentialId && detectedScope.length > 0) {
+      await supabase
+        .from('instagram_credentials')
+        .update({
+          scope_cache: detectedScope,
+          scope_cache_updated_at: new Date().toISOString()
+        })
+        .eq('id', credentialId);
+    }
+
+    return detectedScope;
+
+  } catch (debugError) {
+    console.warn('⚠️  Scope detection failed, using defaults');
+    return ['instagram_manage_insights', 'pages_show_list', 'pages_read_engagement'];
+  }
+}
+
+/**
+ * Calls the /refresh-token endpoint to refresh an access token
+ * @param {string} userId - User UUID
+ * @param {string} businessAccountId - Business account UUID
+ * @returns {Promise<Object>} - { success: boolean, data?: object, error?: string }
+ */
+async function callRefreshTokenEndpoint(userId, businessAccountId) {
+  try {
+    // ✅ v3 OPTIMIZATION: Reuse existing /refresh-token endpoint
+    const API_BASE = process.env.API_BASE_URL || 'http://localhost:3001';
+
+    const response = await axios.post(`${API_BASE}/api/instagram/refresh-token`, {
+      userId,
+      businessAccountId
+    });
+
+    return {
+      success: response.data.success,
+      data: response.data.data
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.response?.data?.error || error.message
+    };
+  }
+}
+
 // ==========================================
 // TOKEN VALIDATION ENDPOINT
 // ==========================================
@@ -2720,22 +2849,123 @@ router.post('/refresh-token', async (req, res) => {
  */
 router.post('/validate-token', async (req, res) => {
   const requestStartTime = Date.now();
+  const supabase = getSupabaseAdmin();
 
   try {
-    // ✅ Initialize Supabase client (was missing - caused 500 error)
-    const supabase = getSupabaseAdmin();
+    const {
+      userId,
+      businessAccountId,
+      importMode = false,
+      pageAccessToken,
+      pageId,
+      pageName
+    } = req.body;
 
-    const { userId, businessAccountId } = req.body;
+    // ===== IMPORT MODE: Direct token import =====
+    if (importMode) {
+      console.log('📥 Token import mode activated');
 
+      const { instagramBusinessId } = req.body; // Only destructure in import mode
+
+      // Validation
+      if (!userId || !pageAccessToken || !instagramBusinessId) {
+        return res.status(400).json({
+          success: false,
+          error: 'Missing required fields for import',
+          required: ['userId', 'pageAccessToken', 'instagramBusinessId']
+        });
+      }
+
+      // ✅ v3 OPTIMIZATION: Use helper function to validate token
+      const validation = await validateMetaToken(pageAccessToken, instagramBusinessId);
+
+      if (!validation.success) {
+        console.error('❌ Token validation failed:', validation.error);
+
+        // ✅ v3 OPTIMIZATION: Resilient audit logging
+        try {
+          await logAudit('token_import_failed', userId, {
+            action: 'import_token',
+            error: 'validation_failed',
+            details: validation.error
+          });
+        } catch (auditError) {
+          console.warn('⚠️  Audit log failed (non-blocking):', auditError.message);
+        }
+
+        return res.status(401).json({
+          success: false,
+          error: 'Invalid or expired token',
+          details: validation.error
+        });
+      }
+
+      console.log('✅ Token validated:', validation.data.username);
+
+      // ✅ v3 OPTIMIZATION: Fetch dynamic scope with caching (no credentialId yet, so no cache)
+      const detectedScope = await fetchDynamicScope(pageAccessToken, supabase, null);
+
+      // Store using existing function (with dynamic scope)
+      const storeResult = await storePageToken({
+        userId,
+        igBusinessAccountId: instagramBusinessId,
+        pageAccessToken,
+        pageId: pageId || instagramBusinessId,
+        pageName: pageName || 'Imported Account',
+        scope: detectedScope // ✅ Use detected scope
+      });
+
+      if (!storeResult.success) {
+        // ✅ v3 OPTIMIZATION: Resilient audit logging
+        try {
+          await logAudit('token_storage_failed', userId, {
+            action: 'import_token',
+            error: storeResult.error
+          });
+        } catch (auditError) {
+          console.warn('⚠️  Audit log failed (non-blocking):', auditError.message);
+        }
+
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to store token',
+          details: storeResult.error
+        });
+      }
+
+      // ✅ v3 OPTIMIZATION: Resilient audit logging
+      try {
+        await logAudit('token_imported', userId, {
+          action: 'import_token',
+          business_account_id: storeResult.businessAccountId,
+          instagram_business_id: instagramBusinessId,
+          scope: detectedScope,
+          response_time_ms: Date.now() - requestStartTime,
+          success: true
+        });
+      } catch (auditError) {
+        console.warn('⚠️  Audit log failed (non-blocking):', auditError.message);
+      }
+
+      return res.json({
+        success: true,
+        status: 'imported',
+        data: {
+          businessAccountId: storeResult.businessAccountId,
+          instagramBusinessId,
+          expiresAt: storeResult.expiresAt,
+          scope: detectedScope
+        }
+      });
+    }
+
+    // ===== VALIDATION MODE: Existing logic (with auto-refresh) =====
     console.log('[Token Validation] Validating token for user:', userId);
 
-    // ===== VALIDATION =====
     if (!userId || !businessAccountId) {
       return res.status(400).json({
         success: false,
-        status: 'error',
-        error: 'Missing required fields: userId and businessAccountId',
-        code: 'MISSING_PARAMETERS'
+        error: 'Missing required fields: userId and businessAccountId'
       });
     }
 
@@ -2770,7 +3000,55 @@ router.post('/validate-token', async (req, res) => {
       });
     }
 
-    // ===== STEP 1.5: Fetch instagram_business_id separately =====
+    // ===== STEP 1.5: Check expiration and auto-refresh if needed (v3 OPTIMIZATION) =====
+    const now = new Date();
+    const expiresAt = new Date(credentials.expires_at);
+    const secondsUntilExpiry = Math.floor((expiresAt - now) / 1000);
+
+    // ✅ v3 OPTIMIZATION: Auto-refresh via /refresh-token endpoint (code reuse)
+    if (secondsUntilExpiry > 0 && secondsUntilExpiry < 86400) {
+      console.log(`⚠️  Token expires in ${Math.floor(secondsUntilExpiry / 3600)}h - auto-refreshing...`);
+
+      // Call existing /refresh-token endpoint instead of duplicating logic
+      const refreshResult = await callRefreshTokenEndpoint(userId, businessAccountId);
+
+      if (refreshResult.success) {
+        console.log('✅ Token auto-refreshed successfully via /refresh-token endpoint');
+
+        // ✅ v3 OPTIMIZATION: Resilient audit logging
+        try {
+          await logAudit('token_auto_refreshed', userId, {
+            action: 'auto_refresh',
+            business_account_id: businessAccountId,
+            new_expiry: refreshResult.data?.expires_at,
+            triggered_by: 'validate_token',
+            success: true
+          });
+        } catch (auditError) {
+          console.warn('⚠️  Audit log failed (non-blocking):', auditError.message);
+        }
+
+        // Refetch credentials to get updated token
+        const { data: updatedCreds } = await supabase
+          .from('instagram_credentials')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('business_account_id', businessAccountId)
+          .eq('token_type', 'page')
+          .eq('is_active', true)
+          .single();
+
+        if (updatedCreds) {
+          // Update credentials variable with refreshed data
+          Object.assign(credentials, updatedCreds);
+        }
+
+      } else {
+        console.warn('⚠️  Auto-refresh failed:', refreshResult.error);
+      }
+    }
+
+    // ===== STEP 2: Fetch instagram_business_id separately =====
     const { data: businessAccount, error: businessError } = await supabase
       .from('instagram_business_accounts')
       .select('instagram_business_id')
@@ -2794,7 +3072,7 @@ router.post('/validate-token', async (req, res) => {
       });
     }
 
-    // ===== STEP 2: Decrypt the token =====
+    // ===== STEP 3: Decrypt the token =====
     const { data: decryptedToken, error: decryptError } = await supabase
       .rpc('decrypt_instagram_token', {
         encrypted_token: credentials.access_token_encrypted
@@ -2820,7 +3098,7 @@ router.post('/validate-token', async (req, res) => {
 
     console.log('[Token Validation] ✅ Token decrypted successfully');
 
-    // ===== STEP 3: Use instagram_business_id from separate query =====
+    // ===== STEP 4: Use instagram_business_id from separate query =====
     const instagramBusinessId = businessAccount.instagram_business_id;
 
     if (!instagramBusinessId) {
@@ -2833,7 +3111,7 @@ router.post('/validate-token', async (req, res) => {
       });
     }
 
-    // ===== STEP 4: Validate token by calling Meta's /me endpoint =====
+    // ===== STEP 5: Validate token by calling Meta's /me endpoint =====
     // This is a lightweight "ping" to check if the token is still valid
     const graphUrl = `https://graph.facebook.com/${GRAPH_API_VERSION}/${instagramBusinessId}`;
 
@@ -2917,15 +3195,19 @@ router.post('/validate-token', async (req, res) => {
 
           console.log(`[Token Validation] ⚠️  Token expired (Code: ${errorCode}, Subcode: ${errorSubcode}) - ${reason}`);
 
-          // Log audit event for token expiration
-          await logAudit('token_validation_expired', userId, {
-            action: 'validate_token',
-            business_account_id: businessAccountId,
-            error_code: errorCode,
-            error_subcode: errorSubcode,
-            reason: reason,
-            response_time_ms: responseTime
-          });
+          // ✅ v3 OPTIMIZATION: Resilient audit logging
+          try {
+            await logAudit('token_validation_expired', userId, {
+              action: 'validate_token',
+              business_account_id: businessAccountId,
+              error_code: errorCode,
+              error_subcode: errorSubcode,
+              reason: reason,
+              response_time_ms: responseTime
+            });
+          } catch (auditError) {
+            console.warn('⚠️  Audit log failed (non-blocking):', auditError.message);
+          }
 
           // ===== RETURN: Token is expired - User must reconnect =====
           return res.json({
@@ -3004,14 +3286,19 @@ router.post('/validate-token', async (req, res) => {
       response: error.response?.data
     });
 
-    await logAudit('token_validation_error', req.body.userId, {
-      action: 'validate_token',
-      error: error.message,
-      error_name: error.name,
-      error_code: error.code,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
-      response_time_ms: responseTime
-    });
+    // ✅ v3 OPTIMIZATION: Resilient audit logging
+    try {
+      await logAudit('token_validation_error', req.body.userId, {
+        action: 'validate_token',
+        error: error.message,
+        error_name: error.name,
+        error_code: error.code,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+        response_time_ms: responseTime
+      });
+    } catch (auditError) {
+      console.warn('⚠️  Audit log failed (non-blocking):', auditError.message);
+    }
 
     res.status(500).json({
       success: false,

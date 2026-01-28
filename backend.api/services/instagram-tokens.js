@@ -9,11 +9,18 @@ const { getSupabaseAdmin } = require('../config/supabase');
 const GRAPH_API_VERSION = 'v23.0';
 const GRAPH_API_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
 
-// Default metrics for account insights
-const DEFAULT_METRICS = [
+// ✅ REFACTORED: Separate safe metrics from optional metrics
+// Safe metrics - work for all Instagram Business/Creator accounts
+const SAFE_METRICS = [
   'impressions',
   'reach',
-  'profile_views',
+  'profile_views'
+];
+
+// Default metrics - includes optional metrics that require specific account setup
+// Note: website_clicks requires a website URL in Instagram profile
+const DEFAULT_METRICS = [
+  ...SAFE_METRICS,
   'website_clicks'
 ];
 
@@ -187,7 +194,8 @@ async function getAccountInsights(igBusinessAccountId, pageToken, options = {}) 
   try {
     const {
       period = '7d',
-      metrics = DEFAULT_METRICS
+      metrics = DEFAULT_METRICS,
+      until: untilParam  // ✅ FIXED: Accept until parameter for previous period queries
     } = options;
 
     // ===== STEP 1: Parse and validate period =====
@@ -203,28 +211,73 @@ async function getAccountInsights(igBusinessAccountId, pageToken, options = {}) 
     }
 
     // ===== STEP 2: Calculate date range (Unix timestamps) =====
-    const now = Date.now();
-    const since = Math.floor((now - (periodDays * 24 * 60 * 60 * 1000)) / 1000);
-    const until = Math.floor(now / 1000);
+    // ✅ FIXED: Use provided until timestamp if available, otherwise use current time
+    const until = untilParam || Math.floor(Date.now() / 1000);
+    const since = until - (periodDays * 24 * 60 * 60);
 
     console.log(`📊 Fetching insights for account: ${igBusinessAccountId}`);
     console.log(`   Period: ${periodDays} days (${new Date(since * 1000).toISOString()} to ${new Date(until * 1000).toISOString()})`);
-    console.log(`   Metrics: ${metrics.join(', ')}`);
+    console.log(`   Until param: ${untilParam ? 'provided' : 'using current time'}`);
+    console.log(`   Metrics requested: ${metrics.join(', ')}`);
 
-    // ===== STEP 3: Call Instagram Insights API =====
-    const response = await axios.get(
-      `${GRAPH_API_BASE}/${igBusinessAccountId}/insights`,
-      {
-        params: {
-          metric: metrics.join(','),
-          period: 'day', // Daily granularity
-          since,
-          until,
-          access_token: pageToken // ✅ CRITICAL: Must use page token, not user token
-        },
-        timeout: 15000 // 15 second timeout (insights can be slow)
+    // ===== STEP 3: Call Instagram Insights API with FALLBACK STRATEGY =====
+    // ✅ REFACTORED: Try with all metrics first, fallback to safe metrics if error 100
+    let response;
+    let actualMetrics = metrics;
+    let usedFallback = false;
+
+    try {
+      // First attempt: Try with requested metrics (may include website_clicks)
+      response = await axios.get(
+        `${GRAPH_API_BASE}/${igBusinessAccountId}/insights`,
+        {
+          params: {
+            metric: metrics.join(','),
+            period: 'day',
+            since,
+            until,
+            access_token: pageToken
+          },
+          timeout: 15000
+        }
+      );
+    } catch (firstAttemptError) {
+      // Check if error is code 100 (invalid parameter/missing permission)
+      const apiError = firstAttemptError.response?.data?.error;
+
+      if (apiError?.code === 100 && metrics.includes('website_clicks')) {
+        // ✅ FALLBACK: Retry with safe metrics only
+        console.warn('⚠️  Error 100 detected - website_clicks likely unavailable');
+        console.warn('   Retrying with safe metrics only (impressions, reach, profile_views)...');
+
+        try {
+          response = await axios.get(
+            `${GRAPH_API_BASE}/${igBusinessAccountId}/insights`,
+            {
+              params: {
+                metric: SAFE_METRICS.join(','),
+                period: 'day',
+                since,
+                until,
+                access_token: pageToken
+              },
+              timeout: 15000
+            }
+          );
+
+          actualMetrics = SAFE_METRICS;
+          usedFallback = true;
+          console.log('✅ Fallback successful - using safe metrics');
+
+        } catch (fallbackError) {
+          // Fallback also failed - re-throw original error
+          throw firstAttemptError;
+        }
+      } else {
+        // Not a code 100 error or no website_clicks - re-throw
+        throw firstAttemptError;
       }
-    );
+    }
 
     // ===== STEP 4: Check for API errors in response =====
     if (response.data.error) {
@@ -242,6 +295,9 @@ async function getAccountInsights(igBusinessAccountId, pageToken, options = {}) 
 
     console.log('✅ Account insights retrieved successfully');
     console.log(`   Returned ${insightsData?.length || 0} metric(s)`);
+    if (usedFallback) {
+      console.log(`   ⚠️  Note: website_clicks unavailable (account may not have website URL configured)`);
+    }
 
     return {
       success: true,
@@ -253,7 +309,8 @@ async function getAccountInsights(igBusinessAccountId, pageToken, options = {}) 
         start_date: new Date(since * 1000).toISOString(),
         end_date: new Date(until * 1000).toISOString()
       },
-      metrics
+      metrics: actualMetrics,  // ✅ Return actual metrics used (may be fallback)
+      usedFallback  // ✅ Indicate if fallback was used
     };
 
   } catch (error) {
@@ -314,7 +371,7 @@ async function getAccountInsights(igBusinessAccountId, pageToken, options = {}) 
  * @param {string} params.pageName - Facebook Page name
  * @returns {Promise<{success: boolean, businessAccountId?: string, expiresAt?: string, error?: string}>}
  */
-async function storePageToken({ userId, igBusinessAccountId, pageAccessToken, pageId, pageName }) {
+async function storePageToken({ userId, igBusinessAccountId, pageAccessToken, pageId, pageName, scope, expiresAt }) {
   try {
     console.log('💾 Storing page token in database...');
     console.log('   User ID (UUID):', userId);
@@ -394,11 +451,23 @@ async function storePageToken({ userId, igBusinessAccountId, pageAccessToken, pa
 
     console.log('✅ Token encrypted successfully');
 
-    // ===== STEP 5: Calculate expiration timestamp =====
-    const expiresIn = 5184000; // 60 days in seconds
-    const expiresAt = new Date(Date.now() + (expiresIn * 1000));
+    // ===== STEP 5: Smart defaults for scope and expiration (v3 OPTIMIZATION) =====
+    // Priority: 1) Passed scope, 2) Detected from debug_token, 3) Fallback defaults
+    const finalScope = scope || ['instagram_manage_insights', 'pages_show_list', 'pages_read_engagement'];
 
-    console.log('📅 Token expiration:', expiresAt.toISOString());
+    console.log('📋 Using scope:', finalScope);
+
+    // ✅ v3 OPTIMIZATION: Auto-calculate expiry if not provided
+    // Meta Page tokens typically expire in 60 days (5184000 seconds)
+    let finalExpiresAt;
+    if (expiresAt) {
+      finalExpiresAt = new Date(expiresAt);
+      console.log('📅 Token expiration (provided):', finalExpiresAt.toISOString());
+    } else {
+      const expiresIn = 5184000; // 60 days in seconds
+      finalExpiresAt = new Date(Date.now() + (expiresIn * 1000));
+      console.log('📅 Token expiration (auto-calculated):', finalExpiresAt.toISOString());
+    }
 
     // ===== STEP 6: Upsert to instagram_credentials table =====
     // Now we have a valid business_account_id (UUID) to use
@@ -409,9 +478,10 @@ async function storePageToken({ userId, igBusinessAccountId, pageAccessToken, pa
         business_account_id: businessAccount.id, // Use the UUID from business account
         access_token_encrypted: encryptedToken,
         token_type: 'page',
-        scope: ['instagram_manage_insights', 'pages_show_list', 'pages_read_engagement'],
+        page_id: pageId,  // ✅ v2: Add page_id
+        scope: finalScope,  // ✅ v3: Use smart defaults
         issued_at: new Date().toISOString(),
-        expires_at: expiresAt.toISOString(),
+        expires_at: finalExpiresAt.toISOString(),  // ✅ v3: Use calculated expiry
         is_active: true,
         last_refreshed_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
@@ -431,10 +501,27 @@ async function storePageToken({ userId, igBusinessAccountId, pageAccessToken, pa
     console.log('✅ Page token stored in database');
     console.log('   Credential Record ID:', credentialData?.[0]?.id);
 
+    // ===== STEP 7: Resilient audit logging (v3 OPTIMIZATION) =====
+    try {
+      const { logAudit } = require('../config/supabase');
+      await logAudit('token_stored', userId, {
+        action: 'store_page_token',
+        business_account_id: businessAccount.id,
+        page_id: pageId,
+        scope: finalScope,
+        expires_at: finalExpiresAt.toISOString(),
+        credential_id: credentialData?.[0]?.id,
+        success: true
+      });
+    } catch (auditError) {
+      console.warn('⚠️  Audit logging failed (non-blocking):', auditError.message);
+      // Don't fail the operation if audit fails - follows Jan 19 pattern
+    }
+
     return {
       success: true,
       businessAccountId: businessAccount.id, // Return the UUID for frontend
-      expiresAt: expiresAt.toISOString()
+      expiresAt: finalExpiresAt.toISOString()  // ✅ v3: Return calculated expiry
     };
 
   } catch (error) {
@@ -566,5 +653,6 @@ module.exports = {
   // Constants (for testing)
   GRAPH_API_VERSION,
   GRAPH_API_BASE,
-  DEFAULT_METRICS
+  DEFAULT_METRICS,
+  SAFE_METRICS  // ✅ Added: Safe metrics that work for all account types
 };

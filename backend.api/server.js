@@ -351,6 +351,52 @@ app.get('/status', async (req, res) => {
 });
 
 // =============================================================================
+// ENVIRONMENT VARIABLE VALIDATION (v3)
+// =============================================================================
+// Validate Instagram API credentials at startup
+// Follows Jan 20 staging fixes and Jan 11/19 error resolution patterns
+// Prevents partial runs with missing credentials
+
+function validateEnvCreds() {
+  const requiredVars = [
+    'INSTAGRAM_APP_ID',
+    'INSTAGRAM_APP_SECRET',
+    'SUPABASE_URL',
+    'SUPABASE_SERVICE_KEY'
+  ];
+
+  const missing = [];
+
+  for (const varName of requiredVars) {
+    if (!process.env[varName]) {
+      missing.push(varName);
+    }
+  }
+
+  if (missing.length > 0) {
+    console.error('❌ CRITICAL: Missing required environment variables:');
+    missing.forEach(varName => {
+      console.error(`   - ${varName}`);
+    });
+    console.error('\n📝 Add these to your .env file before starting the server');
+    throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+  }
+
+  console.log('✅ Environment variables validated');
+  console.log('   Instagram App ID:', process.env.INSTAGRAM_APP_ID);
+  console.log('   Instagram App Secret:', process.env.INSTAGRAM_APP_SECRET?.substring(0, 5) + '...');
+  console.log('   Supabase URL:', process.env.SUPABASE_URL?.split('.')[0] + '...');
+}
+
+// Call validation before initializing services
+try {
+  validateEnvCreds();
+} catch (error) {
+  console.error(error.message);
+  process.exit(1); // Exit with error code
+}
+
+// =============================================================================
 // ROUTE IMPORTS
 // =============================================================================
 

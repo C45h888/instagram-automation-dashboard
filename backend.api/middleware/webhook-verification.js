@@ -19,7 +19,8 @@ const crypto = require('crypto');
  */
 function verifyInstagramWebhookSignature(req, res, next) {
   const signature = req.headers['x-hub-signature'];
-  const META_APP_SECRET = process.env.META_APP_SECRET || process.env.VITE_META_APP_SECRET;
+  // ✅ v3: Use INSTAGRAM_APP_SECRET with fallback to META_APP_SECRET for compatibility
+  const META_APP_SECRET = process.env.INSTAGRAM_APP_SECRET || process.env.META_APP_SECRET;
 
   // ===== STEP 1: Check if signature header exists =====
   if (!signature) {
