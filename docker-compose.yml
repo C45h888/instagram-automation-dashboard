@@ -1,0 +1,123 @@
+version: '3.9'
+
+services:
+  # ================================
+  # Backend API Service (Express)
+  # ================================
+  backend:
+    container_name: instagram-backend
+    build:
+      context: ./backend.api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+
+    # Load all environment variables from .env.production
+    env_file:
+      - .env.production
+
+    # Override specific variables for Docker environment
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+
+    volumes:
+      # Persist logs outside container
+      - ./backend.api/logs:/app/logs
+
+    networks:
+      - instagram-network
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+    # Resource limits (adjust based on VPS capacity)
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # ================================
+  # Frontend Service (Nginx + React)
+  # ================================
+  frontend:
+    container_name: instagram-frontend
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # Pass all VITE_ variables from .env.production as build args
+      args:
+        - VITE_AUTH_MODE
+        - VITE_META_APP_ID
+        - VITE_META_APP_SECRET
+        - VITE_OAUTH_REDIRECT_URI
+        - VITE_SUPABASE_URL
+        - VITE_SUPABASE_ANON_KEY
+        - VITE_API_BASE_URL
+        - VITE_API_URL
+        - VITE_WEBHOOK_URL
+        - VITE_WEBHOOK_VERIFY_TOKEN
+        - VITE_SHOW_ADMIN_LINK
+        - VITE_INSTAGRAM_APP_ID
+        - N8N_BASE_URL
+        - N8N_DM_WEBHOOK
+        - N8N_COMMENT_WEBHOOK
+        - N8N_ORDER_WEBHOOK
+
+    # Load environment variables from .env.production for build args
+    env_file:
+      - .env.production
+
+    restart: unless-stopped
+    ports:
+      - "8080:80"  # Port 8080 on host, allowing host Nginx to handle 80/443
+
+    depends_on:
+      backend:
+        condition: service_healthy
+
+    networks:
+      - instagram-network
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+# ================================
+# Networks
+# ================================
+networks:
+  instagram-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# ================================
+# Volumes (Optional - for data persistence)
+# ================================
+volumes:
+  backend-logs:
+    driver: local

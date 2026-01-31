@@ -1,0 +1,57 @@
+# Dependencies
+node_modules
+npm-debug.log*
+yarn-debug.log*
+
+# Testing
+tests
+*.test.js
+coverage
+
+# Environment files (will be injected via docker-compose)
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+.env*.local
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs (will be in mounted volumes)
+logs
+*.log
+
+# Temporary files
+temp
+tmp
+*.tmp
+
+# Documentation
+*.md
+docs
+
+# CI/CD
+ecosystem.config.js
+
+# Docker
+Dockerfile
+.dockerignore
+
+# Migrations (already applied to Supabase)
+migrations
+
+# Config files not needed in container
+.prettierrc
+.eslintrc*
+.editorconfig
