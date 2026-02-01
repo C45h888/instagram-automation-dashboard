@@ -1,8 +1,13 @@
 // =====================================
-// USE VISITOR POSTS HOOK - PRODUCTION
+// USE VISITOR POSTS HOOK - PRODUCTION v2.0
 // Fetches REAL UGC/tagged posts from Meta Graph API v23.0
 // NO MOCK DATA, NO FALLBACKS
-// Manages UGC data fetching, filtering, and mutations
+//
+// ✅ REFACTORED (Phase 2):
+// - Added retry logic with exponential backoff (matches useInstagramInsights)
+// - Added scope error tracking (scopeError state)
+// - Added userId parameter to all API calls
+// - Resilient audit error handling in sync
 // =====================================
 
 import { useState, useEffect, useCallback } from 'react';
@@ -11,11 +16,19 @@ import { useInstagramAccount } from './useInstagramAccount';
 import type { VisitorPost, UGCStats, UGCFilterState, PermissionRequestForm } from '../types/ugc';
 import { DEFAULT_UGC_FILTERS } from '../types/ugc';
 
+// ✅ NEW: Rate limit error codes (matches useInstagramInsights)
+const RATE_LIMIT_CODES = [17, 4, 32, 613];
+const MAX_RETRIES = 3;
+const BASE_DELAY_MS = 1000;
+
 interface UseVisitorPostsResult {
   visitorPosts: VisitorPost[];
   stats: UGCStats | null;
   isLoading: boolean;
   error: string | null;
+  isRetrying: boolean;          // ✅ NEW
+  retryCount: number;           // ✅ NEW
+  scopeError: string[] | null;  // ✅ NEW: Missing scopes
   filters: UGCFilterState;
   setFilters: (filters: UGCFilterState) => void;
   toggleFeatured: (postId: string, featured: boolean) => Promise<void>;
@@ -34,31 +47,114 @@ export const useVisitorPosts = (): UseVisitorPostsResult => {
   const [stats, setStats] = useState<UGCStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isRetrying, setIsRetrying] = useState(false);      // ✅ NEW
+  const [retryCount, setRetryCount] = useState(0);          // ✅ NEW
+  const [scopeError, setScopeError] = useState<string[] | null>(null);  // ✅ NEW
   const [filters, setFilters] = useState<UGCFilterState>(DEFAULT_UGC_FILTERS);
 
-  // Trigger background sync from Instagram to database
+  // ✅ IMPROVED: Trigger background sync with userId and scope error handling
   const triggerSync = useCallback(async () => {
-    if (!businessAccountId) return;
+    if (!businessAccountId || !user?.id) return;
 
     try {
       const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
 
-      // Trigger sync in background (don't wait for response)
-      fetch(`${apiBaseUrl}/api/instagram/sync/ugc`, {
+      // ✅ IMPROVED: Add userId parameter and await response
+      const response = await fetch(`${apiBaseUrl}/api/instagram/sync/ugc`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ businessAccountId })
-      }).catch(err => {
-        console.warn('⚠️ Background sync failed (non-critical):', err.message);
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,         // ✅ NEW
+          businessAccountId
+        })
       });
 
-      console.log('🔄 Background UGC sync triggered');
+      if (!response.ok) {
+        const errorData = await response.json();
+
+        // ✅ Check for scope errors
+        if (errorData.code === 'MISSING_SCOPES') {
+          console.warn('⚠️  Sync blocked: Missing scopes', errorData.missing);
+          setScopeError(errorData.missing);
+        } else {
+          console.warn('⚠️  Background sync failed:', errorData.error);
+        }
+        // Don't throw - sync is non-critical
+      } else {
+        const result = await response.json();
+        console.log('✅ Background UGC sync completed:', result.synced_count || 0, 'posts');
+        setScopeError(null);  // Clear any previous scope errors
+      }
     } catch (err: any) {
-      console.warn('⚠️ Failed to trigger sync:', err.message);
+      console.warn('⚠️  Failed to trigger sync:', err.message);
     }
-  }, [businessAccountId]);
+  }, [businessAccountId, user?.id]);
+
+  // ✅ NEW: Exponential backoff retry logic (matches useInstagramInsights)
+  const fetchWithRetry = useCallback(async (
+    url: string,
+    config: RequestInit,
+    attempt: number = 0
+  ): Promise<Response> => {
+    try {
+      const response = await fetch(url, config);
+
+      // If successful, return
+      if (response.ok) {
+        return response;
+      }
+
+      // Parse error
+      const errorData = await response.json();
+      const errorCode = errorData.code || errorData.error_code;
+
+      // ✅ Handle scope errors (don't retry)
+      if (errorCode === 'MISSING_SCOPES') {
+        setScopeError(errorData.missing || []);
+        throw new Error(`Missing required permissions: ${errorData.missing?.join(', ')}`);
+      }
+
+      // Check if it's a rate limit error
+      if (RATE_LIMIT_CODES.includes(errorCode) && attempt < MAX_RETRIES) {
+        setIsRetrying(true);
+        setRetryCount(attempt + 1);
+
+        // Exponential backoff: 1s, 2s, 4s
+        const delay = Math.min(BASE_DELAY_MS * Math.pow(2, attempt), 30000);
+        console.log(`⏳ Rate limit hit. Retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
+
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return fetchWithRetry(url, config, attempt + 1);
+      }
+
+      // If not a rate limit error or max retries reached, throw
+      throw new Error(errorData.error || `API Error: ${response.status}`);
+    } catch (err: any) {
+      // Don't retry scope errors
+      if (err.message.includes('Missing required permissions')) {
+        throw err;
+      }
+
+      // Network errors - retry with backoff
+      if ((err.message.includes('fetch') || err.code === 'ECONNREFUSED') && attempt < MAX_RETRIES) {
+        setIsRetrying(true);
+        setRetryCount(attempt + 1);
+
+        const delay = Math.min(BASE_DELAY_MS * Math.pow(2, attempt), 30000);
+        console.log(`⏳ Network error. Retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
+
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return fetchWithRetry(url, config, attempt + 1);
+      }
+
+      throw err;
+    } finally {
+      if (attempt === MAX_RETRIES || attempt === 0) {
+        setIsRetrying(false);
+        setRetryCount(0);
+      }
+    }
+  }, []);
 
   const fetchVisitorPosts = useCallback(async () => {
     if (!user?.id) {
@@ -75,23 +171,16 @@ export const useVisitorPosts = (): UseVisitorPostsResult => {
 
     setIsLoading(true);
     setError(null);
+    setScopeError(null);  // ✅ Clear previous scope errors
 
     try {
-      // ✅ REFACTORED: Now queries database (data synced via /sync/ugc)
       const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
-      const response = await fetch(
-        `${apiBaseUrl}/api/instagram/visitor-posts?businessAccountId=${businessAccountId}&limit=50`,
-        {
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        }
-      );
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `API Error: ${response.status}`);
-      }
+      // ✅ UPDATED: Add userId parameter and use fetchWithRetry
+      const response = await fetchWithRetry(
+        `${apiBaseUrl}/api/instagram/visitor-posts?userId=${user.id}&businessAccountId=${businessAccountId}&limit=50`,
+        { headers: { 'Content-Type': 'application/json' } }
+      );
 
       const result = await response.json();
 
@@ -99,11 +188,9 @@ export const useVisitorPosts = (): UseVisitorPostsResult => {
         throw new Error(result.error || 'Failed to fetch visitor posts');
       }
 
-      // ✅ Set data from database
       setVisitorPosts(result.data || []);
       setStats(result.stats || null);
-
-      console.log(`✅ Visitor posts loaded from ${result.source || 'database'}:`, result.data?.length || 0, 'posts');
+      console.log('✅ Visitor posts loaded:', result.data?.length || 0, 'posts');
 
     } catch (err: any) {
       console.error('❌ Visitor posts fetch failed:', err);
@@ -113,7 +200,7 @@ export const useVisitorPosts = (): UseVisitorPostsResult => {
     } finally {
       setIsLoading(false);
     }
-  }, [user?.id, businessAccountId]);
+  }, [user?.id, businessAccountId, fetchWithRetry]);
 
   const toggleFeatured = async (postId: string, featured: boolean): Promise<void> => {
     try {
@@ -235,6 +322,9 @@ export const useVisitorPosts = (): UseVisitorPostsResult => {
     stats,
     isLoading,
     error,
+    isRetrying,     // ✅ NEW
+    retryCount,     // ✅ NEW
+    scopeError,     // ✅ NEW
     filters,
     setFilters,
     toggleFeatured,
