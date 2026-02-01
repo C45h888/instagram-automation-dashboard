@@ -26,6 +26,7 @@ const RepostConfirmationModal = lazy(() =>
   }))
 );
 import AsyncWrapper from '../components/ui/AsyncWrapper';
+import PermissionBadge from '../components/permissions/shared/PermissionBadge';  // ✅ NEW: Phase 4
 import { useToast } from '../hooks/useToast';
 import { useAuthStore } from '../stores/authStore';
 import { useInstagramAccount } from '../hooks/useInstagramAccount';
@@ -291,6 +292,23 @@ const UGCManagement: React.FC = () => {
     <div className="space-y-6">
       {/* Retry banner */}
       {retryBanner}
+
+      {/* ✅ Page-level Permission Badge (Phase 4) */}
+      <div className="glass-morphism-card p-4 rounded-xl border border-purple-500/30">
+        <div className="flex items-center space-x-3">
+          <PermissionBadge
+            permission="pages_read_user_content"
+            status="granted"
+            size="lg"
+            showIcon={true}
+          />
+          <div className="flex-1">
+            <p className="text-gray-400 text-sm">
+              Read visitor posts and brand mentions on your Instagram Business account
+            </p>
+          </div>
+        </div>
+      </div>
 
       {/* Page Header */}
       <div className="glass-morphism-card p-6 rounded-2xl">

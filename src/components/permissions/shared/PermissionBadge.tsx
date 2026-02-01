@@ -10,11 +10,13 @@ import { motion } from 'framer-motion';
 
 interface PermissionBadgeProps {
   permission: 'instagram_basic' | 'instagram_manage_comments' |
-              'instagram_content_publish' | 'instagram_manage_messages';
+              'instagram_content_publish' | 'instagram_manage_messages' |
+              'pages_read_user_content';  // ✅ NEW: UGC permission
   status?: 'granted' | 'requesting' | 'denied';
   showIcon?: boolean;
   size?: 'sm' | 'md' | 'lg';
   className?: string;
+  description?: string;  // ✅ NEW: Optional override for description
 }
 
 const PERMISSION_CONFIG = {
@@ -37,6 +39,12 @@ const PERMISSION_CONFIG = {
     label: 'instagram_manage_messages',
     color: 'pink',
     description: 'Send and receive direct messages'
+  },
+  // ✅ NEW: UGC permission (Phase 4)
+  pages_read_user_content: {
+    label: 'pages_read_user_content',
+    color: 'purple',
+    description: 'Read visitor posts and brand mentions on your Instagram Business account'
   }
 } as const;
 
@@ -45,7 +53,8 @@ export const PermissionBadge: React.FC<PermissionBadgeProps> = ({
   status = 'granted',
   showIcon = true,
   size = 'md',
-  className = ''
+  className = '',
+  description  // ✅ NEW: Optional custom description
 }) => {
   const config = PERMISSION_CONFIG[permission];
 
@@ -74,6 +83,9 @@ export const PermissionBadge: React.FC<PermissionBadgeProps> = ({
     denied: 'text-red-400'
   }[status];
 
+  // ✅ Use custom description if provided, otherwise use config
+  const displayDescription = description || config.description;
+
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.9 }}
@@ -85,7 +97,7 @@ export const PermissionBadge: React.FC<PermissionBadgeProps> = ({
         ${colorClasses[config.color]}
         ${className}
       `}
-      title={config.description}
+      title={displayDescription}
     >
       {showIcon && status && (
         <StatusIcon className={`w-4 h-4 ${statusColor}`} />

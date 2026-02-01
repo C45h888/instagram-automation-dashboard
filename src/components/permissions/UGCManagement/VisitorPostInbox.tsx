@@ -73,23 +73,7 @@ export const VisitorPostInbox: React.FC<VisitorPostInboxProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Custom UGC Permission Badge */}
-      <div className="glass-morphism-card p-4 rounded-xl border border-purple-500/30">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 bg-purple-500/20 rounded-full flex items-center justify-center">
-            <Star className="w-5 h-5 text-purple-400" />
-          </div>
-          <div>
-            <p className="text-white font-semibold">pages_read_user_content</p>
-            <p className="text-gray-400 text-sm">Read visitor posts and brand mentions on your Instagram Business account</p>
-          </div>
-          <div className="ml-auto">
-            <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-xs font-medium">
-              Granted
-            </span>
-          </div>
-        </div>
-      </div>
+      {/* ✅ PHASE 4: Duplicate badge removed - now at page level in UGCManagement.tsx */}
 
       {/* Feature Highlights */}
       <FeatureHighlight
