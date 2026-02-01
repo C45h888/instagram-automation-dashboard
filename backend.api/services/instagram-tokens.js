@@ -636,6 +636,86 @@ async function retrievePageToken(userId, businessAccountId) {
 }
 
 // ==========================================
+// SCOPE VALIDATION & AUDIT LOGGING
+// =====================================
+// ✅ NEW (bff586c pattern): Scope validation and resilient audit logging
+// ===========================================
+
+/**
+ * ✅ NEW (bff586c pattern): Validate token has required scopes
+ * Uses cached scopes from instagram_credentials.scope_cache
+ * @param {string} userId - User UUID
+ * @param {string} businessAccountId - Business account UUID
+ * @param {string[]} requiredScopes - Required permissions (e.g., ['instagram_basic', 'pages_read_user_content'])
+ * @returns {Promise<{valid: boolean, missing: string[]}>}
+ */
+async function validateTokenScopes(userId, businessAccountId, requiredScopes = []) {
+  try {
+    const supabase = getSupabaseAdmin();
+
+    console.log('🔍 Validating token scopes...');
+    console.log('   User ID:', userId);
+    console.log('   Business Account ID:', businessAccountId);
+    console.log('   Required scopes:', requiredScopes);
+
+    // Fetch cached scopes (7-day TTL per bff586c)
+    const { data: credentials, error } = await supabase
+      .from('instagram_credentials')
+      .select('scope_cache, scope_cache_updated_at')
+      .eq('user_id', userId)
+      .eq('business_account_id', businessAccountId)
+      .eq('token_type', 'page')
+      .eq('is_active', true)
+      .single();
+
+    if (error || !credentials) {
+      console.error('❌ Failed to fetch credentials for scope validation');
+      if (error) console.error('   Error:', error.message);
+      return { valid: false, missing: requiredScopes };
+    }
+
+    const grantedScopes = credentials.scope_cache || [];
+    const missingScopes = requiredScopes.filter(req => !grantedScopes.includes(req));
+
+    if (missingScopes.length === 0) {
+      console.log('✅ All required scopes granted');
+      return { valid: true, missing: [] };
+    } else {
+      console.warn('⚠️  Missing scopes:', missingScopes);
+      return { valid: false, missing: missingScopes };
+    }
+  } catch (err) {
+    console.error('❌ Scope validation error:', err);
+    return { valid: false, missing: requiredScopes };
+  }
+}
+
+/**
+ * ✅ NEW (bff586c pattern): Resilient audit logging
+ * Non-blocking - failures don't affect main flow
+ * @param {string} action - Action name (e.g., 'posts_fetched', 'permission_requested')
+ * @param {string} userId - User UUID
+ * @param {object} metadata - Additional context (e.g., { count: 10, source: 'api' })
+ */
+async function logAudit(action, userId, metadata = {}) {
+  try {
+    const supabase = getSupabaseAdmin();
+
+    await supabase.from('audit_logs').insert({
+      user_id: userId,
+      action,
+      metadata,
+      created_at: new Date().toISOString()
+    });
+
+    console.log(`✅ Audit logged: ${action}`, metadata);
+  } catch (err) {
+    // ✅ Non-blocking: Warn but don't throw (bff586c pattern)
+    console.warn('⚠️  Audit log failed (non-critical):', err.message);
+  }
+}
+
+// ==========================================
 // EXPORTS
 // ==========================================
 
@@ -649,6 +729,10 @@ module.exports = {
   // Database operations
   storePageToken,
   retrievePageToken,
+
+  // ✅ NEW: Scope validation & audit logging (bff586c pattern)
+  validateTokenScopes,
+  logAudit,
 
   // Constants (for testing)
   GRAPH_API_VERSION,

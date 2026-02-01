@@ -7,9 +7,14 @@ const {
   exchangeForPageToken,
   getAccountInsights,
   storePageToken,
-  retrievePageToken
+  retrievePageToken,
+  validateTokenScopes,
+  logAudit: logAuditService
 } = require('../services/instagram-tokens');
-const { logAudit, getSupabaseAdmin } = require('../config/supabase'); // ADDED: Audit logging + DB client
+const { logAudit: logAuditLegacy, getSupabaseAdmin } = require('../config/supabase'); // ADDED: Audit logging + DB client
+
+// ✅ Use new audit logging service (bff586c pattern)
+const logAudit = logAuditService;
 
 // ==========================================
 // CONSTANTS
@@ -1315,17 +1320,40 @@ router.get('/visitor-posts', async (req, res) => {
   const requestStartTime = Date.now();
 
   try {
-    const { businessAccountId, limit = 20, offset = 0 } = req.query;
+    const { userId, businessAccountId, limit = 20, offset = 0 } = req.query;
 
-    console.log('[UGC] Fetching visitor posts from database for account:', businessAccountId);
+    console.log('[UGC] Fetching visitor posts from database');
+    console.log('   User ID:', userId);
+    console.log('   Business Account ID:', businessAccountId);
 
     // ===== VALIDATION =====
-    if (!businessAccountId) {
-      console.error('❌ Missing businessAccountId parameter');
+    if (!userId || !businessAccountId) {
+      console.error('❌ Missing required parameters');
       return res.status(400).json({
         success: false,
-        error: 'businessAccountId is required',
+        error: 'Missing required parameters: userId and businessAccountId',
         code: 'MISSING_PARAMETERS'
+      });
+    }
+
+    // ✅ NEW: Scope validation (bff586c pattern)
+    const scopeCheck = await validateTokenScopes(userId, businessAccountId, [
+      'instagram_basic',
+      'pages_read_user_content'
+    ]);
+
+    if (!scopeCheck.valid) {
+      await logAudit('scope_check_failed', userId, {
+        endpoint: '/visitor-posts',
+        missing: scopeCheck.missing,
+        business_account_id: businessAccountId
+      });
+
+      return res.status(403).json({
+        success: false,
+        error: `Missing required permissions: ${scopeCheck.missing.join(', ')}`,
+        code: 'MISSING_SCOPES',
+        missing: scopeCheck.missing
       });
     }
 
@@ -1347,10 +1375,11 @@ router.get('/visitor-posts', async (req, res) => {
     if (error) {
       console.error('[UGC] Database query error:', error);
 
-      await logAudit('visitor_posts_error', null, {
+      await logAudit('visitor_posts_error', userId, {
         action: 'fetch_visitor_posts',
         error: error.message,
         source: 'database',
+        business_account_id: businessAccountId,
         response_time_ms: Date.now() - requestStartTime
       });
 
@@ -1385,11 +1414,12 @@ router.get('/visitor-posts', async (req, res) => {
 
     const responseTime = Date.now() - requestStartTime;
 
-    await logAudit('instagram_visitor_posts_fetched', null, {
-      action: 'fetch_visitor_posts',
-      business_account_id: businessAccountId,
-      posts_count: posts?.length || 0,
+    // ✅ NEW: Audit successful fetch with userId (bff586c pattern)
+    await logAudit('posts_fetched', userId, {
+      count: posts?.length || 0,
       source: 'database',
+      endpoint: '/visitor-posts',
+      business_account_id: businessAccountId,
       response_time_ms: responseTime
     });
 
