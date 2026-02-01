@@ -11,6 +11,7 @@ import { startTokenRefreshInterval } from './services/tokenRefreshService';
 // Import Layout Components (always needed for protected routes)
 import Layout from './components/layout/Layout';
 import RequireAuth from './components/layout/RequireAuth';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Keep Login eager - it's the entry point for unauthenticated users
 import Login from './pages/Login';
@@ -416,7 +417,11 @@ function App() {
               <Route path="audience" element={<Audience />} />
 
               {/* UGC Management */}
-              <Route path="ugc" element={<UGCManagement />} />
+              <Route path="ugc" element={
+                <ErrorBoundary>
+                  <UGCManagement />
+                </ErrorBoundary>
+              } />
             </Route>
             
             {/* ==========================================

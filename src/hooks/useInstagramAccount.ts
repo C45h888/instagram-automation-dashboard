@@ -109,7 +109,10 @@ export const useInstagramAccount = (): UseInstagramAccountResult => {
     businessAccountId: primaryAccount?.id || null,  // UUID for backend
     instagramBusinessId: primaryAccount?.instagram_business_id || null,  // For API :accountId
     isLoading,
-    error: queryError ? (queryError as Error).message : null,
+    // ✅ PHASE 1 FIX: Safe error handling - prevents crash if queryError is not an Error instance
+    error: queryError
+      ? (queryError instanceof Error ? queryError.message : String(queryError))
+      : null,
     refetch: () => {
       console.log('🔄 Manual refetch triggered');
       refetch();
