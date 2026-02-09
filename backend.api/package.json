@@ -23,13 +23,7 @@
     "check:env": "node -e \"console.log('NODE_ENV:', process.env.NODE_ENV || 'not set'); console.log('DB URL:', process.env.SUPABASE_URL ? '✅ Set' : '❌ Missing'); console.log('Service Key:', process.env.SUPABASE_SERVICE_KEY ? '✅ Set' : '❌ Missing')\"",
     "start:win": "set NODE_ENV=production&& node server.js",
     "dev:win": "set NODE_ENV=development&& nodemon server.js",
-
-    "//": "=== FIXIE PROXY SCRIPTS (Phase 5) ===",
-    "proxy:test": "node tests/test-fixie-proxy.js",
-    "proxy:validate": "node -e \"const {validateProxyConnection} = require('./config/fixie-proxy'); validateProxyConnection().then(r => console.log(r)).catch(e => console.error(e))\"",
-    "proxy:metrics": "node -e \"const {getProxyMetrics} = require('./config/fixie-proxy'); console.log(JSON.stringify(getProxyMetrics(), null, 2))\"",
-    "proxy:ip": "node -e \"const axios = require('axios'); const {HttpsProxyAgent} = require('https-proxy-agent'); const agent = new HttpsProxyAgent(process.env.FIXIE_URL); axios.get('https://api.ipify.org?format=json', {httpsAgent: agent, proxy: false}).then(r => console.log('Static IP:', r.data.ip)).catch(e => console.error('Error:', e.message));\"",
-    "test:full": "npm run test:connection && npm run proxy:validate && npm test"
+    "test:full": "npm run test:connection && npm test"
   },
   "keywords": [
     "instagram",
@@ -53,10 +47,8 @@
     "crypto": "^1.0.1",
     "dotenv": "^16.4.5",
     "express": "^4.21.2",
-    "https-proxy-agent": "^7.0.6",
     "jsonwebtoken": "^9.0.2",
-    "rate-limiter-flexible": "^7.2.0",
-    "socks-proxy-agent": "^8.0.5"
+    "rate-limiter-flexible": "^7.2.0"
   },
   "devDependencies": {
     "cross-env": "^7.0.3",

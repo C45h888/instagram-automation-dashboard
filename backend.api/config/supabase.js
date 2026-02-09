@@ -2,7 +2,6 @@
 const { createClient } = require('@supabase/supabase-js');
 const crypto = require('crypto');
 const dotenv = require('dotenv');
-const { getSupabaseProxyConfig } = require('./fixie-proxy');
 
 // Load environment variables
 dotenv.config({ path: '../.env' });
@@ -162,14 +161,8 @@ async function initializeSupabase(options = {}) {
       const testResult = await testConnection(config.url, serviceKey, timeout);
       
       if (testResult.success) {
-        // Get proxy configuration from Fixie module
-        const proxyConfig = process.env.USE_FIXIE_PROXY === 'true'
-          ? getSupabaseProxyConfig()
-          : {};
-
         // Create production clients
         supabaseAdmin = createClient(config.url, serviceKey, {
-          ...proxyConfig,  // Merge proxy configuration
           auth: {
             autoRefreshToken: false,
             persistSession: false,
@@ -179,12 +172,9 @@ async function initializeSupabase(options = {}) {
             schema: 'public'
           },
           global: {
-            ...proxyConfig.global,  // Merge proxy fetch function
             headers: {
-              ...proxyConfig.global?.headers,
               'X-Client-Info': 'instagram-automation-backend',
-              'X-Client-Version': '1.0.0',
-              'X-Static-IP-Protected': process.env.USE_FIXIE_PROXY === 'true' ? 'true' : 'false'
+              'X-Client-Version': '2.0.0'
             }
           },
           realtime: {
@@ -196,12 +186,7 @@ async function initializeSupabase(options = {}) {
         
         // Create anon client if key provided
         if (anonKey) {
-          const anonProxyConfig = process.env.USE_FIXIE_PROXY === 'true'
-            ? getSupabaseProxyConfig()
-            : {};
-
           supabaseClient = createClient(config.url, anonKey, {
-            ...anonProxyConfig,
             auth: {
               autoRefreshToken: true,
               persistSession: true,
@@ -211,12 +196,9 @@ async function initializeSupabase(options = {}) {
               schema: 'public'
             },
             global: {
-              ...anonProxyConfig.global,
               headers: {
-                ...anonProxyConfig.global?.headers,
                 'X-Client-Info': 'instagram-automation-client',
-                'X-Client-Version': '1.0.0',
-                'X-Static-IP-Protected': process.env.USE_FIXIE_PROXY === 'true' ? 'true' : 'false'
+                'X-Client-Version': '2.0.0'
               }
             }
           });
@@ -758,24 +740,6 @@ const supabaseHelpers = {
 };
 
 // =============================================================================
-// PROXY HELPER FUNCTIONS (Phase 5)
-// =============================================================================
-
-/**
- * Check if proxy is enabled for Supabase connections
- */
-function isProxyEnabled() {
-  return process.env.USE_FIXIE_PROXY === 'true';
-}
-
-/**
- * Check if static IP protection is active
- */
-function isStaticIPProtected() {
-  return process.env.USE_FIXIE_PROXY === 'true';
-}
-
-// =============================================================================
 // EXPORTS - Complete compatibility maintained
 // =============================================================================
 
@@ -795,13 +759,9 @@ module.exports = {
   // Logging functions
   logApiRequest,
   logAudit,
-  
+
   // Helper functions
   supabaseHelpers,
-
-  // Proxy helper functions (Phase 5)
-  isProxyEnabled,
-  isStaticIPProtected,
 
   // Backward compatibility aliases
   supabaseAdmin: getSupabaseAdmin,

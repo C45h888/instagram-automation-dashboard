@@ -62,6 +62,75 @@ export type Database = {
         }
         Relationships: []
       }
+      analytics_reports: {
+        Row: {
+          business_account_id: string
+          created_at: string
+          data_sources: Json | null
+          end_date: string
+          historical_comparison: Json
+          id: string
+          insights: Json
+          instagram_metrics: Json
+          media_metrics: Json
+          processed_at: string
+          report_date: string
+          report_type: string
+          revenue_metrics: Json
+          run_id: string | null
+          start_date: string
+        }
+        Insert: {
+          business_account_id: string
+          created_at?: string
+          data_sources?: Json | null
+          end_date: string
+          historical_comparison?: Json
+          id?: string
+          insights?: Json
+          instagram_metrics?: Json
+          media_metrics?: Json
+          processed_at?: string
+          report_date: string
+          report_type: string
+          revenue_metrics?: Json
+          run_id?: string | null
+          start_date: string
+        }
+        Update: {
+          business_account_id?: string
+          created_at?: string
+          data_sources?: Json | null
+          end_date?: string
+          historical_comparison?: Json
+          id?: string
+          insights?: Json
+          instagram_metrics?: Json
+          media_metrics?: Json
+          processed_at?: string
+          report_date?: string
+          report_type?: string
+          revenue_metrics?: Json
+          run_id?: string | null
+          start_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analytics_reports_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
+            referencedRelation: "active_dm_summary"
+            referencedColumns: ["business_account_id"]
+          },
+          {
+            foreignKeyName: "analytics_reports_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
+            referencedRelation: "instagram_business_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       api_usage: {
         Row: {
           business_account_id: string | null
@@ -437,6 +506,69 @@ export type Database = {
         }
         Relationships: []
       }
+      instagram_assets: {
+        Row: {
+          avg_engagement: number | null
+          business_account_id: string
+          created_at: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          last_posted: string | null
+          media_type: string | null
+          post_count: number | null
+          storage_path: string
+          tags: string[] | null
+          title: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          avg_engagement?: number | null
+          business_account_id: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_posted?: string | null
+          media_type?: string | null
+          post_count?: number | null
+          storage_path: string
+          tags?: string[] | null
+          title?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          avg_engagement?: number | null
+          business_account_id?: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_posted?: string | null
+          media_type?: string | null
+          post_count?: number | null
+          storage_path?: string
+          tags?: string[] | null
+          title?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "instagram_assets_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
+            referencedRelation: "active_dm_summary"
+            referencedColumns: ["business_account_id"]
+          },
+          {
+            foreignKeyName: "instagram_assets_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
+            referencedRelation: "instagram_business_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       instagram_business_accounts: {
         Row: {
           account_type:
@@ -629,10 +761,13 @@ export type Database = {
           is_active: boolean | null
           issued_at: string | null
           last_refreshed_at: string | null
+          page_id: string | null
           refresh_token_encrypted: string | null
           revoked_at: string | null
           revoked_reason: string | null
           scope: string[] | null
+          scope_cache: Json | null
+          scope_cache_updated_at: string | null
           token_hash: string | null
           token_type: string | null
           updated_at: string | null
@@ -648,10 +783,13 @@ export type Database = {
           is_active?: boolean | null
           issued_at?: string | null
           last_refreshed_at?: string | null
+          page_id?: string | null
           refresh_token_encrypted?: string | null
           revoked_at?: string | null
           revoked_reason?: string | null
           scope?: string[] | null
+          scope_cache?: Json | null
+          scope_cache_updated_at?: string | null
           token_hash?: string | null
           token_type?: string | null
           updated_at?: string | null
@@ -667,10 +805,13 @@ export type Database = {
           is_active?: boolean | null
           issued_at?: string | null
           last_refreshed_at?: string | null
+          page_id?: string | null
           refresh_token_encrypted?: string | null
           revoked_at?: string | null
           revoked_reason?: string | null
           scope?: string[] | null
+          scope_cache?: Json | null
+          scope_cache_updated_at?: string | null
           token_hash?: string | null
           token_type?: string | null
           updated_at?: string | null
@@ -1021,6 +1162,145 @@ export type Database = {
         }
         Relationships: []
       }
+      prompt_templates: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_active: boolean
+          notes: string | null
+          prompt_key: string
+          template: string
+          updated_at: string | null
+          version: number
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean
+          notes?: string | null
+          prompt_key: string
+          template: string
+          updated_at?: string | null
+          version?: number
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean
+          notes?: string | null
+          prompt_key?: string
+          template?: string
+          updated_at?: string | null
+          version?: number
+        }
+        Relationships: []
+      }
+      scheduled_posts: {
+        Row: {
+          agent_approved: boolean | null
+          agent_modifications: Json | null
+          agent_quality_score: number | null
+          agent_reasoning: string | null
+          asset_id: string | null
+          asset_storage_path: string
+          asset_url: string
+          business_account_id: string
+          caption_body: string | null
+          caption_cta: string | null
+          caption_hook: string | null
+          created_at: string | null
+          evaluated_at: string | null
+          generated_caption: string
+          generated_hashtags: Json | null
+          generation_model: string | null
+          id: string
+          instagram_media_id: string | null
+          publish_error: string | null
+          published_at: string | null
+          run_id: string | null
+          selection_factors: Json | null
+          selection_score: number | null
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          agent_approved?: boolean | null
+          agent_modifications?: Json | null
+          agent_quality_score?: number | null
+          agent_reasoning?: string | null
+          asset_id?: string | null
+          asset_storage_path: string
+          asset_url: string
+          business_account_id: string
+          caption_body?: string | null
+          caption_cta?: string | null
+          caption_hook?: string | null
+          created_at?: string | null
+          evaluated_at?: string | null
+          generated_caption: string
+          generated_hashtags?: Json | null
+          generation_model?: string | null
+          id?: string
+          instagram_media_id?: string | null
+          publish_error?: string | null
+          published_at?: string | null
+          run_id?: string | null
+          selection_factors?: Json | null
+          selection_score?: number | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          agent_approved?: boolean | null
+          agent_modifications?: Json | null
+          agent_quality_score?: number | null
+          agent_reasoning?: string | null
+          asset_id?: string | null
+          asset_storage_path?: string
+          asset_url?: string
+          business_account_id?: string
+          caption_body?: string | null
+          caption_cta?: string | null
+          caption_hook?: string | null
+          created_at?: string | null
+          evaluated_at?: string | null
+          generated_caption?: string
+          generated_hashtags?: Json | null
+          generation_model?: string | null
+          id?: string
+          instagram_media_id?: string | null
+          publish_error?: string | null
+          published_at?: string | null
+          run_id?: string | null
+          selection_factors?: Json | null
+          selection_score?: number | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scheduled_posts_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "instagram_assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scheduled_posts_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
+            referencedRelation: "active_dm_summary"
+            referencedColumns: ["business_account_id"]
+          },
+          {
+            foreignKeyName: "scheduled_posts_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
+            referencedRelation: "instagram_business_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ugc_campaigns: {
         Row: {
           business_account_id: string
@@ -1188,6 +1468,129 @@ export type Database = {
           },
           {
             foreignKeyName: "ugc_content_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
+            referencedRelation: "instagram_business_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ugc_discovered: {
+        Row: {
+          business_account_id: string
+          caption: string | null
+          comments_count: number | null
+          created_at: string | null
+          id: string
+          instagram_media_id: string
+          like_count: number | null
+          media_type: string | null
+          media_url: string | null
+          permalink: string | null
+          post_timestamp: string | null
+          quality_factors: Json | null
+          quality_score: number
+          quality_tier: string
+          run_id: string | null
+          source: string
+          source_hashtag: string | null
+          updated_at: string | null
+          username: string
+        }
+        Insert: {
+          business_account_id: string
+          caption?: string | null
+          comments_count?: number | null
+          created_at?: string | null
+          id?: string
+          instagram_media_id: string
+          like_count?: number | null
+          media_type?: string | null
+          media_url?: string | null
+          permalink?: string | null
+          post_timestamp?: string | null
+          quality_factors?: Json | null
+          quality_score: number
+          quality_tier: string
+          run_id?: string | null
+          source: string
+          source_hashtag?: string | null
+          updated_at?: string | null
+          username: string
+        }
+        Update: {
+          business_account_id?: string
+          caption?: string | null
+          comments_count?: number | null
+          created_at?: string | null
+          id?: string
+          instagram_media_id?: string
+          like_count?: number | null
+          media_type?: string | null
+          media_url?: string | null
+          permalink?: string | null
+          post_timestamp?: string | null
+          quality_factors?: Json | null
+          quality_score?: number
+          quality_tier?: string
+          run_id?: string | null
+          source?: string
+          source_hashtag?: string | null
+          updated_at?: string | null
+          username?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ugc_discovered_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
+            referencedRelation: "active_dm_summary"
+            referencedColumns: ["business_account_id"]
+          },
+          {
+            foreignKeyName: "ugc_discovered_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
+            referencedRelation: "instagram_business_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ugc_monitored_hashtags: {
+        Row: {
+          business_account_id: string
+          created_at: string | null
+          hashtag: string
+          id: string
+          is_active: boolean
+          updated_at: string | null
+        }
+        Insert: {
+          business_account_id: string
+          created_at?: string | null
+          hashtag: string
+          id?: string
+          is_active?: boolean
+          updated_at?: string | null
+        }
+        Update: {
+          business_account_id?: string
+          created_at?: string | null
+          hashtag?: string
+          id?: string
+          is_active?: boolean
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ugc_monitored_hashtags_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
+            referencedRelation: "active_dm_summary"
+            referencedColumns: ["business_account_id"]
+          },
+          {
+            foreignKeyName: "ugc_monitored_hashtags_business_account_id_fkey"
             columns: ["business_account_id"]
             isOneToOne: false
             referencedRelation: "instagram_business_accounts"

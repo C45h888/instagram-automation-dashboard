@@ -14,15 +14,8 @@ const {
   logAudit
 } = require('./config/supabase');
 
-// Import Fixie Static IP Proxy (Phase 5)
-const {
-  initializeFixieProxy,
-  validateProxyConnection,
-  getProxyHealth
-} = require('./config/fixie-proxy');
-
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3000;
 
 // =============================================================================
 // CORS CONFIGURATION - PRODUCTION READY (IMPROVED)
@@ -41,7 +34,9 @@ const rawOrigins = [
   'https://888intelligenceautomation.in',      // Production root
   'https://www.888intelligenceautomation.in',  // Production www
   'https://api.888intelligenceautomation.in',  // Production API
-  'https://app.888intelligenceautomation.in'   // Production app
+  'https://app.888intelligenceautomation.in',  // Production app
+  'http://localhost:3002',                     // Agent (development)
+  'http://instagram-agent:3002'                // Agent (Docker network)
 ];
 
 // SAFETY NET: Filter out undefined/null/empty strings to prevent CORS errors
@@ -70,7 +65,8 @@ const corsOptions = {
     'Authorization',
     'X-Requested-With',
     'X-Request-ID',
-    'X-Client-Info'
+    'X-Client-Info',
+    'X-API-Key'
   ]
 };
 
@@ -235,14 +231,12 @@ app.use((req, res, next) => {
 // HEALTH CHECK ENDPOINTS - CRITICAL FOR MONITORING
 // =============================================================================
 
-// Basic health check with proxy status (Phase 5)
+// Basic health check
 app.get('/health', (req, res) => {
-  const proxyHealth = getProxyHealth();
-
-  const health = {
+  res.status(200).json({
     status: 'healthy',
     service: 'instagram-automation-backend',
-    version: '2.0.0',
+    version: '3.0.0',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     environment: process.env.NODE_ENV || 'development',
@@ -255,23 +249,8 @@ app.get('/health', (req, res) => {
         total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
         unit: 'MB'
       }
-    },
-    proxy: {
-      enabled: proxyHealth.enabled,
-      initialized: proxyHealth.initialized,
-      httpAgent: proxyHealth.httpAgent,
-      socksAgent: proxyHealth.socksAgent,
-      staticIPs: proxyHealth.staticIPs,
-      metrics: {
-        requests: proxyHealth.metrics.requests,
-        failures: proxyHealth.metrics.failures,
-        avgResponseTime: proxyHealth.metrics.avgResponseTime,
-        lastError: proxyHealth.metrics.lastError
-      }
     }
-  };
-
-  res.status(200).json(health);
+  });
 });
 
 // Database health check endpoint
@@ -304,18 +283,6 @@ app.get('/health/database', async (req, res) => {
   }
 });
 
-// Dedicated proxy health endpoint (Phase 5)
-app.get('/health/proxy', (req, res) => {
-  const { getProxyMetrics } = require('./config/fixie-proxy');
-  const metrics = getProxyMetrics();
-
-  res.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    proxy: metrics
-  });
-});
-
 // Complete system status endpoint
 app.get('/status', async (req, res) => {
   const status = {
@@ -324,17 +291,12 @@ app.get('/status', async (req, res) => {
     services: {
       backend: 'operational',
       database: 'checking...',
-      authentication: 'operational',
-      tunnels: {
-        api: 'operational', // Tunnel A is always operational if this responds
-        database: 'deprecated' // Tunnel B removed
-      }
+      authentication: 'operational'
     },
     configuration: {
       supabase_configured: !!process.env.SUPABASE_SERVICE_KEY,
       encryption_enabled: !!process.env.ENCRYPTION_KEY,
-      n8n_webhooks_configured: !!process.env.N8N_BASE_URL,
-      static_ip_configured: !!process.env.STATIC_IP // For future use
+      agent_api_key_configured: !!process.env.AGENT_API_KEY
     }
   };
   
@@ -386,6 +348,11 @@ function validateEnvCreds() {
   console.log('   Instagram App ID:', process.env.INSTAGRAM_APP_ID);
   console.log('   Instagram App Secret:', process.env.INSTAGRAM_APP_SECRET?.substring(0, 5) + '...');
   console.log('   Supabase URL:', process.env.SUPABASE_URL?.split('.')[0] + '...');
+
+  // Non-fatal warning for agent API key
+  if (!process.env.AGENT_API_KEY) {
+    console.warn('⚠️  AGENT_API_KEY not configured - agent proxy endpoints will return 500');
+  }
 }
 
 // Call validation before initializing services
@@ -426,6 +393,15 @@ try {
   console.error('❌ Failed to load Instagram API routes:', error.message);
 }
 
+// ✅ Agent proxy routes (Path C - Agent → Backend → Graph API)
+try {
+  const agentProxyRoutes = require('./routes/agent-proxy');
+  app.use('/api/instagram', agentProxyRoutes);
+  console.log('✅ Agent proxy routes loaded (5 endpoints: search-hashtag, tags, send-dm, publish-post, insights)');
+} catch (error) {
+  console.error('❌ Failed to load agent proxy routes:', error.message);
+}
+
 // ✅ Authentication routes REMOVED (Phase 3.7)
 // Native Supabase OAuth now handles authentication directly
 // Backend auth.js deleted - signInWithIdToken() was incompatible with Facebook tokens
@@ -446,8 +422,8 @@ try {
 app.get('/', (req, res) => {
   res.json({
     service: 'Instagram Automation Backend',
-    version: '2.0.0',
-    architecture: 'Direct Supabase Connection with Static IP Whitelisting',
+    version: '3.0.0',
+    architecture: 'LangChain Agent proxy (Path C) + Frontend data via webhooks (Path B)',
     status: 'operational',
     documentation: '/api',
     health: '/health',
@@ -458,13 +434,17 @@ app.get('/', (req, res) => {
 app.get('/api', (req, res) => {
   res.json({
     title: 'Instagram Automation Backend API',
-    version: '2.0.0',
-    description: 'Optimized backend with direct Supabase connection',
+    version: '3.0.0',
+    description: 'Backend proxy layer for LangChain agent + frontend data display',
     architecture: {
       api_tunnel: 'api.888intelligenceautomation.in',
       database: 'Direct connection to Supabase (uromexjprcrjfmhkmgxa.supabase.co)',
-      security: 'Static IP whitelisting on Supabase firewall',
-      removed: 'Database tunnel (Tunnel B) - eliminated due to proxy issues'
+      data_paths: {
+        path_a: 'Meta Webhook → Agent (real-time automation)',
+        path_b: 'Meta Webhook → Backend (frontend display + archival)',
+        path_c: 'Agent → Backend REST proxy → Graph API (5 endpoints)'
+      },
+      removed: 'N8N workflows, Fixie proxy, static IP whitelisting'
     },
     endpoints: {
       health: {
@@ -473,8 +453,15 @@ app.get('/api', (req, res) => {
         '/status': 'Complete system status'
       },
       webhooks: {
-        '/webhook/instagram': 'Instagram webhook endpoint',
-        '/webhook/n8n-status': 'N8N integration status'
+        '/webhook/instagram': 'Instagram webhook endpoint (Path B - frontend data)',
+        '/webhook/realtime-updates': 'Frontend polling endpoint for real-time events'
+      },
+      agent_proxy: {
+        'POST /api/instagram/search-hashtag': 'Search hashtag media for UGC discovery (agent only)',
+        'GET /api/instagram/tags': 'Get tagged posts for UGC discovery (agent only)',
+        'POST /api/instagram/send-dm': 'Send DM for UGC permissions (agent only)',
+        'POST /api/instagram/publish-post': 'Publish post from content scheduler (agent only)',
+        'GET /api/instagram/insights': 'Get account/media insights for analytics (agent only)'
       },
       testing: {
         '/api/test': 'Test suite overview',
@@ -553,17 +540,6 @@ async function startServer() {
   console.log(`   Anon Key: ${process.env.SUPABASE_ANON_KEY ? '✅ Configured' : '❌ Missing'}`);
   console.log(`   Encryption: ${process.env.ENCRYPTION_KEY ? '✅ Enabled' : '⚠️  Disabled'}`);
 
-  // Initialize Fixie Static IP Proxy (Phase 5)
-  console.log('\n🔒 Initializing Static IP Security...');
-  const proxyInit = initializeFixieProxy();
-
-  if (proxyInit.enabled) {
-    console.log('✅ Fixie proxy enabled');
-    console.log(`   Static IPs: ${proxyInit.staticIPs.join(', ')}`);
-  } else {
-    console.log(`ℹ️  Proxy not enabled: ${proxyInit.reason || 'Disabled in configuration'}`);
-  }
-
   // Initialize Supabase with resilient connection
   console.log('\n🔄 Initializing Supabase connection...');
   
@@ -623,43 +599,6 @@ async function startServer() {
     console.log('   CORS: Configured for allowed origins');
     console.log('   Database: Direct connection with IP whitelisting');
     console.log('   Encryption: ' + (process.env.ENCRYPTION_KEY ? 'Enabled' : 'Disabled'));
-
-    // Validate static IP proxy in production (Phase 5)
-    if (process.env.NODE_ENV === 'production' && process.env.USE_FIXIE_PROXY === 'true') {
-      console.log('\n🧪 Validating static IP connection...');
-
-      try {
-        const validation = await validateProxyConnection();
-
-        if (!validation.valid) {
-          console.error('\n' + '='.repeat(60));
-          console.error('❌ CRITICAL: STATIC IP VALIDATION FAILED!');
-          console.error('='.repeat(60));
-          console.error(`Reason: ${validation.reason}`);
-          console.error(`Detected IP: ${validation.ip || 'Unknown'}`);
-          console.error(`Expected IPs: ${validation.staticIPs?.join(', ') || 'None'}`);
-          console.error('\n⚠️  YOUR DATABASE IS NOT PROTECTED!');
-          console.error('⚠️  SERVER WILL SHUT DOWN IN 5 SECONDS...\n');
-
-          // Give time to read the error
-          await new Promise(resolve => setTimeout(resolve, 5000));
-          process.exit(1);
-        }
-
-        console.log('\n✅ Static IP Validation Successful');
-        console.log(`   Detected IP: ${validation.ip}`);
-        console.log(`   Expected IPs: ${validation.staticIPs.join(', ')}`);
-        console.log(`   Status: ${validation.reason}`);
-
-      } catch (error) {
-        console.error('❌ Proxy validation error:', error.message);
-
-        if (process.env.NODE_ENV === 'production') {
-          console.error('⚠️  Cannot start in production without proxy validation');
-          process.exit(1);
-        }
-      }
-    }
 
     console.log('\n' + '='.repeat(60) + '\n');
   });
