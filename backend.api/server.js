@@ -66,7 +66,8 @@ const corsOptions = {
     'X-Requested-With',
     'X-Request-ID',
     'X-Client-Info',
-    'X-API-Key'
+    'X-API-Key',
+    'X-User-ID'
   ]
 };
 
@@ -397,7 +398,7 @@ try {
 try {
   const agentProxyRoutes = require('./routes/agent-proxy');
   app.use('/api/instagram', agentProxyRoutes);
-  console.log('✅ Agent proxy routes loaded (5 endpoints: search-hashtag, tags, send-dm, publish-post, insights)');
+  console.log('✅ Agent proxy routes loaded (6 endpoints: search-hashtag, tags, send-dm, publish-post, insights, oversight/chat)');
 } catch (error) {
   console.error('❌ Failed to load agent proxy routes:', error.message);
 }
