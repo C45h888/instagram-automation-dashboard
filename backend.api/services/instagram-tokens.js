@@ -597,9 +597,24 @@ async function retrievePageToken(userId, businessAccountId) {
       const expiredAgo = Math.floor((now - expiresAt) / (1000 * 60 * 60 * 24)); // days
       console.error(`❌ Page token expired ${expiredAgo} day(s) ago`);
 
-      throw new Error(
+      // Mark token inactive in DB so subsequent calls fail fast without re-querying the expired record
+      try {
+        await supabase
+          .from('instagram_credentials')
+          .update({ is_active: false, updated_at: new Date().toISOString() })
+          .eq('user_id', userId)
+          .eq('business_account_id', businessAccountId)
+          .eq('token_type', 'page');
+        console.warn('⚠️  Token marked inactive in database');
+      } catch (deactivateErr) {
+        console.warn('⚠️  Failed to deactivate token record (non-blocking):', deactivateErr.message);
+      }
+
+      const err = new Error(
         `Page token expired on ${expiresAt.toISOString()}. User must reconnect their Instagram account through OAuth.`
       );
+      err.code = 'TOKEN_EXPIRED';
+      throw err;
     }
 
     const expiresIn = Math.floor((expiresAt - now) / (1000 * 60 * 60 * 24)); // days

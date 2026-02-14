@@ -398,7 +398,7 @@ try {
 try {
   const agentProxyRoutes = require('./routes/agent-proxy');
   app.use('/api/instagram', agentProxyRoutes);
-  console.log('✅ Agent proxy routes loaded (6 endpoints: search-hashtag, tags, send-dm, publish-post, insights, oversight/chat)');
+  console.log('✅ Agent proxy routes loaded (13 endpoints: search-hashtag, tags, send-dm, publish-post, insights, account-insights, media-insights, reply-comment, reply-dm, oversight/chat, post-comments, conversations, conversation-messages)');
 } catch (error) {
   console.error('❌ Failed to load agent proxy routes:', error.message);
 }

@@ -112,7 +112,7 @@ router.post('/search-hashtag', async (req, res) => {
     const mediaRes = await axios.get(mediaUrl, {
       params: {
         user_id: igUserId,
-        fields: 'id,media_type,media_url,permalink,caption,timestamp,username,like_count,comments_count',
+        fields: 'id,media_type,media_url,thumbnail_url,permalink,caption,timestamp,username,like_count,comments_count',
         limit: searchLimit,
         access_token: pageToken
       }
@@ -480,7 +480,7 @@ router.post('/publish-post', async (req, res) => {
 // metricTypeOverride: if provided, ignores the metric_type query param.
 
 async function handleInsightsRequest(req, res, startTime, metricTypeOverride) {
-  const { business_account_id, until, metric_type } = req.query;
+  const { business_account_id, since, until, metric_type } = req.query;
 
   try {
     // Validation
@@ -499,23 +499,28 @@ async function handleInsightsRequest(req, res, startTime, metricTypeOverride) {
 
     if (type === 'account') {
       // Get account insights using existing function (handles fallback for code 100)
+      // Pass since/until from agent request — Graph API expects Unix timestamps or ISO strings
       const accountInsights = await getAccountInsights(igUserId, pageToken, {
-        period: '7d',
+        since,
         until
       });
 
       insightsData = accountInsights;
 
     } else if (type === 'media') {
-      // Get media insights - fetch recent media first
+      // Get media insights - fetch media filtered by date range
+      // Graph API /{igUserId}/media accepts since/until as Unix timestamps
       const mediaUrl = `${GRAPH_API_BASE}/${igUserId}/media`;
-      const mediaRes = await axios.get(mediaUrl, {
-        params: {
-          fields: 'id,media_type,timestamp,caption',
-          limit: 25,
-          access_token: pageToken
-        }
-      });
+      const mediaParams = {
+        fields: 'id,media_type,timestamp,caption',
+        limit: 50,
+        access_token: pageToken
+      };
+      // Convert ISO date strings to Unix timestamps for Graph API (if provided)
+      if (since) mediaParams.since = Math.floor(new Date(since).getTime() / 1000);
+      if (until) mediaParams.until = Math.floor(new Date(until).getTime() / 1000);
+
+      const mediaRes = await axios.get(mediaUrl, { params: mediaParams });
 
       const mediaList = mediaRes.data.data || [];
 
