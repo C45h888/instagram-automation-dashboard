@@ -658,10 +658,10 @@ async function validateTokenScopes(userId, businessAccountId, requiredScopes = [
     console.log('   Business Account ID:', businessAccountId);
     console.log('   Required scopes:', requiredScopes);
 
-    // Fetch cached scopes (7-day TTL per bff586c)
+    // Fetch scopes — prefer scope_cache (live-validated) but fall back to scope (set at token store time)
     const { data: credentials, error } = await supabase
       .from('instagram_credentials')
-      .select('scope_cache, scope_cache_updated_at')
+      .select('scope, scope_cache, scope_cache_updated_at')
       .eq('user_id', userId)
       .eq('business_account_id', businessAccountId)
       .eq('token_type', 'page')
@@ -674,7 +674,7 @@ async function validateTokenScopes(userId, businessAccountId, requiredScopes = [
       return { valid: false, missing: requiredScopes };
     }
 
-    const grantedScopes = credentials.scope_cache || [];
+    const grantedScopes = credentials.scope_cache || credentials.scope || [];
     const missingScopes = requiredScopes.filter(req => !grantedScopes.includes(req));
 
     if (missingScopes.length === 0) {

@@ -112,7 +112,7 @@ router.post('/search-hashtag', async (req, res) => {
     const mediaRes = await axios.get(mediaUrl, {
       params: {
         user_id: igUserId,
-        fields: 'id,media_type,media_url,permalink,caption,timestamp,like_count,comments_count',
+        fields: 'id,media_type,media_url,permalink,caption,timestamp,username,like_count,comments_count',
         limit: searchLimit,
         access_token: pageToken
       }
@@ -242,25 +242,63 @@ router.get('/tags', async (req, res) => {
  */
 router.post('/send-dm', async (req, res) => {
   const startTime = Date.now();
-  const { business_account_id, recipient_id, message_text } = req.body;
+  let { business_account_id, recipient_id, recipient_username, message_text } = req.body;
 
   try {
     // Validation
-    if (!business_account_id || !recipient_id || !message_text) {
+    if (!business_account_id || !message_text) {
       return res.status(400).json({
-        error: 'Missing required fields: business_account_id, recipient_id, message_text'
+        error: 'Missing required fields: business_account_id, message_text'
       });
     }
 
-    // Validate recipient_id is numeric IGSID
-    if (!/^\d+$/.test(recipient_id)) {
+    if (!recipient_id && !recipient_username) {
       return res.status(400).json({
-        error: 'recipient_id must be a numeric Instagram Scoped ID (IGSID), not a username'
+        error: 'Either recipient_id (numeric IGSID) or recipient_username must be provided'
       });
+    }
+
+    if (message_text.length > 1000) {
+      return res.status(400).json({ error: 'message_text exceeds 1000 character limit' });
     }
 
     // Resolve credentials
     const { igUserId, pageToken } = await resolveAccountCredentials(business_account_id);
+
+    // If only recipient_username provided, resolve to numeric IGSID via business_discovery
+    if (!recipient_id && recipient_username) {
+      const cleanUsername = recipient_username.replace(/^@/, '');
+      try {
+        const discoveryRes = await axios.get(`${GRAPH_API_BASE}/${igUserId}`, {
+          params: {
+            fields: `business_discovery.fields(ig_id).username(${cleanUsername})`,
+            access_token: pageToken
+          }
+        });
+        recipient_id = discoveryRes.data?.business_discovery?.ig_id;
+      } catch (discoveryErr) {
+        const discoveryError = discoveryErr.response?.data?.error?.message || discoveryErr.message;
+        console.error(`❌ Username resolution failed for @${cleanUsername}:`, discoveryError);
+        return res.status(404).json({
+          error: `Could not resolve username '@${cleanUsername}' to an Instagram ID. The account must be a Business/Creator account.`,
+          code: 'USERNAME_RESOLUTION_FAILED'
+        });
+      }
+
+      if (!recipient_id) {
+        return res.status(404).json({
+          error: `Username '@${cleanUsername}' not found or is not a Business/Creator account`,
+          code: 'USERNAME_NOT_FOUND'
+        });
+      }
+    }
+
+    // Validate resolved recipient_id is numeric IGSID
+    if (!/^\d+$/.test(recipient_id)) {
+      return res.status(400).json({
+        error: 'recipient_id must be a numeric Instagram Scoped ID (IGSID)'
+      });
+    }
 
     // Send DM via Graph API
     const dmUrl = `${GRAPH_API_BASE}/me/messages`;
@@ -436,16 +474,13 @@ router.post('/publish-post', async (req, res) => {
 });
 
 // ============================================
-// ENDPOINT 5: GET /insights (Analytics Reports)
+// SHARED HELPER: INSIGHTS REQUEST HANDLER
 // ============================================
+// Extracted so /insights, /account-insights, and /media-insights can share one implementation.
+// metricTypeOverride: if provided, ignores the metric_type query param.
 
-/**
- * Gets account or media insights for analytics reports
- * Used by: Analytics reports scheduler (scheduler/analytics_reports.py)
- */
-router.get('/insights', async (req, res) => {
-  const startTime = Date.now();
-  const { business_account_id, since, until, metric_type } = req.query;
+async function handleInsightsRequest(req, res, startTime, metricTypeOverride) {
+  const { business_account_id, until, metric_type } = req.query;
 
   try {
     // Validation
@@ -455,7 +490,7 @@ router.get('/insights', async (req, res) => {
       });
     }
 
-    const type = metric_type || 'account';
+    const type = metricTypeOverride || metric_type || 'account';
 
     // Resolve credentials
     const { igUserId, pageToken } = await resolveAccountCredentials(business_account_id);
@@ -502,7 +537,6 @@ router.get('/insights', async (req, res) => {
             insights: insightsRes.data.data || []
           };
         } catch (err) {
-          // Gracefully handle individual media insight failures
           console.warn(`⚠️ Failed to fetch insights for media ${media.id}:`, err.message);
           return {
             media_id: media.id,
@@ -524,10 +558,12 @@ router.get('/insights', async (req, res) => {
     }
 
     const latency = Date.now() - startTime;
+    const endpointName = metricTypeOverride === 'account' ? '/account-insights'
+      : metricTypeOverride === 'media' ? '/media-insights'
+      : '/insights';
 
-    // Log API request
     await logApiRequest({
-      endpoint: '/insights',
+      endpoint: endpointName,
       method: 'GET',
       business_account_id,
       user_id: igUserId,
@@ -545,7 +581,7 @@ router.get('/insights', async (req, res) => {
     const errorMessage = error.response?.data?.error?.message || error.message;
 
     await logApiRequest({
-      endpoint: '/insights',
+      endpoint: metricTypeOverride ? `/${metricTypeOverride === 'account' ? 'account' : 'media'}-insights` : '/insights',
       method: 'GET',
       business_account_id,
       success: false,
@@ -559,10 +595,213 @@ router.get('/insights', async (req, res) => {
       code: error.response?.data?.error?.code
     });
   }
+}
+
+// ============================================
+// ENDPOINT 5: GET /insights (Analytics Reports)
+// ============================================
+
+/**
+ * Gets account or media insights for analytics reports
+ * Used by: Analytics reports scheduler (scheduler/analytics_reports.py)
+ * Also available via /account-insights and /media-insights aliases (agent naming convention)
+ */
+router.get('/insights', (req, res) => handleInsightsRequest(req, res, Date.now(), null));
+
+// ============================================
+// ENDPOINT 5A: GET /account-insights (Agent alias for /insights?metric_type=account)
+// ============================================
+
+/**
+ * Account-level insights alias matching agent naming convention.
+ * Agent calls: GET /account-insights?business_account_id=X&since=Y&until=Z
+ * Used by: analytics_tools.py fetch_account_insights()
+ */
+router.get('/account-insights', (req, res) => handleInsightsRequest(req, res, Date.now(), 'account'));
+
+// ============================================
+// ENDPOINT 5B: GET /media-insights (Agent alias for /insights?metric_type=media)
+// ============================================
+
+/**
+ * Media-level insights alias matching agent naming convention.
+ * Agent calls: GET /media-insights?business_account_id=X&since=Y&until=Z
+ * Used by: analytics_tools.py fetch_media_insights()
+ */
+router.get('/media-insights', (req, res) => handleInsightsRequest(req, res, Date.now(), 'media'));
+
+// ============================================
+// ENDPOINT 6: POST /reply-comment (Engagement Monitor)
+// ============================================
+
+/**
+ * Replies to an Instagram comment.
+ * Used by: Engagement monitor (scheduler/engagement_monitor.py via automation_tools.py)
+ * Agent sends: { comment_id, reply_text, business_account_id, post_id }
+ */
+router.post('/reply-comment', async (req, res) => {
+  const startTime = Date.now();
+  const { business_account_id, comment_id, reply_text, post_id } = req.body;
+
+  try {
+    // Validation
+    if (!business_account_id || !comment_id || !reply_text) {
+      return res.status(400).json({
+        error: 'Missing required fields: business_account_id, comment_id, reply_text'
+      });
+    }
+
+    if (!/^\d+$/.test(String(comment_id))) {
+      return res.status(400).json({ error: 'Invalid comment_id format' });
+    }
+
+    if (reply_text.length > 2200) {
+      return res.status(400).json({
+        error: 'reply_text exceeds 2200 character limit'
+      });
+    }
+
+    // Resolve credentials
+    const { pageToken, userId } = await resolveAccountCredentials(business_account_id);
+
+    // POST /{comment_id}/replies — same Graph API pattern as instagram-api.js:882
+    const replyRes = await axios.post(`${GRAPH_API_BASE}/${comment_id}/replies`, null, {
+      params: {
+        message: reply_text.trim(),
+        access_token: pageToken
+      },
+      timeout: 10000
+    });
+
+    const latency = Date.now() - startTime;
+
+    await logApiRequest({
+      endpoint: '/reply-comment',
+      method: 'POST',
+      business_account_id,
+      user_id: userId,
+      success: true,
+      latency
+    });
+
+    await logAudit({
+      event_type: 'comment_reply_sent',
+      action: 'reply',
+      resource_type: 'instagram_comment',
+      resource_id: replyRes.data.id,
+      details: { comment_id, post_id, reply_text },
+      success: true
+    });
+
+    res.json({ success: true, id: replyRes.data.id });
+
+  } catch (error) {
+    const latency = Date.now() - startTime;
+    const errorMessage = error.response?.data?.error?.message || error.message;
+
+    await logApiRequest({
+      endpoint: '/reply-comment',
+      method: 'POST',
+      business_account_id,
+      success: false,
+      error: errorMessage,
+      latency
+    });
+
+    console.error('❌ Comment reply failed:', errorMessage);
+    res.status(error.response?.status || 500).json({
+      error: errorMessage,
+      code: error.response?.data?.error?.code
+    });
+  }
 });
 
 // ============================================
-// ENDPOINT 6: POST /oversight/chat (Oversight Agent SSE)
+// ENDPOINT 7: POST /reply-dm (Engagement Monitor)
+// ============================================
+
+/**
+ * Sends a reply into an existing DM conversation.
+ * Used by: Engagement monitor (scheduler/engagement_monitor.py via automation_tools.py)
+ * Agent sends: { conversation_id, recipient_id, message_text, business_account_id }
+ */
+router.post('/reply-dm', async (req, res) => {
+  const startTime = Date.now();
+  const { business_account_id, conversation_id, recipient_id, message_text } = req.body;
+
+  try {
+    // Validation
+    if (!business_account_id || !conversation_id || !message_text) {
+      return res.status(400).json({
+        error: 'Missing required fields: business_account_id, conversation_id, message_text'
+      });
+    }
+
+    if (!/^[\w-]+$/.test(String(conversation_id))) {
+      return res.status(400).json({ error: 'Invalid conversation_id format' });
+    }
+
+    if (message_text.length > 1000) {
+      return res.status(400).json({ error: 'message_text exceeds 1000 character limit' });
+    }
+
+    // Resolve credentials
+    const { pageToken, userId } = await resolveAccountCredentials(business_account_id);
+
+    // POST /{conversation_id}/messages — same Graph API pattern as instagram-api.js:2013
+    const dmRes = await axios.post(`${GRAPH_API_BASE}/${conversation_id}/messages`, null, {
+      params: {
+        message: message_text.trim(),
+        access_token: pageToken
+      },
+      timeout: 10000
+    });
+
+    const latency = Date.now() - startTime;
+
+    await logApiRequest({
+      endpoint: '/reply-dm',
+      method: 'POST',
+      business_account_id,
+      user_id: userId,
+      success: true,
+      latency
+    });
+
+    await logAudit({
+      event_type: 'dm_reply_sent',
+      action: 'reply',
+      resource_type: 'instagram_dm',
+      resource_id: dmRes.data.id,
+      details: { conversation_id, recipient_id },
+      success: true
+    });
+
+    res.json({ success: true, id: dmRes.data.id });
+
+  } catch (error) {
+    const latency = Date.now() - startTime;
+    const errorMessage = error.response?.data?.error?.message || error.message;
+
+    await logApiRequest({
+      endpoint: '/reply-dm',
+      method: 'POST',
+      business_account_id,
+      success: false,
+      error: errorMessage,
+      latency
+    });
+
+    console.error('❌ DM reply failed:', errorMessage);
+    res.status(error.response?.status || 500).json({
+      error: errorMessage,
+      code: error.response?.data?.error?.code
+    });
+  }
+});
+
+// ============================================
+// ENDPOINT 8: POST /oversight/chat (Oversight Agent SSE)
 // ============================================
 // Transparent proxy for the Python/LangChain Oversight Brain.
 // Streams agent responses to the frontend via Server-Sent Events.
@@ -650,7 +889,7 @@ router.post('/oversight/chat', async (req, res) => {
   let agentStream = null;
   let pingInterval = null;
 
-  const cleanup = (reason) => {
+  const cleanup = () => {
     if (cleanedUp) return;
     cleanedUp = true;
     if (pingInterval) { clearInterval(pingInterval); pingInterval = null; }
@@ -755,6 +994,489 @@ router.post('/oversight/chat', async (req, res) => {
     });
 
     cleanup('agent connection failed');
+  }
+});
+
+// ============================================
+// ENDPOINT 9: GET /post-comments (Engagement Monitor)
+// ============================================
+
+/**
+ * Fetches live comments for a specific Instagram media post.
+ * Used by: Engagement monitor to read fresh comments before deciding to reply.
+ * Agent sends: ?business_account_id=X&media_id=Y&limit=N
+ * Wraps: instagram-api.js GET /comments/:mediaId
+ */
+router.get('/post-comments', async (req, res) => {
+  const startTime = Date.now();
+  const { business_account_id, media_id, limit } = req.query;
+
+  try {
+    if (!business_account_id || !media_id) {
+      return res.status(400).json({
+        error: 'Missing required query params: business_account_id, media_id'
+      });
+    }
+
+    if (!/^\d+$/.test(String(media_id))) {
+      return res.status(400).json({ error: 'Invalid media_id format' });
+    }
+
+    const fetchLimit = Math.min(parseInt(limit) || 50, 100);
+
+    const { pageToken, userId } = await resolveAccountCredentials(business_account_id);
+
+    // GET /{mediaId}/comments — same Graph API pattern as instagram-api.js:587
+    const commentsRes = await axios.get(`${GRAPH_API_BASE}/${media_id}/comments`, {
+      params: {
+        fields: 'id,text,timestamp,username,like_count,replies_count',
+        limit: fetchLimit,
+        access_token: pageToken
+      },
+      timeout: 10000
+    });
+
+    const latency = Date.now() - startTime;
+
+    await logApiRequest({
+      endpoint: '/post-comments',
+      method: 'GET',
+      business_account_id,
+      user_id: userId,
+      success: true,
+      latency
+    });
+
+    res.json({
+      success: true,
+      data: commentsRes.data.data || [],
+      paging: commentsRes.data.paging || {},
+      meta: { count: commentsRes.data.data?.length || 0 }
+    });
+
+  } catch (error) {
+    const latency = Date.now() - startTime;
+    const errorMessage = error.response?.data?.error?.message || error.message;
+
+    await logApiRequest({
+      endpoint: '/post-comments',
+      method: 'GET',
+      business_account_id,
+      success: false,
+      error: errorMessage,
+      latency
+    });
+
+    console.error('❌ Post comments fetch failed:', errorMessage);
+    res.status(error.response?.status || 500).json({
+      error: errorMessage,
+      code: error.response?.data?.error?.code
+    });
+  }
+});
+
+// ============================================
+// ENDPOINT 10: GET /conversations (Engagement Monitor)
+// ============================================
+
+/**
+ * Lists active DM conversations with 24-hour messaging window status.
+ * Used by: Engagement monitor to find conversations eligible for replies.
+ * Agent sends: ?business_account_id=X&limit=N
+ * Wraps: instagram-api.js GET /conversations/:id
+ */
+router.get('/conversations', async (req, res) => {
+  const startTime = Date.now();
+  const { business_account_id, limit } = req.query;
+
+  try {
+    if (!business_account_id) {
+      return res.status(400).json({
+        error: 'Missing required query param: business_account_id'
+      });
+    }
+
+    const fetchLimit = Math.min(parseInt(limit) || 20, 50);
+
+    const { igUserId, pageToken, userId } = await resolveAccountCredentials(business_account_id);
+
+    // GET /{igUserId}/conversations — same Graph API pattern as instagram-api.js:1703
+    const convRes = await axios.get(`${GRAPH_API_BASE}/${igUserId}/conversations`, {
+      params: {
+        fields: 'id,participants,updated_time,message_count,messages{created_time,from}',
+        platform: 'instagram',
+        limit: fetchLimit,
+        access_token: pageToken
+      },
+      timeout: 10000
+    });
+
+    // Transform with 24-hour window calculation (same logic as instagram-api.js:1726-1759)
+    const now = new Date();
+    const conversations = (convRes.data.data || []).map(conv => {
+      const lastMessage = conv.messages?.data?.[0];
+      const lastMessageTime = lastMessage ? new Date(lastMessage.created_time) : null;
+      const hoursSinceLastMessage = lastMessageTime
+        ? (now - lastMessageTime) / (1000 * 60 * 60)
+        : null;
+      const isWithin24Hours = hoursSinceLastMessage !== null && hoursSinceLastMessage < 24;
+      const hoursRemaining = hoursSinceLastMessage !== null
+        ? Math.max(0, 24 - hoursSinceLastMessage)
+        : null;
+
+      return {
+        id: conv.id,
+        participants: conv.participants?.data || [],
+        last_message_at: conv.updated_time,
+        message_count: conv.message_count || 0,
+        last_message: lastMessage || null,
+        messaging_window: {
+          is_open: isWithin24Hours,
+          hours_remaining: hoursRemaining !== null ? parseFloat(hoursRemaining.toFixed(1)) : null,
+          requires_template: hoursSinceLastMessage !== null && hoursSinceLastMessage >= 24,
+          last_customer_message_at: lastMessageTime ? lastMessageTime.toISOString() : null
+        },
+        within_window: isWithin24Hours,
+        can_send_messages: isWithin24Hours
+      };
+    });
+
+    const latency = Date.now() - startTime;
+
+    await logApiRequest({
+      endpoint: '/conversations',
+      method: 'GET',
+      business_account_id,
+      user_id: userId,
+      success: true,
+      latency
+    });
+
+    res.json({
+      success: true,
+      data: conversations,
+      paging: convRes.data.paging || {},
+      meta: { count: conversations.length }
+    });
+
+  } catch (error) {
+    const latency = Date.now() - startTime;
+    const errorMessage = error.response?.data?.error?.message || error.message;
+
+    await logApiRequest({
+      endpoint: '/conversations',
+      method: 'GET',
+      business_account_id,
+      success: false,
+      error: errorMessage,
+      latency
+    });
+
+    console.error('❌ Conversations fetch failed:', errorMessage);
+    res.status(error.response?.status || 500).json({
+      error: errorMessage,
+      code: error.response?.data?.error?.code
+    });
+  }
+});
+
+// ============================================
+// ENDPOINT 11: GET /conversation-messages (Engagement Monitor)
+// ============================================
+
+/**
+ * Fetches messages for a specific DM conversation.
+ * Used by: Engagement monitor to read thread history before crafting a reply.
+ * Agent sends: ?business_account_id=X&conversation_id=Y&limit=N
+ * Wraps: instagram-api.js GET /conversations/:conversationId/messages
+ */
+router.get('/conversation-messages', async (req, res) => {
+  const startTime = Date.now();
+  const { business_account_id, conversation_id, limit } = req.query;
+
+  try {
+    if (!business_account_id || !conversation_id) {
+      return res.status(400).json({
+        error: 'Missing required query params: business_account_id, conversation_id'
+      });
+    }
+
+    if (!/^[\w-]+$/.test(String(conversation_id))) {
+      return res.status(400).json({ error: 'Invalid conversation_id format' });
+    }
+
+    const fetchLimit = Math.min(parseInt(limit) || 20, 100);
+
+    const { pageToken, userId } = await resolveAccountCredentials(business_account_id);
+
+    // GET /{conversationId}/messages — same Graph API pattern as instagram-api.js:1873
+    const msgRes = await axios.get(`${GRAPH_API_BASE}/${conversation_id}/messages`, {
+      params: {
+        fields: 'id,message,from,created_time,attachments',
+        limit: fetchLimit,
+        access_token: pageToken
+      },
+      timeout: 10000
+    });
+
+    const latency = Date.now() - startTime;
+
+    await logApiRequest({
+      endpoint: '/conversation-messages',
+      method: 'GET',
+      business_account_id,
+      user_id: userId,
+      success: true,
+      latency
+    });
+
+    res.json({
+      success: true,
+      data: msgRes.data.data || [],
+      paging: msgRes.data.paging || {},
+      meta: { count: msgRes.data.data?.length || 0 }
+    });
+
+  } catch (error) {
+    const latency = Date.now() - startTime;
+    const errorMessage = error.response?.data?.error?.message || error.message;
+
+    await logApiRequest({
+      endpoint: '/conversation-messages',
+      method: 'GET',
+      business_account_id,
+      success: false,
+      error: errorMessage,
+      latency
+    });
+
+    console.error('❌ Conversation messages fetch failed:', errorMessage);
+    res.status(error.response?.status || 500).json({
+      error: errorMessage,
+      code: error.response?.data?.error?.code
+    });
+  }
+});
+
+// ============================================
+// ENDPOINT 12: POST /repost-ugc (UGC Discovery)
+// ============================================
+
+/**
+ * Reposts UGC content to the business Instagram account after verifying permission.
+ * Used by: UGC discovery scheduler after creator grants permission.
+ * Agent sends: { business_account_id, ugc_content_id }
+ * Wraps: instagram-api.js POST /ugc/repost
+ */
+router.post('/repost-ugc', async (req, res) => {
+  const startTime = Date.now();
+  const { business_account_id, ugc_content_id } = req.body;
+
+  try {
+    if (!business_account_id || !ugc_content_id) {
+      return res.status(400).json({
+        error: 'Missing required fields: business_account_id, ugc_content_id'
+      });
+    }
+
+    // Step 1: Fetch UGC content and verify permission
+    const supabase = getSupabaseAdmin();
+    const { data: ugcContent, error: ugcError } = await supabase
+      .from('ugc_content')
+      .select('*')
+      .eq('id', ugc_content_id)
+      .single();
+
+    if (ugcError || !ugcContent) {
+      return res.status(404).json({
+        error: 'UGC content not found',
+        code: 'CONTENT_NOT_FOUND'
+      });
+    }
+
+    // Step 2: Permission gate — same check as instagram-api.js:2166
+    if (ugcContent.repost_permission_granted !== true) {
+      return res.status(403).json({
+        error: 'Cannot repost: permission not granted by content creator',
+        code: 'PERMISSION_DENIED',
+        details: {
+          permission_requested: ugcContent.repost_permission_requested,
+          permission_granted: ugcContent.repost_permission_granted
+        }
+      });
+    }
+
+    const mediaUrl = ugcContent.media_url;
+    if (!mediaUrl) {
+      return res.status(400).json({ error: 'UGC content has no media URL', code: 'NO_MEDIA_URL' });
+    }
+
+    // Step 3: Resolve credentials and publish (2-step: container → publish)
+    const { igUserId, pageToken, userId } = await resolveAccountCredentials(business_account_id);
+
+    const caption = ugcContent.caption
+      ? `📸 @${ugcContent.author_username}: ${ugcContent.caption}\n\n#repost`
+      : `📸 @${ugcContent.author_username}\n\n#repost`;
+
+    // Create media container
+    const createRes = await axios.post(`${GRAPH_API_BASE}/${igUserId}/media`, null, {
+      params: { image_url: mediaUrl, caption, access_token: pageToken },
+      timeout: 15000
+    });
+
+    const creationId = createRes.data.id;
+    if (!creationId) throw new Error('Failed to create media container');
+
+    // Publish container
+    const publishRes = await axios.post(`${GRAPH_API_BASE}/${igUserId}/media_publish`, null, {
+      params: { creation_id: creationId, access_token: pageToken },
+      timeout: 15000
+    });
+
+    const mediaId = publishRes.data.id;
+    const latency = Date.now() - startTime;
+
+    // Update ugc_content record
+    await supabase
+      .from('ugc_content')
+      .update({ reposted: true, reposted_at: new Date().toISOString(), instagram_media_id: mediaId })
+      .eq('id', ugc_content_id);
+
+    await logApiRequest({
+      endpoint: '/repost-ugc',
+      method: 'POST',
+      business_account_id,
+      user_id: userId,
+      success: true,
+      latency
+    });
+
+    await logAudit({
+      event_type: 'ugc_reposted',
+      action: 'repost',
+      resource_type: 'ugc_content',
+      resource_id: mediaId,
+      details: { ugc_content_id, author: ugcContent.author_username },
+      success: true
+    });
+
+    res.json({
+      success: true,
+      id: mediaId,
+      original_author: ugcContent.author_username
+    });
+
+  } catch (error) {
+    const latency = Date.now() - startTime;
+    const errorMessage = error.response?.data?.error?.message || error.message;
+
+    await logApiRequest({
+      endpoint: '/repost-ugc',
+      method: 'POST',
+      business_account_id,
+      success: false,
+      error: errorMessage,
+      latency
+    });
+
+    console.error('❌ UGC repost failed:', errorMessage);
+    res.status(error.response?.status || 500).json({
+      error: errorMessage,
+      code: error.response?.data?.error?.code
+    });
+  }
+});
+
+// ============================================
+// ENDPOINT 13: POST /sync-ugc (UGC / Analytics)
+// ============================================
+
+/**
+ * Triggers a fresh sync of tagged/UGC posts from Instagram Graph API into Supabase.
+ * Used by: UGC discovery scheduler after processing tags, to keep DB current.
+ * Agent sends: { business_account_id }
+ * Wraps: instagram-api.js POST /sync/ugc
+ */
+router.post('/sync-ugc', async (req, res) => {
+  const startTime = Date.now();
+  const { business_account_id } = req.body;
+
+  try {
+    if (!business_account_id) {
+      return res.status(400).json({ error: 'Missing required field: business_account_id' });
+    }
+
+    const { igUserId, pageToken, userId } = await resolveAccountCredentials(business_account_id);
+
+    // Fetch tagged posts from Graph API (same endpoint as /tags but stores to DB)
+    const tagsRes = await axios.get(`${GRAPH_API_BASE}/${igUserId}/tags`, {
+      params: {
+        fields: 'id,media_type,media_url,thumbnail_url,caption,permalink,timestamp,username,like_count,comments_count',
+        limit: 50,
+        access_token: pageToken
+      },
+      timeout: 15000
+    });
+
+    const taggedPosts = tagsRes.data.data || [];
+
+    // Upsert into ugc_content table
+    const supabase = getSupabaseAdmin();
+    let syncedCount = 0;
+
+    if (taggedPosts.length > 0) {
+      const records = taggedPosts.map(post => ({
+        business_account_id,
+        instagram_media_id: post.id,
+        author_username: post.username || null,
+        media_type: post.media_type,
+        media_url: post.media_url || post.thumbnail_url || null,
+        caption: post.caption || null,
+        permalink: post.permalink,
+        posted_at: post.timestamp,
+        like_count: post.like_count || 0,
+        comments_count: post.comments_count || 0,
+        synced_at: new Date().toISOString()
+      }));
+
+      const { error: upsertError } = await supabase
+        .from('ugc_content')
+        .upsert(records, { onConflict: 'instagram_media_id', ignoreDuplicates: false });
+
+      if (!upsertError) syncedCount = records.length;
+    }
+
+    const latency = Date.now() - startTime;
+
+    await logApiRequest({
+      endpoint: '/sync-ugc',
+      method: 'POST',
+      business_account_id,
+      user_id: userId,
+      success: true,
+      latency
+    });
+
+    res.json({ success: true, synced_count: syncedCount });
+
+  } catch (error) {
+    const latency = Date.now() - startTime;
+    const errorMessage = error.response?.data?.error?.message || error.message;
+
+    await logApiRequest({
+      endpoint: '/sync-ugc',
+      method: 'POST',
+      business_account_id,
+      success: false,
+      error: errorMessage,
+      latency
+    });
+
+    console.error('❌ UGC sync failed:', errorMessage);
+    res.status(error.response?.status || 500).json({
+      error: errorMessage,
+      code: error.response?.data?.error?.code
+    });
   }
 });
 

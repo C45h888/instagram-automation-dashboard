@@ -1,0 +1,3 @@
+<task>okay we will probably need to check behind the endpoinst logic and how they work can you review how the agent endpoints work by refering to /tmp/instagram-automation-agent/ directory and cross examining it againtst the agent endpoints the in the backend.api directory since i have just added a thin wrapper for the legace api enpdoints and  we need to review all of these endpoints in /tmp/instagram-automation-agent/ directory and ensure that the endpoints and are synced with the endpoints in the agent-proxy
+
+ okay so we need to audit the backend's ugc features 

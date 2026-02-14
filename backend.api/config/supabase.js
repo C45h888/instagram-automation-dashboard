@@ -388,24 +388,49 @@ const decrypt = (encryptedData) => {
 // AUDIT LOGGING (Direct to Supabase)
 // =============================================================================
 
-async function logAudit(eventType, userId = null, eventData = {}, req = null) {
+async function logAudit(eventTypeOrObj, userId = null, eventData = {}, req = null) {
   try {
+    // Support both positional and object call forms:
+    // Positional: logAudit('event_type', userId, { action, resource_type, ... }, req)
+    // Object:     logAudit({ event_type, user_id, action, resource_type, resource_id, details, success })
+    let eventType_v, userId_v, eventData_v, req_v;
+
+    if (eventTypeOrObj !== null && typeof eventTypeOrObj === 'object' && !Array.isArray(eventTypeOrObj)) {
+      // Object form (used by agent-proxy.js)
+      eventType_v = eventTypeOrObj.event_type;
+      userId_v = eventTypeOrObj.user_id || null;
+      eventData_v = {
+        action: eventTypeOrObj.action || 'unknown',
+        resource_type: eventTypeOrObj.resource_type,
+        resource_id: eventTypeOrObj.resource_id,
+        details: eventTypeOrObj.details || {},
+        success: eventTypeOrObj.success !== false
+      };
+      req_v = null;
+    } else {
+      // Positional form (used by server.js, supabaseHelpers, instagram-tokens.js)
+      eventType_v = eventTypeOrObj;
+      userId_v = userId;
+      eventData_v = eventData;
+      req_v = req;
+    }
+
     const admin = getSupabaseAdmin();
     if (!admin) {
       console.warn('⚠️  Cannot log audit - database not connected');
       return;
     }
-    
+
     await admin.from('audit_log').insert({
-      user_id: userId,
-      event_type: eventType,
-      action: eventData.action || 'unknown',
-      resource_type: eventData.resource_type,
-      resource_id: eventData.resource_id,
-      details: eventData,
-      ip_address: req?.ip || req?.connection?.remoteAddress || null,
-      user_agent: req?.headers?.['user-agent'] || 'unknown',
-      success: eventData.success !== false,
+      user_id: userId_v,
+      event_type: eventType_v,
+      action: eventData_v.action || 'unknown',
+      resource_type: eventData_v.resource_type,
+      resource_id: eventData_v.resource_id,
+      details: eventData_v,
+      ip_address: req_v?.ip || req_v?.connection?.remoteAddress || null,
+      user_agent: req_v?.headers?.['user-agent'] || 'unknown',
+      success: eventData_v.success !== false,
       created_at: new Date().toISOString()
     });
   } catch (error) {
@@ -417,8 +442,33 @@ async function logAudit(eventType, userId = null, eventData = {}, req = null) {
 // API REQUEST LOGGING (For monitoring and billing)
 // =============================================================================
 
-async function logApiRequest(userId, endpoint, method, responseTime, statusCode, success, businessAccountId = null) {
+async function logApiRequest(userIdOrObj, endpoint, method, responseTime, statusCode, success, businessAccountId = null) {
   try {
+    // Support both positional and object call forms:
+    // Positional: logApiRequest(userId, endpoint, method, responseTime, statusCode, success, businessAccountId)
+    // Object:     logApiRequest({ user_id, endpoint, method, latency, status_code, success, business_account_id })
+    let userId_v, endpoint_v, method_v, responseTime_v, statusCode_v, success_v, businessAccountId_v;
+
+    if (userIdOrObj !== null && typeof userIdOrObj === 'object' && !Array.isArray(userIdOrObj)) {
+      // Object form (used by agent-proxy.js)
+      userId_v = userIdOrObj.user_id || null;
+      endpoint_v = userIdOrObj.endpoint;
+      method_v = userIdOrObj.method;
+      responseTime_v = userIdOrObj.latency || userIdOrObj.response_time || 0;
+      statusCode_v = userIdOrObj.status_code || (userIdOrObj.success ? 200 : 500);
+      success_v = userIdOrObj.success !== undefined ? userIdOrObj.success : true;
+      businessAccountId_v = userIdOrObj.business_account_id || null;
+    } else {
+      // Positional form (used by server.js middleware)
+      userId_v = userIdOrObj;
+      endpoint_v = endpoint;
+      method_v = method;
+      responseTime_v = responseTime;
+      statusCode_v = statusCode;
+      success_v = success;
+      businessAccountId_v = businessAccountId;
+    }
+
     const admin = getSupabaseAdmin();
     if (!admin) {
       console.warn('⚠️  Cannot log API request - database not connected');
@@ -433,13 +483,13 @@ async function logApiRequest(userId, endpoint, method, responseTime, statusCode,
     const SENTINEL_UUID = '00000000-0000-0000-0000-000000000000';
 
     const { error } = await admin.from('api_usage').upsert({
-      user_id: userId,
-      business_account_id: businessAccountId || SENTINEL_UUID,
-      endpoint: endpoint,
-      method: method,
-      response_time_ms: responseTime,
-      status_code: statusCode,
-      success: success,
+      user_id: userId_v,
+      business_account_id: businessAccountId_v || SENTINEL_UUID,
+      endpoint: endpoint_v,
+      method: method_v,
+      response_time_ms: responseTime_v,
+      status_code: statusCode_v,
+      success: success_v,
       hour_bucket: hourBucket.toISOString(),
       request_count: 1,
       created_at: new Date().toISOString()
