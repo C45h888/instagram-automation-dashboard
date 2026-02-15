@@ -1,5 +1,5 @@
 // backend/routes/agent-proxy.js - Agent Proxy Layer (Path C)
-// Provides 5 REST endpoints for the Python/LangChain agent to execute IG API calls
+// Provides 13 REST endpoints for the Python/LangChain agent to execute IG API calls
 // Agent never holds tokens - this backend acts as secure proxy
 
 const express = require('express');
@@ -14,6 +14,67 @@ const GRAPH_API_BASE = 'https://graph.facebook.com/v23.0';
 
 // Apply authentication middleware to all agent proxy endpoints
 router.use(validateAgentApiKey);
+
+// ============================================
+// SHARED HELPERS: SUPABASE WRITE-THROUGH
+// ============================================
+
+/**
+ * Ensures an instagram_media record exists for the given Instagram media ID.
+ * Returns the Supabase UUID for use as FK in instagram_comments.media_id.
+ * Creates a minimal stub if the record doesn't exist yet.
+ */
+async function ensureMediaRecord(supabase, instagramMediaId, businessAccountId) {
+  const { data: existing } = await supabase
+    .from('instagram_media')
+    .select('id')
+    .eq('instagram_media_id', instagramMediaId)
+    .limit(1)
+    .single();
+
+  if (existing) return existing.id;
+
+  const { data: created, error } = await supabase
+    .from('instagram_media')
+    .upsert({
+      instagram_media_id: instagramMediaId,
+      business_account_id: businessAccountId,
+    }, { onConflict: 'instagram_media_id' })
+    .select('id')
+    .single();
+
+  if (error) {
+    console.warn(`⚠️ ensureMediaRecord failed for ${instagramMediaId}:`, error.message);
+    return null;
+  }
+  return created.id;
+}
+
+/**
+ * Extracts hashtags from brand post captions and upserts into ugc_monitored_hashtags.
+ * Auto-populates the table the agent reads at the start of every UGC discovery cycle.
+ */
+async function syncHashtagsFromCaptions(supabase, businessAccountId, captions) {
+  const tagSet = new Set();
+  const hashtagRegex = /#(\w+)/g;
+  for (const caption of captions) {
+    if (!caption) continue;
+    let match;
+    while ((match = hashtagRegex.exec(caption)) !== null) {
+      tagSet.add(match[1].toLowerCase());
+    }
+  }
+  if (tagSet.size === 0) return;
+  const records = [...tagSet].map(tag => ({
+    business_account_id: businessAccountId,
+    hashtag: tag,
+    is_active: true,
+  }));
+  const { error } = await supabase
+    .from('ugc_monitored_hashtags')
+    .upsert(records, { onConflict: 'business_account_id,hashtag', ignoreDuplicates: true });
+  if (error) console.warn('⚠️ Hashtag sync failed:', error.message);
+}
 
 // ============================================
 // SHARED HELPER: RESOLVE ACCOUNT CREDENTIALS
@@ -112,7 +173,7 @@ router.post('/search-hashtag', async (req, res) => {
     const mediaRes = await axios.get(mediaUrl, {
       params: {
         user_id: igUserId,
-        fields: 'id,media_type,media_url,thumbnail_url,permalink,caption,timestamp,username,like_count,comments_count',
+        fields: 'id,media_type,media_url,thumbnail_url,permalink,caption,timestamp,username,like_count,comments_count,owner{id}',
         limit: searchLimit,
         access_token: pageToken
       }
@@ -130,10 +191,50 @@ router.post('/search-hashtag', async (req, res) => {
       latency
     });
 
+    // Flatten owner{id} → owner_id for agent compatibility
+    const media = (mediaRes.data.data || []).map(item => ({
+      ...item,
+      owner_id: item.owner?.id || null,
+    }));
+
+    // --- Supabase write-through: raw UGC for agent scoring pipeline ---
+    if (media.length > 0) {
+      try {
+        const supabase = getSupabaseAdmin();
+        if (supabase) {
+          const ugcRecords = media
+            .filter(m => m.id)
+            .map(m => ({
+              business_account_id,
+              instagram_media_id: m.id,
+              source: 'hashtag',
+              source_hashtag: cleanHashtag,
+              username: m.username || null,
+              caption: (m.caption || '').slice(0, 2000),
+              media_type: m.media_type || null,
+              media_url: m.media_url || m.thumbnail_url || null,
+              permalink: m.permalink || null,
+              like_count: m.like_count || 0,
+              comments_count: m.comments_count || 0,
+              post_timestamp: m.timestamp || null,
+              quality_score: null,
+              quality_tier: null,
+            }));
+          const { error: upsertErr } = await supabase
+            .from('ugc_discovered')
+            .upsert(ugcRecords, { onConflict: 'instagram_media_id', ignoreDuplicates: false });
+          if (upsertErr) console.warn('⚠️ UGC hashtag write-through failed:', upsertErr.message);
+        }
+      } catch (wtErr) {
+        console.warn('⚠️ UGC hashtag write-through error:', wtErr.message);
+      }
+    }
+    // --- End write-through ---
+
     // Return both formats for compatibility
     res.json({
-      recent_media: mediaRes.data.data || [],
-      data: mediaRes.data.data || []
+      recent_media: media,
+      data: media
     });
 
   } catch (error) {
@@ -204,10 +305,46 @@ router.get('/tags', async (req, res) => {
       latency
     });
 
+    const taggedPosts = tagsRes.data.data || [];
+
+    // --- Supabase write-through: raw tagged UGC for agent scoring pipeline ---
+    if (taggedPosts.length > 0) {
+      try {
+        const supabase = getSupabaseAdmin();
+        if (supabase) {
+          const ugcRecords = taggedPosts
+            .filter(p => p.id)
+            .map(p => ({
+              business_account_id,
+              instagram_media_id: p.id,
+              source: 'tagged',
+              source_hashtag: null,
+              username: p.username || null,
+              caption: (p.caption || '').slice(0, 2000),
+              media_type: p.media_type || null,
+              media_url: p.media_url || p.thumbnail_url || null,
+              permalink: p.permalink || null,
+              like_count: p.like_count || 0,
+              comments_count: p.comments_count || 0,
+              post_timestamp: p.timestamp || null,
+              quality_score: null,
+              quality_tier: null,
+            }));
+          const { error: upsertErr } = await supabase
+            .from('ugc_discovered')
+            .upsert(ugcRecords, { onConflict: 'instagram_media_id', ignoreDuplicates: false });
+          if (upsertErr) console.warn('⚠️ UGC tags write-through failed:', upsertErr.message);
+        }
+      } catch (wtErr) {
+        console.warn('⚠️ UGC tags write-through error:', wtErr.message);
+      }
+    }
+    // --- End write-through ---
+
     // Return both formats for compatibility
     res.json({
-      tagged_posts: tagsRes.data.data || [],
-      data: tagsRes.data.data || []
+      tagged_posts: taggedPosts,
+      data: taggedPosts
     });
 
   } catch (error) {
@@ -330,6 +467,30 @@ router.post('/send-dm', async (req, res) => {
       success: true
     });
 
+    // --- Supabase write-through: log outgoing DM (conversation_id null — not returned by Graph API) ---
+    try {
+      const supabase = getSupabaseAdmin();
+      const messageId = dmRes.data.message_id || dmRes.data.id;
+      if (supabase && messageId) {
+        const { error: msgErr } = await supabase
+          .from('instagram_dm_messages')
+          .upsert({
+            message_id: messageId,
+            message_text,
+            conversation_id: null,
+            business_account_id,
+            is_from_business: true,
+            recipient_instagram_id: recipient_id,
+            sent_at: new Date().toISOString(),
+            send_status: 'sent',
+          }, { onConflict: 'message_id', ignoreDuplicates: false });
+        if (msgErr) console.warn('⚠️ Send-DM write-through failed:', msgErr.message);
+      }
+    } catch (wtErr) {
+      console.warn('⚠️ Send-DM write-through error:', wtErr.message);
+    }
+    // --- End write-through ---
+
     res.json({
       success: true,
       id: dmRes.data.message_id || dmRes.data.id
@@ -430,6 +591,25 @@ router.post('/publish-post', async (req, res) => {
           .eq('id', scheduled_post_id);
       }
     }
+
+    // --- Supabase write-through: create instagram_media stub so agent can read post context immediately ---
+    try {
+      const supabase = getSupabaseAdmin();
+      if (supabase && mediaId) {
+        await supabase
+          .from('instagram_media')
+          .upsert({
+            instagram_media_id: mediaId,
+            business_account_id,
+            media_type: type,
+            caption,
+            published_at: new Date().toISOString(),
+          }, { onConflict: 'instagram_media_id', ignoreDuplicates: false });
+      }
+    } catch (wtErr) {
+      console.warn('⚠️ instagram_media publish write-through error:', wtErr.message);
+    }
+    // --- End write-through ---
 
     // Log API request and audit trail
     await logApiRequest({
@@ -555,6 +735,34 @@ async function handleInsightsRequest(req, res, startTime, metricTypeOverride) {
 
       const mediaInsights = await Promise.all(mediaInsightsPromises);
       insightsData = { media_insights: mediaInsights };
+
+      // --- Supabase write-through: upsert instagram_media metrics + sync hashtags ---
+      if (mediaInsights.length > 0) {
+        try {
+          const supabase = getSupabaseAdmin();
+          if (supabase) {
+            // A) Upsert engagement metrics into instagram_media
+            const mediaRecords = mediaInsights.map(m => ({
+              instagram_media_id: m.media_id,
+              business_account_id,
+              media_type: m.media_type || null,
+              reach: m.insights.find(i => i.name === 'reach')?.values?.[0]?.value || 0,
+              published_at: m.timestamp || null,
+            }));
+            const { error: mediaErr } = await supabase
+              .from('instagram_media')
+              .upsert(mediaRecords, { onConflict: 'instagram_media_id', ignoreDuplicates: false });
+            if (mediaErr) console.warn('⚠️ instagram_media insights write-through failed:', mediaErr.message);
+
+            // B) Auto-extract hashtags from captions → ugc_monitored_hashtags
+            const captions = mediaList.map(m => m.caption).filter(Boolean);
+            await syncHashtagsFromCaptions(supabase, business_account_id, captions);
+          }
+        } catch (wtErr) {
+          console.warn('⚠️ Media insights write-through error:', wtErr.message);
+        }
+      }
+      // --- End write-through ---
 
     } else {
       return res.status(400).json({
@@ -781,6 +989,29 @@ router.post('/reply-dm', async (req, res) => {
       details: { conversation_id, recipient_id },
       success: true
     });
+
+    // --- Supabase write-through: log outgoing DM reply for conversation history ---
+    try {
+      const supabase = getSupabaseAdmin();
+      if (supabase && dmRes.data.id) {
+        const { error: msgErr } = await supabase
+          .from('instagram_dm_messages')
+          .upsert({
+            message_id: dmRes.data.id,
+            message_text: message_text.trim(),
+            conversation_id,
+            business_account_id,
+            is_from_business: true,
+            recipient_instagram_id: recipient_id || null,
+            sent_at: new Date().toISOString(),
+            send_status: 'sent',
+          }, { onConflict: 'message_id', ignoreDuplicates: false });
+        if (msgErr) console.warn('⚠️ DM reply write-through failed:', msgErr.message);
+      }
+    } catch (wtErr) {
+      console.warn('⚠️ DM reply write-through error:', wtErr.message);
+    }
+    // --- End write-through ---
 
     res.json({ success: true, id: dmRes.data.id });
 
@@ -1052,11 +1283,45 @@ router.get('/post-comments', async (req, res) => {
       latency
     });
 
+    const comments = commentsRes.data.data || [];
+
+    // --- Supabase write-through: upsert comments + ensure instagram_media record exists ---
+    if (comments.length > 0) {
+      try {
+        const supabase = getSupabaseAdmin();
+        if (supabase) {
+          const mediaUUID = await ensureMediaRecord(supabase, media_id, business_account_id);
+          if (mediaUUID) {
+            const commentRecords = comments
+              .filter(c => c.id)
+              .map(c => ({
+                instagram_comment_id: c.id,
+                text: c.text || '',
+                author_username: c.username || '',
+                author_instagram_id: null,
+                media_id: mediaUUID,
+                business_account_id,
+                created_at: c.timestamp,
+                like_count: c.like_count || 0,
+                processed_by_automation: false,
+              }));
+            const { error: upsertErr } = await supabase
+              .from('instagram_comments')
+              .upsert(commentRecords, { onConflict: 'instagram_comment_id', ignoreDuplicates: false });
+            if (upsertErr) console.warn('⚠️ Comment write-through failed:', upsertErr.message);
+          }
+        }
+      } catch (wtErr) {
+        console.warn('⚠️ Comment write-through error:', wtErr.message);
+      }
+    }
+    // --- End write-through ---
+
     res.json({
       success: true,
-      data: commentsRes.data.data || [],
+      data: comments,
       paging: commentsRes.data.paging || {},
-      meta: { count: commentsRes.data.data?.length || 0 }
+      meta: { count: comments.length }
     });
 
   } catch (error) {
@@ -1157,6 +1422,44 @@ router.get('/conversations', async (req, res) => {
       latency
     });
 
+    // --- Supabase write-through: upsert DM conversations with 24h window status ---
+    if (conversations.length > 0) {
+      try {
+        const supabase = getSupabaseAdmin();
+        if (supabase) {
+          const convRecords = conversations
+            .filter(conv => conv.participants?.length > 0 && conv.participants[0].id)
+            .map(conv => {
+              const mw = conv.messaging_window || {};
+              const isOpen = mw.is_open || false;
+              const hoursRemaining = mw.hours_remaining;
+              const windowExpiresAt = isOpen && hoursRemaining != null
+                ? new Date(Date.now() + hoursRemaining * 3600000).toISOString()
+                : null;
+              return {
+                customer_instagram_id: conv.participants[0].id,
+                business_account_id,
+                conversation_id: conv.id,
+                within_window: isOpen,
+                window_expires_at: windowExpiresAt,
+                last_message_at: conv.last_message_at,
+                message_count: conv.message_count || 0,
+                conversation_status: 'open',
+              };
+            });
+          if (convRecords.length > 0) {
+            const { error: upsertErr } = await supabase
+              .from('instagram_dm_conversations')
+              .upsert(convRecords, { onConflict: 'customer_instagram_id,business_account_id', ignoreDuplicates: false });
+            if (upsertErr) console.warn('⚠️ Conversation write-through failed:', upsertErr.message);
+          }
+        }
+      } catch (wtErr) {
+        console.warn('⚠️ Conversation write-through error:', wtErr.message);
+      }
+    }
+    // --- End write-through ---
+
     res.json({
       success: true,
       data: conversations,
@@ -1212,7 +1515,7 @@ router.get('/conversation-messages', async (req, res) => {
 
     const fetchLimit = Math.min(parseInt(limit) || 20, 100);
 
-    const { pageToken, userId } = await resolveAccountCredentials(business_account_id);
+    const { igUserId, pageToken, userId } = await resolveAccountCredentials(business_account_id);
 
     // GET /{conversationId}/messages — same Graph API pattern as instagram-api.js:1873
     const msgRes = await axios.get(`${GRAPH_API_BASE}/${conversation_id}/messages`, {
@@ -1235,11 +1538,40 @@ router.get('/conversation-messages', async (req, res) => {
       latency
     });
 
+    const messages = msgRes.data.data || [];
+
+    // --- Supabase write-through: upsert messages with is_from_business flag ---
+    if (messages.length > 0) {
+      try {
+        const supabase = getSupabaseAdmin();
+        if (supabase) {
+          const msgRecords = messages
+            .filter(m => m.id)
+            .map(m => ({
+              message_id: m.id,
+              message_text: m.message || '',
+              conversation_id,
+              business_account_id,
+              is_from_business: m.from?.id === igUserId,
+              sent_at: m.created_time,
+              send_status: 'received',
+            }));
+          const { error: upsertErr } = await supabase
+            .from('instagram_dm_messages')
+            .upsert(msgRecords, { onConflict: 'message_id', ignoreDuplicates: false });
+          if (upsertErr) console.warn('⚠️ Message write-through failed:', upsertErr.message);
+        }
+      } catch (wtErr) {
+        console.warn('⚠️ Message write-through error:', wtErr.message);
+      }
+    }
+    // --- End write-through ---
+
     res.json({
       success: true,
-      data: msgRes.data.data || [],
+      data: messages,
       paging: msgRes.data.paging || {},
-      meta: { count: msgRes.data.data?.length || 0 }
+      meta: { count: messages.length }
     });
 
   } catch (error) {
@@ -1275,43 +1607,55 @@ router.get('/conversation-messages', async (req, res) => {
  */
 router.post('/repost-ugc', async (req, res) => {
   const startTime = Date.now();
-  const { business_account_id, ugc_content_id } = req.body;
+  const { business_account_id, permission_id } = req.body;
 
   try {
-    if (!business_account_id || !ugc_content_id) {
+    if (!business_account_id || !permission_id) {
       return res.status(400).json({
-        error: 'Missing required fields: business_account_id, ugc_content_id'
+        error: 'Missing required fields: business_account_id, permission_id'
       });
     }
 
-    // Step 1: Fetch UGC content and verify permission
     const supabase = getSupabaseAdmin();
-    const { data: ugcContent, error: ugcError } = await supabase
-      .from('ugc_content')
-      .select('*')
-      .eq('id', ugc_content_id)
+
+    // Step 1: Fetch permission record — must exist and be 'granted'
+    const { data: permission, error: permError } = await supabase
+      .from('ugc_permissions')
+      .select('id, ugc_discovered_id, username, status, business_account_id')
+      .eq('id', permission_id)
+      .eq('business_account_id', business_account_id)
       .single();
 
-    if (ugcError || !ugcContent) {
+    if (permError || !permission) {
       return res.status(404).json({
-        error: 'UGC content not found',
+        error: 'Permission record not found',
+        code: 'PERMISSION_NOT_FOUND'
+      });
+    }
+
+    if (permission.status !== 'granted') {
+      return res.status(403).json({
+        error: 'Cannot repost: permission not granted by content creator',
+        code: 'PERMISSION_DENIED',
+        details: { current_status: permission.status }
+      });
+    }
+
+    // Step 2: Fetch UGC media data from ugc_discovered
+    const { data: ugcDiscovered, error: ugcError } = await supabase
+      .from('ugc_discovered')
+      .select('id, media_url, media_type, caption, username')
+      .eq('id', permission.ugc_discovered_id)
+      .single();
+
+    if (ugcError || !ugcDiscovered) {
+      return res.status(404).json({
+        error: 'UGC content record not found',
         code: 'CONTENT_NOT_FOUND'
       });
     }
 
-    // Step 2: Permission gate — same check as instagram-api.js:2166
-    if (ugcContent.repost_permission_granted !== true) {
-      return res.status(403).json({
-        error: 'Cannot repost: permission not granted by content creator',
-        code: 'PERMISSION_DENIED',
-        details: {
-          permission_requested: ugcContent.repost_permission_requested,
-          permission_granted: ugcContent.repost_permission_granted
-        }
-      });
-    }
-
-    const mediaUrl = ugcContent.media_url;
+    const mediaUrl = ugcDiscovered.media_url;
     if (!mediaUrl) {
       return res.status(400).json({ error: 'UGC content has no media URL', code: 'NO_MEDIA_URL' });
     }
@@ -1319,9 +1663,9 @@ router.post('/repost-ugc', async (req, res) => {
     // Step 3: Resolve credentials and publish (2-step: container → publish)
     const { igUserId, pageToken, userId } = await resolveAccountCredentials(business_account_id);
 
-    const caption = ugcContent.caption
-      ? `📸 @${ugcContent.author_username}: ${ugcContent.caption}\n\n#repost`
-      : `📸 @${ugcContent.author_username}\n\n#repost`;
+    const caption = ugcDiscovered.caption
+      ? `📸 @${ugcDiscovered.username}: ${ugcDiscovered.caption}\n\n#repost`
+      : `📸 @${ugcDiscovered.username}\n\n#repost`;
 
     // Create media container
     const createRes = await axios.post(`${GRAPH_API_BASE}/${igUserId}/media`, null, {
@@ -1341,11 +1685,15 @@ router.post('/repost-ugc', async (req, res) => {
     const mediaId = publishRes.data.id;
     const latency = Date.now() - startTime;
 
-    // Update ugc_content record
+    // Update ugc_permissions record — mark as reposted
     await supabase
-      .from('ugc_content')
-      .update({ reposted: true, reposted_at: new Date().toISOString(), instagram_media_id: mediaId })
-      .eq('id', ugc_content_id);
+      .from('ugc_permissions')
+      .update({
+        status: 'reposted',
+        reposted_at: new Date().toISOString(),
+        instagram_media_id: mediaId
+      })
+      .eq('id', permission_id);
 
     await logApiRequest({
       endpoint: '/repost-ugc',
@@ -1359,16 +1707,16 @@ router.post('/repost-ugc', async (req, res) => {
     await logAudit({
       event_type: 'ugc_reposted',
       action: 'repost',
-      resource_type: 'ugc_content',
+      resource_type: 'ugc_permissions',
       resource_id: mediaId,
-      details: { ugc_content_id, author: ugcContent.author_username },
+      details: { permission_id, ugc_discovered_id: permission.ugc_discovered_id, author: ugcDiscovered.username },
       success: true
     });
 
     res.json({
       success: true,
       id: mediaId,
-      original_author: ugcContent.author_username
+      original_author: ugcDiscovered.username
     });
 
   } catch (error) {
@@ -1425,7 +1773,7 @@ router.post('/sync-ugc', async (req, res) => {
 
     const taggedPosts = tagsRes.data.data || [];
 
-    // Upsert into ugc_content table
+    // Upsert into ugc_discovered (canonical agent table)
     const supabase = getSupabaseAdmin();
     let syncedCount = 0;
 
@@ -1433,19 +1781,21 @@ router.post('/sync-ugc', async (req, res) => {
       const records = taggedPosts.map(post => ({
         business_account_id,
         instagram_media_id: post.id,
-        author_username: post.username || null,
+        username: post.username || null,
         media_type: post.media_type,
         media_url: post.media_url || post.thumbnail_url || null,
         caption: post.caption || null,
         permalink: post.permalink,
-        posted_at: post.timestamp,
+        post_timestamp: post.timestamp,
         like_count: post.like_count || 0,
         comments_count: post.comments_count || 0,
-        synced_at: new Date().toISOString()
+        source: 'tagged',
+        quality_tier: null,
+        quality_score: null
       }));
 
       const { error: upsertError } = await supabase
-        .from('ugc_content')
+        .from('ugc_discovered')
         .upsert(records, { onConflict: 'instagram_media_id', ignoreDuplicates: false });
 
       if (!upsertError) syncedCount = records.length;
