@@ -544,4 +544,110 @@ router.get('/conversation-messages', async (req, res) => {
   }
 });
 
+// ============================================
+// ENDPOINT: POST /send-dm (UGC Permission DM)
+// ============================================
+
+/**
+ * Sends a new DM to a user (initiates conversation, not a reply).
+ * Used by: UGC pipeline (ugc_tools.send_permission_dm) to request creator repost permission.
+ *
+ * Agent payload: { business_account_id, recipient_id, recipient_username, message_text }
+ *   recipient_id      — numeric IGSID of the creator to message
+ *   recipient_username — for audit context only, not sent to Graph API
+ */
+router.post('/send-dm', async (req, res) => {
+  const startTime = Date.now();
+  const { business_account_id, recipient_id, recipient_username, message_text } = req.body;
+
+  try {
+    if (!business_account_id || !recipient_id || !message_text) {
+      return res.status(400).json({
+        error: 'Missing required fields: business_account_id, recipient_id, message_text'
+      });
+    }
+
+    if (!/^\d+$/.test(String(recipient_id))) {
+      return res.status(400).json({ error: 'Invalid recipient_id: must be a numeric IGSID' });
+    }
+
+    if (message_text.length > 1000) {
+      return res.status(400).json({ error: 'message_text exceeds 1000 character limit' });
+    }
+
+    const { igUserId, pageToken, userId } = await resolveAccountCredentials(business_account_id);
+
+    const dmRes = await axios.post(`${GRAPH_API_BASE}/${igUserId}/messages`, {
+      recipient: { id: String(recipient_id) },
+      message: { text: message_text.trim() }
+    }, {
+      params: { access_token: pageToken },
+      timeout: 10000
+    });
+
+    const latency = Date.now() - startTime;
+
+    await logApiRequest({
+      endpoint: '/send-dm',
+      method: 'POST',
+      business_account_id,
+      user_id: userId,
+      success: true,
+      latency
+    });
+
+    await logAudit({
+      event_type: 'dm_sent',
+      action: 'send',
+      resource_type: 'instagram_dm',
+      resource_id: dmRes.data.message_id || dmRes.data.id,
+      details: { recipient_id, recipient_username },
+      success: true
+    });
+
+    // Supabase write-through: log outgoing DM (no conversation_id yet for new threads)
+    try {
+      const supabase = getSupabaseAdmin();
+      if (supabase && (dmRes.data.message_id || dmRes.data.id)) {
+        const { error: msgErr } = await supabase
+          .from('instagram_dm_messages')
+          .upsert({
+            message_id: dmRes.data.message_id || dmRes.data.id,
+            message_text: message_text.trim(),
+            conversation_id: null,
+            business_account_id,
+            is_from_business: true,
+            recipient_instagram_id: String(recipient_id),
+            sent_at: new Date().toISOString(),
+            send_status: 'sent',
+          }, { onConflict: 'message_id', ignoreDuplicates: false });
+        if (msgErr) console.warn('⚠️ Send-DM write-through failed:', msgErr.message);
+      }
+    } catch (wtErr) {
+      console.warn('⚠️ Send-DM write-through error:', wtErr.message);
+    }
+
+    res.json({ success: true, message_id: dmRes.data.message_id || dmRes.data.id });
+
+  } catch (error) {
+    const latency = Date.now() - startTime;
+    const errorMessage = error.response?.data?.error?.message || error.message;
+
+    await logApiRequest({
+      endpoint: '/send-dm',
+      method: 'POST',
+      business_account_id,
+      success: false,
+      error: errorMessage,
+      latency
+    });
+
+    console.error('❌ Send DM failed:', errorMessage);
+    res.status(error.response?.status || 500).json({
+      error: errorMessage,
+      code: error.response?.data?.error?.code
+    });
+  }
+});
+
 module.exports = router;
