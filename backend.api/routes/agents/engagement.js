@@ -1,6 +1,6 @@
 // backend.api/routes/agents/engagement.js
 // Engagement Monitor endpoints: /post-comments, /conversations, /conversation-messages,
-//                               /reply-comment, /reply-dm
+//                               /reply-comment, /reply-dm, /send-dm
 
 const express = require('express');
 const router = express.Router();
@@ -8,9 +8,13 @@ const axios = require('axios');
 const { getSupabaseAdmin, logApiRequest, logAudit } = require('../../config/supabase');
 const {
   resolveAccountCredentials,
-  ensureMediaRecord,
   GRAPH_API_BASE,
 } = require('../../helpers/agent-helpers');
+const {
+  fetchAndStoreComments,
+  fetchAndStoreConversations,
+  fetchAndStoreMessages,
+} = require('../../helpers/data-fetchers');
 
 // ============================================
 // ENDPOINT 6: POST /reply-comment (Engagement Monitor)
@@ -212,105 +216,37 @@ router.post('/reply-dm', async (req, res) => {
 /**
  * Fetches live comments for a specific Instagram media post.
  * Used by: Engagement monitor to read fresh comments before deciding to reply.
+ * Delegates to fetchAndStoreComments() for Graph API + Supabase logic.
  */
 router.get('/post-comments', async (req, res) => {
-  const startTime = Date.now();
   const { business_account_id, media_id, limit } = req.query;
 
-  try {
-    if (!business_account_id || !media_id) {
-      return res.status(400).json({
-        error: 'Missing required query params: business_account_id, media_id'
-      });
-    }
-
-    if (!/^\d+$/.test(String(media_id))) {
-      return res.status(400).json({ error: 'Invalid media_id format' });
-    }
-
-    const fetchLimit = Math.min(parseInt(limit) || 50, 100);
-
-    const { pageToken, userId } = await resolveAccountCredentials(business_account_id);
-
-    const commentsRes = await axios.get(`${GRAPH_API_BASE}/${media_id}/comments`, {
-      params: {
-        fields: 'id,text,timestamp,username,like_count,replies_count',
-        limit: fetchLimit,
-        access_token: pageToken
-      },
-      timeout: 10000
-    });
-
-    const latency = Date.now() - startTime;
-
-    await logApiRequest({
-      endpoint: '/post-comments',
-      method: 'GET',
-      business_account_id,
-      user_id: userId,
-      success: true,
-      latency
-    });
-
-    const comments = commentsRes.data.data || [];
-
-    // Supabase write-through: upsert comments + ensure instagram_media record exists
-    if (comments.length > 0) {
-      try {
-        const supabase = getSupabaseAdmin();
-        if (supabase) {
-          const mediaUUID = await ensureMediaRecord(supabase, media_id, business_account_id);
-          if (mediaUUID) {
-            const commentRecords = comments
-              .filter(c => c.id)
-              .map(c => ({
-                instagram_comment_id: c.id,
-                text: c.text || '',
-                author_username: c.username || '',
-                author_instagram_id: null,
-                media_id: mediaUUID,
-                business_account_id,
-                created_at: c.timestamp,
-                like_count: c.like_count || 0,
-                processed_by_automation: false,
-              }));
-            const { error: upsertErr } = await supabase
-              .from('instagram_comments')
-              .upsert(commentRecords, { onConflict: 'instagram_comment_id', ignoreDuplicates: false });
-            if (upsertErr) console.warn('⚠️ Comment write-through failed:', upsertErr.message);
-          }
-        }
-      } catch (wtErr) {
-        console.warn('⚠️ Comment write-through error:', wtErr.message);
-      }
-    }
-
-    res.json({
-      success: true,
-      data: comments,
-      paging: commentsRes.data.paging || {},
-      meta: { count: comments.length }
-    });
-
-  } catch (error) {
-    const latency = Date.now() - startTime;
-    const errorMessage = error.response?.data?.error?.message || error.message;
-
-    await logApiRequest({
-      endpoint: '/post-comments',
-      method: 'GET',
-      business_account_id,
-      success: false,
-      error: errorMessage,
-      latency
-    });
-
-    console.error('❌ Post comments fetch failed:', errorMessage);
-    res.status(error.response?.status || 500).json({
-      error: errorMessage,
-      code: error.response?.data?.error?.code
+  // HTTP validation
+  if (!business_account_id || !media_id) {
+    return res.status(400).json({
+      error: 'Missing required query params: business_account_id, media_id'
     });
   }
+
+  if (!/^\d+$/.test(String(media_id))) {
+    return res.status(400).json({ error: 'Invalid media_id format' });
+  }
+
+  const result = await fetchAndStoreComments(business_account_id, media_id, limit);
+
+  if (!result.success) {
+    return res.status(500).json({
+      error: result.error,
+      code: undefined
+    });
+  }
+
+  res.json({
+    success: true,
+    data: result.comments,
+    paging: result.paging,
+    meta: { count: result.count }
+  });
 });
 
 // ============================================
@@ -320,136 +256,32 @@ router.get('/post-comments', async (req, res) => {
 /**
  * Lists active DM conversations with 24-hour messaging window status.
  * Used by: Engagement monitor to find conversations eligible for replies.
+ * Delegates to fetchAndStoreConversations() for Graph API + Supabase logic.
  */
 router.get('/conversations', async (req, res) => {
-  const startTime = Date.now();
   const { business_account_id, limit } = req.query;
 
-  try {
-    if (!business_account_id) {
-      return res.status(400).json({
-        error: 'Missing required query param: business_account_id'
-      });
-    }
-
-    const fetchLimit = Math.min(parseInt(limit) || 20, 50);
-
-    const { igUserId, pageToken, userId } = await resolveAccountCredentials(business_account_id);
-
-    const convRes = await axios.get(`${GRAPH_API_BASE}/${igUserId}/conversations`, {
-      params: {
-        fields: 'id,participants,updated_time,message_count,messages{created_time,from}',
-        platform: 'instagram',
-        limit: fetchLimit,
-        access_token: pageToken
-      },
-      timeout: 10000
-    });
-
-    // Transform with 24-hour window calculation
-    const now = new Date();
-    const conversations = (convRes.data.data || []).map(conv => {
-      const lastMessage = conv.messages?.data?.[0];
-      const lastMessageTime = lastMessage ? new Date(lastMessage.created_time) : null;
-      const hoursSinceLastMessage = lastMessageTime
-        ? (now - lastMessageTime) / (1000 * 60 * 60)
-        : null;
-      const isWithin24Hours = hoursSinceLastMessage !== null && hoursSinceLastMessage < 24;
-      const hoursRemaining = hoursSinceLastMessage !== null
-        ? Math.max(0, 24 - hoursSinceLastMessage)
-        : null;
-
-      return {
-        id: conv.id,
-        participants: conv.participants?.data || [],
-        last_message_at: conv.updated_time,
-        message_count: conv.message_count || 0,
-        last_message: lastMessage || null,
-        messaging_window: {
-          is_open: isWithin24Hours,
-          hours_remaining: hoursRemaining !== null ? parseFloat(hoursRemaining.toFixed(1)) : null,
-          requires_template: hoursSinceLastMessage !== null && hoursSinceLastMessage >= 24,
-          last_customer_message_at: lastMessageTime ? lastMessageTime.toISOString() : null
-        },
-        within_window: isWithin24Hours,
-        can_send_messages: isWithin24Hours
-      };
-    });
-
-    const latency = Date.now() - startTime;
-
-    await logApiRequest({
-      endpoint: '/conversations',
-      method: 'GET',
-      business_account_id,
-      user_id: userId,
-      success: true,
-      latency
-    });
-
-    // Supabase write-through: upsert DM conversations with 24h window status
-    if (conversations.length > 0) {
-      try {
-        const supabase = getSupabaseAdmin();
-        if (supabase) {
-          const convRecords = conversations
-            .filter(conv => conv.participants?.length > 0 && conv.participants[0].id)
-            .map(conv => {
-              const mw = conv.messaging_window || {};
-              const isOpen = mw.is_open || false;
-              const hoursRemaining = mw.hours_remaining;
-              const windowExpiresAt = isOpen && hoursRemaining != null
-                ? new Date(Date.now() + hoursRemaining * 3600000).toISOString()
-                : null;
-              return {
-                instagram_thread_id: conv.id,
-                customer_instagram_id: conv.participants[0].id,
-                business_account_id,
-                within_window: isOpen,
-                window_expires_at: windowExpiresAt,
-                last_message_at: conv.last_message_at,
-                message_count: conv.message_count || 0,
-                conversation_status: 'active',
-              };
-            });
-          if (convRecords.length > 0) {
-            const { error: upsertErr } = await supabase
-              .from('instagram_dm_conversations')
-              .upsert(convRecords, { onConflict: 'instagram_thread_id', ignoreDuplicates: false });
-            if (upsertErr) console.warn('⚠️ Conversation write-through failed:', upsertErr.message);
-          }
-        }
-      } catch (wtErr) {
-        console.warn('⚠️ Conversation write-through error:', wtErr.message);
-      }
-    }
-
-    res.json({
-      success: true,
-      data: conversations,
-      paging: convRes.data.paging || {},
-      meta: { count: conversations.length }
-    });
-
-  } catch (error) {
-    const latency = Date.now() - startTime;
-    const errorMessage = error.response?.data?.error?.message || error.message;
-
-    await logApiRequest({
-      endpoint: '/conversations',
-      method: 'GET',
-      business_account_id,
-      success: false,
-      error: errorMessage,
-      latency
-    });
-
-    console.error('❌ Conversations fetch failed:', errorMessage);
-    res.status(error.response?.status || 500).json({
-      error: errorMessage,
-      code: error.response?.data?.error?.code
+  if (!business_account_id) {
+    return res.status(400).json({
+      error: 'Missing required query param: business_account_id'
     });
   }
+
+  const result = await fetchAndStoreConversations(business_account_id, limit);
+
+  if (!result.success) {
+    return res.status(500).json({
+      error: result.error,
+      code: undefined
+    });
+  }
+
+  res.json({
+    success: true,
+    data: result.conversations,
+    paging: result.paging,
+    meta: { count: result.count }
+  });
 });
 
 // ============================================
@@ -459,112 +291,36 @@ router.get('/conversations', async (req, res) => {
 /**
  * Fetches messages for a specific DM conversation.
  * Used by: Engagement monitor to read thread history before crafting a reply.
+ * Delegates to fetchAndStoreMessages() for Graph API + Supabase logic.
  */
 router.get('/conversation-messages', async (req, res) => {
-  const startTime = Date.now();
   const { business_account_id, conversation_id, limit } = req.query;
 
-  try {
-    if (!business_account_id || !conversation_id) {
-      return res.status(400).json({
-        error: 'Missing required query params: business_account_id, conversation_id'
-      });
-    }
-
-    if (!/^[\w-]+$/.test(String(conversation_id))) {
-      return res.status(400).json({ error: 'Invalid conversation_id format' });
-    }
-
-    const fetchLimit = Math.min(parseInt(limit) || 20, 100);
-
-    const { igUserId, pageToken, userId } = await resolveAccountCredentials(business_account_id);
-
-    const msgRes = await axios.get(`${GRAPH_API_BASE}/${conversation_id}/messages`, {
-      params: {
-        fields: 'id,message,from,created_time,attachments',
-        limit: fetchLimit,
-        access_token: pageToken
-      },
-      timeout: 10000
-    });
-
-    const latency = Date.now() - startTime;
-
-    await logApiRequest({
-      endpoint: '/conversation-messages',
-      method: 'GET',
-      business_account_id,
-      user_id: userId,
-      success: true,
-      latency
-    });
-
-    const messages = msgRes.data.data || [];
-
-    // Supabase write-through: upsert messages with is_from_business flag
-    if (messages.length > 0) {
-      try {
-        const supabase = getSupabaseAdmin();
-        if (supabase) {
-          // Resolve IG thread ID → Supabase UUID for conversation FK
-          let conversationUUID = null;
-          if (conversation_id) {
-            const { data: conv } = await supabase
-              .from('instagram_dm_conversations')
-              .select('id')
-              .eq('instagram_thread_id', conversation_id)
-              .maybeSingle();
-            conversationUUID = conv?.id || null;
-          }
-
-          const msgRecords = messages
-            .filter(m => m.id)
-            .map(m => ({
-              instagram_message_id: m.id,
-              message_text: m.message || '',
-              conversation_id: conversationUUID,
-              business_account_id,
-              is_from_business: m.from?.id === igUserId,
-              recipient_instagram_id: m.from?.id || '',
-              sent_at: m.created_time,
-              send_status: 'delivered',
-            }));
-          const { error: upsertErr } = await supabase
-            .from('instagram_dm_messages')
-            .upsert(msgRecords, { onConflict: 'instagram_message_id', ignoreDuplicates: false });
-          if (upsertErr) console.warn('⚠️ Message write-through failed:', upsertErr.message);
-        }
-      } catch (wtErr) {
-        console.warn('⚠️ Message write-through error:', wtErr.message);
-      }
-    }
-
-    res.json({
-      success: true,
-      data: messages,
-      paging: msgRes.data.paging || {},
-      meta: { count: messages.length }
-    });
-
-  } catch (error) {
-    const latency = Date.now() - startTime;
-    const errorMessage = error.response?.data?.error?.message || error.message;
-
-    await logApiRequest({
-      endpoint: '/conversation-messages',
-      method: 'GET',
-      business_account_id,
-      success: false,
-      error: errorMessage,
-      latency
-    });
-
-    console.error('❌ Conversation messages fetch failed:', errorMessage);
-    res.status(error.response?.status || 500).json({
-      error: errorMessage,
-      code: error.response?.data?.error?.code
+  if (!business_account_id || !conversation_id) {
+    return res.status(400).json({
+      error: 'Missing required query params: business_account_id, conversation_id'
     });
   }
+
+  if (!/^[\w-]+$/.test(String(conversation_id))) {
+    return res.status(400).json({ error: 'Invalid conversation_id format' });
+  }
+
+  const result = await fetchAndStoreMessages(business_account_id, conversation_id, limit);
+
+  if (!result.success) {
+    return res.status(500).json({
+      error: result.error,
+      code: undefined
+    });
+  }
+
+  res.json({
+    success: true,
+    data: result.messages,
+    paging: result.paging,
+    meta: { count: result.count }
+  });
 });
 
 // ============================================

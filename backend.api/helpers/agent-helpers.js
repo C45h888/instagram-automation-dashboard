@@ -2,9 +2,8 @@
 // Shared helper functions used across agent proxy route modules.
 // Extracted from routes/agent-proxy.js to keep route files lean.
 
-const axios = require('axios');
-const { getSupabaseAdmin, logApiRequest } = require('../config/supabase');
-const { retrievePageToken, getAccountInsights } = require('../services/instagram-tokens');
+const { getSupabaseAdmin } = require('../config/supabase');
+const { retrievePageToken } = require('../services/instagram-tokens');
 
 const GRAPH_API_BASE = 'https://graph.facebook.com/v23.0';
 
@@ -125,9 +124,16 @@ async function resolveAccountCredentials(businessAccountId) {
 // ============================================
 // Shared by /insights, /account-insights, and /media-insights.
 // metricTypeOverride: if provided, ignores the metric_type query param.
+// Delegates to data-fetchers for Graph API + Supabase logic.
 
-async function handleInsightsRequest(req, res, startTime, metricTypeOverride) {
+async function handleInsightsRequest(req, res, _startTime, metricTypeOverride) {
   const { business_account_id, since, until, metric_type } = req.query;
+
+  // Lazy-require to avoid circular dependency (data-fetchers imports from this file)
+  const {
+    fetchAndStoreMediaInsights,
+    fetchAndStoreAccountInsights,
+  } = require('./data-fetchers');
 
   try {
     if (!business_account_id) {
@@ -138,81 +144,21 @@ async function handleInsightsRequest(req, res, startTime, metricTypeOverride) {
 
     const type = metricTypeOverride || metric_type || 'account';
 
-    const { igUserId, pageToken } = await resolveAccountCredentials(business_account_id);
-
     let insightsData = {};
 
     if (type === 'account') {
-      const accountInsights = await getAccountInsights(igUserId, pageToken, { since, until });
-      insightsData = accountInsights;
+      const result = await fetchAndStoreAccountInsights(business_account_id, { since, until });
+      if (!result.success) {
+        throw new Error(result.error);
+      }
+      insightsData = result.data;
 
     } else if (type === 'media') {
-      const mediaUrl = `${GRAPH_API_BASE}/${igUserId}/media`;
-      const mediaParams = {
-        fields: 'id,media_type,timestamp,caption',
-        limit: 50,
-        access_token: pageToken
-      };
-      if (since) mediaParams.since = Math.floor(new Date(since).getTime() / 1000);
-      if (until) mediaParams.until = Math.floor(new Date(until).getTime() / 1000);
-
-      const mediaRes = await axios.get(mediaUrl, { params: mediaParams });
-      const mediaList = mediaRes.data.data || [];
-
-      const mediaInsightsPromises = mediaList.map(async (media) => {
-        try {
-          const insightsUrl = `${GRAPH_API_BASE}/${media.id}/insights`;
-          const insightsRes = await axios.get(insightsUrl, {
-            params: {
-              metric: 'reach,impressions,saved',
-              access_token: pageToken
-            }
-          });
-          return {
-            media_id: media.id,
-            media_type: media.media_type,
-            timestamp: media.timestamp,
-            insights: insightsRes.data.data || []
-          };
-        } catch (err) {
-          console.warn(`⚠️ Failed to fetch insights for media ${media.id}:`, err.message);
-          return {
-            media_id: media.id,
-            media_type: media.media_type,
-            timestamp: media.timestamp,
-            insights: [],
-            error: err.message
-          };
-        }
-      });
-
-      const mediaInsights = await Promise.all(mediaInsightsPromises);
-      insightsData = { media_insights: mediaInsights };
-
-      // Supabase write-through: upsert instagram_media metrics + sync hashtags
-      if (mediaInsights.length > 0) {
-        try {
-          const supabase = getSupabaseAdmin();
-          if (supabase) {
-            const mediaRecords = mediaInsights.map(m => ({
-              instagram_media_id: m.media_id,
-              business_account_id,
-              media_type: m.media_type || null,
-              reach: m.insights.find(i => i.name === 'reach')?.values?.[0]?.value || 0,
-              published_at: m.timestamp || null,
-            }));
-            const { error: mediaErr } = await supabase
-              .from('instagram_media')
-              .upsert(mediaRecords, { onConflict: 'instagram_media_id', ignoreDuplicates: false });
-            if (mediaErr) console.warn('⚠️ instagram_media insights write-through failed:', mediaErr.message);
-
-            const captions = mediaList.map(m => m.caption).filter(Boolean);
-            await syncHashtagsFromCaptions(supabase, business_account_id, captions);
-          }
-        } catch (wtErr) {
-          console.warn('⚠️ Media insights write-through error:', wtErr.message);
-        }
+      const result = await fetchAndStoreMediaInsights(business_account_id, since, until);
+      if (!result.success) {
+        throw new Error(result.error);
       }
+      insightsData = { media_insights: result.mediaInsights };
 
     } else {
       return res.status(400).json({
@@ -220,34 +166,10 @@ async function handleInsightsRequest(req, res, startTime, metricTypeOverride) {
       });
     }
 
-    const latency = Date.now() - startTime;
-    const endpointName = metricTypeOverride === 'account' ? '/account-insights'
-      : metricTypeOverride === 'media' ? '/media-insights'
-      : '/insights';
-
-    await logApiRequest({
-      endpoint: endpointName,
-      method: 'GET',
-      business_account_id,
-      user_id: igUserId,
-      success: true,
-      latency
-    });
-
     res.json({ success: true, data: insightsData });
 
   } catch (error) {
-    const latency = Date.now() - startTime;
     const errorMessage = error.response?.data?.error?.message || error.message;
-
-    await logApiRequest({
-      endpoint: metricTypeOverride ? `/${metricTypeOverride === 'account' ? 'account' : 'media'}-insights` : '/insights',
-      method: 'GET',
-      business_account_id,
-      success: false,
-      error: errorMessage,
-      latency
-    });
 
     console.error('❌ Insights fetch failed:', errorMessage);
     res.status(error.response?.status || 500).json({

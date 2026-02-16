@@ -14,6 +14,9 @@ const {
   logAudit
 } = require('./config/supabase');
 
+// Proactive sync (Bus 1: backend-driven cron data sync)
+const { initScheduledJobs } = require('./services/proactive-sync');
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -532,6 +535,8 @@ app.use((err, req, res, next) => {
 // =============================================================================
 
 async function startServer() {
+  let stopCronJobs = () => {};
+
   console.log('\n' + '='.repeat(60));
   console.log('🚀 Instagram Automation Backend - Starting...');
   console.log('='.repeat(60));
@@ -586,7 +591,14 @@ async function startServer() {
       console.warn('⚠️  Continuing in development mode without database');
     }
   }
-  
+
+  // Initialize proactive sync cron jobs (Bus 1: backend-driven data sync)
+  try {
+    stopCronJobs = initScheduledJobs();
+  } catch (cronError) {
+    console.error('[ProactiveSync] Failed to initialize:', cronError.message);
+  }
+
   // Start Express server
   const server = app.listen(PORT, '0.0.0.0', async () => {
     console.log('\n' + '='.repeat(60));
@@ -611,7 +623,10 @@ async function startServer() {
   // Graceful shutdown handling
   const gracefulShutdown = async (signal) => {
     console.log(`\n📴 ${signal} received, shutting down gracefully...`);
-    
+
+    // Stop proactive sync cron jobs before closing server
+    stopCronJobs();
+
     server.close(async () => {
       console.log('🔒 HTTP server closed');
       
