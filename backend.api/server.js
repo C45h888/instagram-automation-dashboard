@@ -15,7 +15,7 @@ const {
 } = require('./config/supabase');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 
 // =============================================================================
 // CORS CONFIGURATION - PRODUCTION READY (IMPROVED)
@@ -353,6 +353,10 @@ function validateEnvCreds() {
   // Non-fatal warning for agent API key
   if (!process.env.AGENT_API_KEY) {
     console.warn('⚠️  AGENT_API_KEY not configured - agent proxy endpoints will return 500');
+  }
+
+  if (!process.env.AGENT_URL) {
+    console.warn('⚠️  AGENT_URL not configured - oversight/chat proxy will return 500');
   }
 }
 

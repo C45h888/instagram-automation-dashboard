@@ -153,18 +153,29 @@ router.post('/reply-dm', async (req, res) => {
     try {
       const supabase = getSupabaseAdmin();
       if (supabase && dmRes.data.id) {
+        // Resolve IG thread ID → Supabase UUID for conversation FK
+        let conversationUUID = null;
+        if (conversation_id) {
+          const { data: conv } = await supabase
+            .from('instagram_dm_conversations')
+            .select('id')
+            .eq('instagram_thread_id', conversation_id)
+            .maybeSingle();
+          conversationUUID = conv?.id || null;
+        }
+
         const { error: msgErr } = await supabase
           .from('instagram_dm_messages')
           .upsert({
-            message_id: dmRes.data.id,
+            instagram_message_id: dmRes.data.id,
             message_text: message_text.trim(),
-            conversation_id,
+            conversation_id: conversationUUID,
             business_account_id,
             is_from_business: true,
-            recipient_instagram_id: recipient_id || null,
+            recipient_instagram_id: recipient_id || '',
             sent_at: new Date().toISOString(),
             send_status: 'sent',
-          }, { onConflict: 'message_id', ignoreDuplicates: false });
+          }, { onConflict: 'instagram_message_id', ignoreDuplicates: false });
         if (msgErr) console.warn('⚠️ DM reply write-through failed:', msgErr.message);
       }
     } catch (wtErr) {
@@ -391,20 +402,20 @@ router.get('/conversations', async (req, res) => {
                 ? new Date(Date.now() + hoursRemaining * 3600000).toISOString()
                 : null;
               return {
+                instagram_thread_id: conv.id,
                 customer_instagram_id: conv.participants[0].id,
                 business_account_id,
-                conversation_id: conv.id,
                 within_window: isOpen,
                 window_expires_at: windowExpiresAt,
                 last_message_at: conv.last_message_at,
                 message_count: conv.message_count || 0,
-                conversation_status: 'open',
+                conversation_status: 'active',
               };
             });
           if (convRecords.length > 0) {
             const { error: upsertErr } = await supabase
               .from('instagram_dm_conversations')
-              .upsert(convRecords, { onConflict: 'customer_instagram_id,business_account_id', ignoreDuplicates: false });
+              .upsert(convRecords, { onConflict: 'instagram_thread_id', ignoreDuplicates: false });
             if (upsertErr) console.warn('⚠️ Conversation write-through failed:', upsertErr.message);
           }
         }
@@ -495,20 +506,32 @@ router.get('/conversation-messages', async (req, res) => {
       try {
         const supabase = getSupabaseAdmin();
         if (supabase) {
+          // Resolve IG thread ID → Supabase UUID for conversation FK
+          let conversationUUID = null;
+          if (conversation_id) {
+            const { data: conv } = await supabase
+              .from('instagram_dm_conversations')
+              .select('id')
+              .eq('instagram_thread_id', conversation_id)
+              .maybeSingle();
+            conversationUUID = conv?.id || null;
+          }
+
           const msgRecords = messages
             .filter(m => m.id)
             .map(m => ({
-              message_id: m.id,
+              instagram_message_id: m.id,
               message_text: m.message || '',
-              conversation_id,
+              conversation_id: conversationUUID,
               business_account_id,
               is_from_business: m.from?.id === igUserId,
+              recipient_instagram_id: m.from?.id || '',
               sent_at: m.created_time,
-              send_status: 'received',
+              send_status: 'delivered',
             }));
           const { error: upsertErr } = await supabase
             .from('instagram_dm_messages')
-            .upsert(msgRecords, { onConflict: 'message_id', ignoreDuplicates: false });
+            .upsert(msgRecords, { onConflict: 'instagram_message_id', ignoreDuplicates: false });
           if (upsertErr) console.warn('⚠️ Message write-through failed:', upsertErr.message);
         }
       } catch (wtErr) {
@@ -612,7 +635,7 @@ router.post('/send-dm', async (req, res) => {
         const { error: msgErr } = await supabase
           .from('instagram_dm_messages')
           .upsert({
-            message_id: dmRes.data.message_id || dmRes.data.id,
+            instagram_message_id: dmRes.data.message_id || dmRes.data.id,
             message_text: message_text.trim(),
             conversation_id: null,
             business_account_id,
@@ -620,7 +643,7 @@ router.post('/send-dm', async (req, res) => {
             recipient_instagram_id: String(recipient_id),
             sent_at: new Date().toISOString(),
             send_status: 'sent',
-          }, { onConflict: 'message_id', ignoreDuplicates: false });
+          }, { onConflict: 'instagram_message_id', ignoreDuplicates: false });
         if (msgErr) console.warn('⚠️ Send-DM write-through failed:', msgErr.message);
       }
     } catch (wtErr) {

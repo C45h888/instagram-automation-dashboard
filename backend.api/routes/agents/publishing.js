@@ -85,6 +85,9 @@ router.post('/publish-post', async (req, res) => {
             media_type: type,
             caption,
             published_at: new Date().toISOString(),
+            like_count: 0,
+            comments_count: 0,
+            reach: 0,
           }, { onConflict: 'instagram_media_id', ignoreDuplicates: false });
       }
     } catch (wtErr) {

@@ -319,12 +319,10 @@ router.post('/repost-ugc', async (req, res) => {
     const mediaId = publishRes.data.id;
     const latency = Date.now() - startTime;
 
-    // Mark permission as reposted
+    // Link published media to permission record (status stays 'granted'; repost tracked via instagram_media)
     await supabase
       .from('ugc_permissions')
       .update({
-        status: 'reposted',
-        reposted_at: new Date().toISOString(),
         instagram_media_id: mediaId
       })
       .eq('id', permission_id);
