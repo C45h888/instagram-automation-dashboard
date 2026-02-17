@@ -8,6 +8,26 @@ const { retrievePageToken } = require('../services/instagram-tokens');
 const GRAPH_API_BASE = 'https://graph.facebook.com/v23.0';
 
 // ============================================
+// CREDENTIAL CACHE
+// ============================================
+// Prevents redundant DB round trips (2-3 hits per call) across tight-loop callers
+// like proactive-sync, which calls resolveAccountCredentials per-account per-fetcher.
+// TTL is intentionally short (5 min) relative to 60-day token lifetime.
+// Busted explicitly on token write events (exchange-token, refresh-token routes).
+
+const _credentialCache = new Map();
+const CREDENTIAL_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Removes a cached credential entry for a given business account.
+ * Call this whenever a token is stored or refreshed in the DB.
+ * @param {string} businessAccountId - UUID from instagram_business_accounts
+ */
+function clearCredentialCache(businessAccountId) {
+  _credentialCache.delete(businessAccountId);
+}
+
+// ============================================
 // HELPER: ENSURE MEDIA RECORD
 // ============================================
 
@@ -83,6 +103,11 @@ async function syncHashtagsFromCaptions(supabase, businessAccountId, captions) {
  * @throws {Error} If account not found or token retrieval fails
  */
 async function resolveAccountCredentials(businessAccountId) {
+  const cached = _credentialCache.get(businessAccountId);
+  if (cached && (Date.now() - cached.ts) < CREDENTIAL_TTL_MS) {
+    return cached.value;
+  }
+
   try {
     const supabase = getSupabaseAdmin();
     if (!supabase) {
@@ -112,7 +137,9 @@ async function resolveAccountCredentials(businessAccountId) {
       throw new Error('Failed to retrieve access token');
     }
 
-    return { igUserId, pageToken, userId };
+    const result = { igUserId, pageToken, userId };
+    _credentialCache.set(businessAccountId, { value: result, ts: Date.now() });
+    return result;
   } catch (error) {
     console.error('❌ Credential resolution failed:', error.message);
     throw error;
@@ -183,6 +210,7 @@ module.exports = {
   ensureMediaRecord,
   syncHashtagsFromCaptions,
   resolveAccountCredentials,
+  clearCredentialCache,
   handleInsightsRequest,
   GRAPH_API_BASE,
 };

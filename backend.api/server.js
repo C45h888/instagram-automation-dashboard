@@ -214,7 +214,9 @@ app.use((req, res, next) => {
     const responseTime = Date.now() - req.startTime;
     
     // Log API request to database (async, non-blocking)
-    if (!url.includes('/health') && !url.includes('/test')) {
+    // Skip /api/instagram routes — they self-log with full business_account_id context
+    const isSelfLogging = url.includes('/api/instagram');
+    if (!url.includes('/health') && !url.includes('/test') && !isSelfLogging) {
       logApiRequest(
         req.user?.id || null,
         url,

@@ -12,6 +12,7 @@ const {
   logAudit: logAuditService
 } = require('../services/instagram-tokens');
 const { logAudit: logAuditLegacy, getSupabaseAdmin } = require('../config/supabase'); // ADDED: Audit logging + DB client
+const { clearCredentialCache } = require('../helpers/agent-helpers');
 
 // ✅ Use new audit logging service (bff586c pattern)
 const logAudit = logAuditService;
@@ -198,6 +199,9 @@ router.post('/exchange-token', async (req, res) => {
     }
 
     console.log('✅ Page token stored successfully');
+
+    // Bust cached credentials so the next call fetches the new token from DB
+    clearCredentialCache(storeResult.businessAccountId);
 
     // ===== STEP 5: Return the discovered businessAccountId to frontend =====
     // THIS IS THE HANDSHAKE COMPLETION
@@ -2619,6 +2623,9 @@ router.post('/refresh-token', async (req, res) => {
       }
 
       console.log('[Token] ✅ Database updated with new token and expiration');
+
+      // Bust cached credentials so the next call fetches the refreshed token from DB
+      clearCredentialCache(businessAccountId);
 
       // ===== STEP 7: Log audit trail =====
       const responseTime = Date.now() - requestStartTime;

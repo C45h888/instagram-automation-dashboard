@@ -8,6 +8,7 @@ const axios = require('axios');
 const { getSupabaseAdmin, logApiRequest, logAudit } = require('../../config/supabase');
 const {
   resolveAccountCredentials,
+  ensureMediaRecord,
   GRAPH_API_BASE,
 } = require('../../helpers/agent-helpers');
 const {
@@ -43,7 +44,7 @@ router.post('/reply-comment', async (req, res) => {
       return res.status(400).json({ error: 'reply_text exceeds 2200 character limit' });
     }
 
-    const { pageToken, userId } = await resolveAccountCredentials(business_account_id);
+    const { igUserId, pageToken, userId } = await resolveAccountCredentials(business_account_id);
 
     const replyRes = await axios.post(`${GRAPH_API_BASE}/${comment_id}/replies`, null, {
       params: {
@@ -72,6 +73,31 @@ router.post('/reply-comment', async (req, res) => {
       details: { comment_id, post_id, reply_text },
       success: true
     });
+
+    // Supabase write-through: log outgoing comment reply
+    try {
+      const supabase = getSupabaseAdmin();
+      if (supabase && replyRes.data.id) {
+        const mediaUUID = post_id
+          ? await ensureMediaRecord(supabase, post_id, business_account_id)
+          : null;
+        await supabase
+          .from('instagram_comments')
+          .upsert({
+            instagram_comment_id: replyRes.data.id,
+            text: reply_text.trim(),
+            author_username: null,
+            author_instagram_id: igUserId,
+            media_id: mediaUUID,
+            business_account_id,
+            created_at: new Date().toISOString(),
+            like_count: 0,
+            processed_by_automation: true,
+          }, { onConflict: 'instagram_comment_id', ignoreDuplicates: false });
+      }
+    } catch (wtErr) {
+      console.warn('⚠️ Comment reply write-through error:', wtErr.message);
+    }
 
     res.json({ success: true, id: replyRes.data.id });
 

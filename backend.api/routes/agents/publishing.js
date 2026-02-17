@@ -44,7 +44,8 @@ router.post('/publish-post', async (req, res) => {
     }
 
     const createRes = await axios.post(`${GRAPH_API_BASE}/${igUserId}/media`, null, {
-      params: createPayload
+      params: createPayload,
+      timeout: 15000
     });
     const creationId = createRes.data.id;
 
@@ -52,7 +53,8 @@ router.post('/publish-post', async (req, res) => {
 
     // Step 2: Publish media container
     const publishRes = await axios.post(`${GRAPH_API_BASE}/${igUserId}/media_publish`, null, {
-      params: { creation_id: creationId, access_token: pageToken }
+      params: { creation_id: creationId, access_token: pageToken },
+      timeout: 15000
     });
 
     const mediaId = publishRes.data.id;

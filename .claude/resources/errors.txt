@@ -1,64 +1,34 @@
-react-dom.development.js:18704 The above error occurred in the <RepostConfirmationModal> component:
+Backend Analysis
+Framework: Express.js (Node.js), port 3001
+DB client: @supabase/supabase-js v2
+Queue infrastructure: None — no Bull, BullMQ, Redis, or any job queue exists in the backend
+Retry infrastructure: None on the backend side either — axios calls go straight to the Instagram Graph API with a 10-15s timeout, and errors just return HTTP 5xx
 
-    at RepostConfirmationModal (http://192.168.29.63:5175/src/components/permissions/UGCManagement/RepostConfirmationModal.tsx:21:3)
-    at div
-    at UGCManagement (http://192.168.29.63:5175/src/pages/UGCManagement.tsx:37:7)
-    at RenderedRoute (http://192.168.29.63:5175/node_modules/.vite/deps/react-router-dom.js?v=72539263:5525:26)
-    at Outlet (http://192.168.29.63:5175/node_modules/.vite/deps/react-router-dom.js?v=72539263:6195:26)
-    at div
-    at main
-    at div
-    at Layout (http://192.168.29.63:5175/src/components/layout/Layout.tsx:41:20)
-    at RequireAuth (http://192.168.29.63:5175/src/components/layout/RequireAuth.tsx:21:24)
-    at RenderedRoute (http://192.168.29.63:5175/node_modules/.vite/deps/react-router-dom.js?v=72539263:5525:26)
-    at Routes (http://192.168.29.63:5175/node_modules/.vite/deps/react-router-dom.js?v=72539263:6261:3)
-    at Suspense
-    at Router (http://192.168.29.63:5175/node_modules/.vite/deps/react-router-dom.js?v=72539263:6204:13)
-    at BrowserRouter (http://192.168.29.63:5175/node_modules/.vite/deps/react-router-dom.js?v=72539263:9273:3)
-    at QueryClientProvider (http://192.168.29.63:5175/node_modules/.vite/deps/@tanstack_react-query.js?v=72539263:2939:3)
-    at TokenRefreshManager (http://192.168.29.63:5175/src/App.tsx:716:32)
-    at App
+What This Reveals About the Gap
+The data bus is:
 
-Consider adding an error boundary to your tree to customize error handling behavior.
-Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries.
-react-dom.development.js:26962 Uncaught TypeError: Cannot read properties of null (reading 'message')
-    at generateCreditCaption (RepostConfirmationModal.tsx:31:34)
-    at RepostConfirmationModal (RepostConfirmationModal.tsx:39:25)
-    at renderWithHooks (react-dom.development.js:15486:18)
-    at mountIndeterminateComponent (react-dom.development.js:20103:13)
-    at beginWork (react-dom.development.js:21626:16)
-    at beginWork$1 (react-dom.development.js:27465:14)
-    at performUnitOfWork (react-dom.development.js:26596:12)
-    at workLoopSync (react-dom.development.js:26505:5)
-    at renderRootSync (react-dom.development.js:26473:7)
-    at recoverFromConcurrentError (react-dom.development.js:25889:20)
-App.tsx:301 ⏹️ Stopping token refresh service
-realtimeService.ts:140 
 
-here is the error from sources tab which contains some more infomation regardb ing the crash 
-<!doctype html>
-<html lang="en">
-  <head>
-    <script type="module">import { injectIntoGlobalHook } from "/@react-refresh";
-injectIntoGlobalHook(window);
-window.$RefreshReg$ = () => {};
-window.$RefreshSig$ = () => (type) => type;</script>
+Agent decision → httpx POST → Express endpoint → axios → Instagram Graph API
+There are two failure windows, not one:
 
-    <script type="module" src="/@vite/client"></script>
+Agent → Backend (what you identified): if Express is down/restarting, the httpx call fails after 2 retries and the action is silently dropped
+Backend → Instagram Graph API (equally dangerous): if the Graph API rate-limits or returns a 5xx, Express returns an error to the agent, which marks the job as failed — also silently dropped
+Neither side has a queue. A queued job at the agent level survives window #1 but still can't survive window #2 without the backend also handling its own retry. However, the backend returns the Instagram response directly, so the agent sees the full outcome — meaning queueing on the agent side alone covers both windows as long as the queue worker re-attempts the full agent→backend→IG chain.
 
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>InstaAutomate - Instagram Automation Platform</title>
-    <meta name="description" content="Professional Instagram Business Automation Platform - Automate comments, messages, analytics, and customer service for Instagram Business accounts." />
+Updated Recommendation
+Given zero queue infrastructure on the backend, this pushes clearly toward Approach B (Queue-First) because:
 
-    <!-- Facebook SDK for JavaScript -->
-    <!-- SDK will be initialized in React component with proper app ID from env vars -->
-    <script async defer crossorigin="anonymous" src="https://connect.facebook.net/en_US/sdk.js"></script>
-  </head>
-  <body>
-    <div id="root"></div>
-    <div id="fb-root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>
+The backend is stateless Express — it will be restarted on deploys, and there's no graceful drain. Approach A's direct-first path hits this window every deploy.
+node-cron is the only scheduler in the backend — no job processing. Any retry logic must live in the agent.
+The backend already writes to Supabase on success (scheduled_posts, ugc_permissions, instagram_dm_messages) — so the agent queue can use the Supabase state to detect what got through and skip duplicates (idempotency key = scheduled_post_id, comment_id, permission_id).
+One important nuance for the queue design: separate idempotency handling per action type since some actions (publish-post) have a natural dedup key already in the DB (scheduled_post_id), while others (reply-comment) need the job_id embedded in the Redis entry to prevent double-firing.
+
+Which approach do you want to go with, and should I start building it?
+
+The background agent failed but I already got the backend info directly. The user's question was about which approach to use. I've already presented both approaches and done the backend analysis. Now I should wait for the user to decide.
+
+Already got it covered — I read the backend files directly while the agent was running. The analysis above has everything from the backend.
+
+The background agent hit a permissions wall in its sandboxed context, but the direct tools in this session have full access to /tmp/backend-api-e3d534b/. No action needed on your end.
+
+Ball's in your court — Approach A or B, and do you want to start building?

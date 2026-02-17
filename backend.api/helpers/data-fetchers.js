@@ -581,10 +581,12 @@ async function fetchAndStoreMediaInsights(businessAccountId, since, until) {
     const mediaRes = await axios.get(mediaUrl, { params: mediaParams });
     const mediaList = mediaRes.data.data || [];
 
-    const mediaInsightsPromises = mediaList.map(async (media) => {
+    const INSIGHTS_BATCH_SIZE = 5;
+    const INSIGHTS_BATCH_DELAY_MS = 500;
+
+    const fetchInsightsForMedia = async (media) => {
       try {
-        const insightsUrl = `${GRAPH_API_BASE}/${media.id}/insights`;
-        const insightsRes = await axios.get(insightsUrl, {
+        const insightsRes = await axios.get(`${GRAPH_API_BASE}/${media.id}/insights`, {
           params: {
             metric: 'reach,impressions,saved',
             access_token: pageToken
@@ -606,9 +608,18 @@ async function fetchAndStoreMediaInsights(businessAccountId, since, until) {
           error: err.message
         };
       }
-    });
+    };
 
-    const mediaInsights = await Promise.all(mediaInsightsPromises);
+    const mediaInsights = [];
+    for (let i = 0; i < mediaList.length; i += INSIGHTS_BATCH_SIZE) {
+      const batch = mediaList.slice(i, i + INSIGHTS_BATCH_SIZE);
+      const batchResults = await Promise.all(batch.map(fetchInsightsForMedia));
+      mediaInsights.push(...batchResults);
+      // Pause between batches to avoid rate-limit bursts (skip delay after last batch)
+      if (i + INSIGHTS_BATCH_SIZE < mediaList.length) {
+        await new Promise(resolve => setTimeout(resolve, INSIGHTS_BATCH_DELAY_MS));
+      }
+    }
 
     const latency = Date.now() - startTime;
 
@@ -631,6 +642,8 @@ async function fetchAndStoreMediaInsights(businessAccountId, since, until) {
             business_account_id: businessAccountId,
             media_type: m.media_type || null,
             reach: m.insights.find(i => i.name === 'reach')?.values?.[0]?.value || 0,
+            impressions: m.insights.find(i => i.name === 'impressions')?.values?.[0]?.value || 0,
+            saves: m.insights.find(i => i.name === 'saved')?.values?.[0]?.value || 0,
             published_at: m.timestamp || null,
           }));
           const { error: mediaErr } = await supabase
