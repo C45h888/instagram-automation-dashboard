@@ -7,6 +7,7 @@ const axios = require('axios');
 const { getSupabaseAdmin, logApiRequest, logAudit } = require('../../config/supabase');
 const {
   resolveAccountCredentials,
+  categorizeIgError,
   GRAPH_API_BASE,
 } = require('../../helpers/agent-helpers');
 
@@ -130,9 +131,13 @@ router.post('/publish-post', async (req, res) => {
     });
 
     console.error('❌ Post publish failed:', errorMessage);
+    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
     res.status(error.response?.status || 500).json({
       error: errorMessage,
-      code: error.response?.data?.error?.code
+      code: error.response?.data?.error?.code,
+      retryable,
+      error_category,
+      retry_after_seconds
     });
   }
 });

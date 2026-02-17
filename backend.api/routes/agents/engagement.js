@@ -9,6 +9,7 @@ const { getSupabaseAdmin, logApiRequest, logAudit } = require('../../config/supa
 const {
   resolveAccountCredentials,
   ensureMediaRecord,
+  categorizeIgError,
   GRAPH_API_BASE,
 } = require('../../helpers/agent-helpers');
 const {
@@ -115,9 +116,13 @@ router.post('/reply-comment', async (req, res) => {
     });
 
     console.error('❌ Comment reply failed:', errorMessage);
+    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
     res.status(error.response?.status || 500).json({
       error: errorMessage,
-      code: error.response?.data?.error?.code
+      code: error.response?.data?.error?.code,
+      retryable,
+      error_category,
+      retry_after_seconds
     });
   }
 });
@@ -228,9 +233,13 @@ router.post('/reply-dm', async (req, res) => {
     });
 
     console.error('❌ DM reply failed:', errorMessage);
+    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
     res.status(error.response?.status || 500).json({
       error: errorMessage,
-      code: error.response?.data?.error?.code
+      code: error.response?.data?.error?.code,
+      retryable,
+      error_category,
+      retry_after_seconds
     });
   }
 });
@@ -263,7 +272,10 @@ router.get('/post-comments', async (req, res) => {
   if (!result.success) {
     return res.status(500).json({
       error: result.error,
-      code: undefined
+      code: result.code,
+      retryable: result.retryable,
+      error_category: result.error_category,
+      retry_after_seconds: result.retry_after_seconds
     });
   }
 
@@ -298,7 +310,10 @@ router.get('/conversations', async (req, res) => {
   if (!result.success) {
     return res.status(500).json({
       error: result.error,
-      code: undefined
+      code: result.code,
+      retryable: result.retryable,
+      error_category: result.error_category,
+      retry_after_seconds: result.retry_after_seconds
     });
   }
 
@@ -337,7 +352,10 @@ router.get('/conversation-messages', async (req, res) => {
   if (!result.success) {
     return res.status(500).json({
       error: result.error,
-      code: undefined
+      code: result.code,
+      retryable: result.retryable,
+      error_category: result.error_category,
+      retry_after_seconds: result.retry_after_seconds
     });
   }
 
@@ -448,9 +466,13 @@ router.post('/send-dm', async (req, res) => {
     });
 
     console.error('❌ Send DM failed:', errorMessage);
+    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
     res.status(error.response?.status || 500).json({
       error: errorMessage,
-      code: error.response?.data?.error?.code
+      code: error.response?.data?.error?.code,
+      retryable,
+      error_category,
+      retry_after_seconds
     });
   }
 });

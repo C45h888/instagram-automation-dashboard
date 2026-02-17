@@ -7,6 +7,7 @@ const axios = require('axios');
 const { getSupabaseAdmin, logApiRequest, logAudit } = require('../../config/supabase');
 const {
   resolveAccountCredentials,
+  categorizeIgError,
   GRAPH_API_BASE,
 } = require('../../helpers/agent-helpers');
 const {
@@ -40,7 +41,10 @@ router.post('/search-hashtag', async (req, res) => {
     const isNotFound = result.error && result.error.includes('Hashtag not found');
     return res.status(isNotFound ? 404 : 500).json({
       error: result.error,
-      code: undefined
+      code: result.code,
+      retryable: result.retryable,
+      error_category: result.error_category,
+      retry_after_seconds: result.retry_after_seconds
     });
   }
 
@@ -70,7 +74,10 @@ router.get('/tags', async (req, res) => {
   if (!result.success) {
     return res.status(500).json({
       error: result.error,
-      code: undefined
+      code: result.code,
+      retryable: result.retryable,
+      error_category: result.error_category,
+      retry_after_seconds: result.retry_after_seconds
     });
   }
 
@@ -207,9 +214,13 @@ router.post('/repost-ugc', async (req, res) => {
     });
 
     console.error('❌ UGC repost failed:', errorMessage);
+    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
     res.status(error.response?.status || 500).json({
       error: errorMessage,
-      code: error.response?.data?.error?.code
+      code: error.response?.data?.error?.code,
+      retryable,
+      error_category,
+      retry_after_seconds
     });
   }
 });
@@ -297,9 +308,13 @@ router.post('/sync-ugc', async (req, res) => {
     });
 
     console.error('❌ UGC sync failed:', errorMessage);
+    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
     res.status(error.response?.status || 500).json({
       error: errorMessage,
-      code: error.response?.data?.error?.code
+      code: error.response?.data?.error?.code,
+      retryable,
+      error_category,
+      retry_after_seconds
     });
   }
 });

@@ -9,6 +9,7 @@ const {
   resolveAccountCredentials,
   ensureMediaRecord,
   syncHashtagsFromCaptions,
+  categorizeIgError,
   GRAPH_API_BASE,
 } = require('./agent-helpers');
 const { getAccountInsights } = require('../services/instagram-tokens');
@@ -106,7 +107,12 @@ async function fetchAndStoreComments(businessAccountId, mediaId, limit = 50) {
       latency
     }).catch(() => {});
 
-    return { success: false, comments: [], count: 0, paging: {}, error: errorMessage };
+    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
+    return {
+      success: false, comments: [], count: 0, paging: {}, error: errorMessage,
+      code: error.response?.data?.error?.code,
+      retryable, error_category, retry_after_seconds
+    };
   }
 }
 
@@ -237,7 +243,12 @@ async function fetchAndStoreConversations(businessAccountId, limit = 20) {
       latency
     }).catch(() => {});
 
-    return { success: false, conversations: [], count: 0, paging: {}, error: errorMessage };
+    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
+    return {
+      success: false, conversations: [], count: 0, paging: {}, error: errorMessage,
+      code: error.response?.data?.error?.code,
+      retryable, error_category, retry_after_seconds
+    };
   }
 }
 
@@ -339,7 +350,12 @@ async function fetchAndStoreMessages(businessAccountId, conversationId, limit = 
       latency
     }).catch(() => {});
 
-    return { success: false, messages: [], count: 0, paging: {}, error: errorMessage };
+    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
+    return {
+      success: false, messages: [], count: 0, paging: {}, error: errorMessage,
+      code: error.response?.data?.error?.code,
+      retryable, error_category, retry_after_seconds
+    };
   }
 }
 
@@ -453,7 +469,12 @@ async function fetchAndStoreHashtagMedia(businessAccountId, hashtag, limit = 25)
       latency
     }).catch(() => {});
 
-    return { success: false, media: [], count: 0, error: errorMessage };
+    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
+    return {
+      success: false, media: [], count: 0, error: errorMessage,
+      code: error.response?.data?.error?.code,
+      retryable, error_category, retry_after_seconds
+    };
   }
 }
 
@@ -545,7 +566,12 @@ async function fetchAndStoreTaggedMedia(businessAccountId, limit = 25) {
       latency
     }).catch(() => {});
 
-    return { success: false, taggedPosts: [], count: 0, error: errorMessage };
+    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
+    return {
+      success: false, taggedPosts: [], count: 0, error: errorMessage,
+      code: error.response?.data?.error?.code,
+      retryable, error_category, retry_after_seconds
+    };
   }
 }
 
@@ -674,7 +700,12 @@ async function fetchAndStoreMediaInsights(businessAccountId, since, until) {
       latency
     }).catch(() => {});
 
-    return { success: false, mediaInsights: [], count: 0, error: errorMessage };
+    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
+    return {
+      success: false, mediaInsights: [], count: 0, error: errorMessage,
+      code: error.response?.data?.error?.code,
+      retryable, error_category, retry_after_seconds
+    };
   }
 }
 
@@ -724,7 +755,12 @@ async function fetchAndStoreAccountInsights(businessAccountId, options = {}) {
       latency
     }).catch(() => {});
 
-    return { success: false, data: {}, error: errorMessage };
+    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
+    return {
+      success: false, data: {}, error: errorMessage,
+      code: error.response?.data?.error?.code,
+      retryable, error_category, retry_after_seconds
+    };
   }
 }
 
