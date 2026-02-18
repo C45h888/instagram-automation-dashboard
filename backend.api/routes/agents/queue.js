@@ -104,18 +104,38 @@ router.post('/post-queue/retry', async (req, res) => {
   if (!supabase) return res.status(503).json({ error: 'Database unavailable' });
 
   try {
+    // Pre-flight: fetch current row to guard against race conditions
+    const { data: current } = await supabase
+      .from('post_queue')
+      .select('id, status, action_type, instagram_id')
+      .eq('id', queue_id)
+      .single();
+
+    if (!current) {
+      return res.status(404).json({ error: 'Queue row not found' });
+    }
+    if (current.status === 'sent') {
+      return res.status(409).json({
+        error: 'Row already sent — retry not allowed',
+        action_type: current.action_type,
+        instagram_id: current.instagram_id,
+      });
+    }
+    if (!['dlq', 'failed'].includes(current.status)) {
+      return res.status(409).json({
+        error: `Row is in status '${current.status}' — only dlq/failed rows can be retried`,
+      });
+    }
+
     const { data, error } = await supabase
       .from('post_queue')
       .update({ status: 'pending', next_retry_at: null, error: null })
-      .in('status', ['dlq', 'failed'])
       .eq('id', queue_id)
       .select('id, action_type, retry_count')
       .single();
 
     if (error || !data) {
-      return res.status(404).json({
-        error: 'Queue row not found or not in a retryable state (must be dlq or failed)'
-      });
+      return res.status(500).json({ error: 'Failed to reset queue row' });
     }
 
     res.json({

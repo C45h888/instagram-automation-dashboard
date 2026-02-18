@@ -503,7 +503,100 @@ function initScheduledJobs() {
     }
   }, { scheduled: true, timezone: 'UTC' });
 
-  scheduledJobs = [engagementJob, ugcJob, insightsJob];
+  // ── Heartbeat failover detector — every 5 min ───────────────────────────────
+  // If agent is silent >HEARTBEAT_STALE_MINUTES, mark it 'down' and move any
+  // approved scheduled_posts into post_queue so post-fallback.js can publish them.
+  const HEARTBEAT_STALE_MINUTES = parseInt(process.env.HEARTBEAT_STALE_MINUTES || '30', 10);
+  let heartbeatRunning = false;
+
+  const heartbeatJob = cron.schedule(process.env.POST_FALLBACK_CRON || '*/5 * * * *', async () => {
+    if (heartbeatRunning) return;
+    heartbeatRunning = true;
+    try {
+      const supabase = getSupabaseAdmin();
+      if (!supabase) return;
+
+      const staleThreshold = new Date(Date.now() - HEARTBEAT_STALE_MINUTES * 60 * 1000).toISOString();
+
+      // Mark stale agents as down
+      const { data: downAgents } = await supabase
+        .from('agent_heartbeats')
+        .update({ status: 'down' })
+        .lt('last_beat_at', staleThreshold)
+        .eq('status', 'alive')
+        .select('agent_id, last_beat_at');
+
+      if (!downAgents?.length) return;
+
+      console.warn(`[Failover] Agent(s) down: ${downAgents.map(a => a.agent_id).join(', ')}`);
+
+      for (const agent of downAgents) {
+        const missCount = Math.floor(
+          (Date.now() - new Date(agent.last_beat_at).getTime()) / (5 * 60 * 1000)
+        );
+        if (missCount >= 3) {
+          await logAudit({
+            event_type: 'agent_down_alert',
+            action: 'heartbeat_missed',
+            resource_type: 'agent_heartbeats',
+            resource_id: agent.agent_id,
+            details: { missed_beats: missCount, last_beat_at: agent.last_beat_at },
+            success: false,
+          }).catch(() => {});
+          console.error(`[Failover] ⚠️ Agent ${agent.agent_id} missed ${missCount} heartbeats`);
+        }
+      }
+
+      // Failover: enqueue approved scheduled_posts older than stale window
+      const { data: stuck } = await supabase
+        .from('scheduled_posts')
+        .select('id, business_account_id, asset_id')
+        .eq('status', 'approved')
+        .lt('created_at', staleThreshold);
+
+      for (const post of (stuck || [])) {
+        const { data: asset } = await supabase
+          .from('instagram_assets')
+          .select('storage_path, media_type')
+          .eq('id', post.asset_id)
+          .single();
+
+        if (!asset) continue;
+
+        // Lazy require avoids circular dependency (agent-helpers imports config/supabase)
+        const { insertQueueRow } = require('../helpers/agent-helpers');
+        const crypto = require('crypto');
+        const idemKey = crypto.createHash('sha256')
+          .update(`failover_publish:${post.id}`)
+          .digest('hex');
+
+        await insertQueueRow(supabase, {
+          business_account_id: post.business_account_id,
+          action_type: 'publish_post',
+          payload: {
+            image_url: asset.storage_path,
+            media_type: asset.media_type || 'IMAGE',
+            scheduled_post_id: post.id,
+          },
+          idempotency_key: idemKey,
+        });
+
+        // Mark as publishing so we don't re-insert on the next tick
+        await supabase
+          .from('scheduled_posts')
+          .update({ status: 'publishing' })
+          .eq('id', post.id);
+
+        console.log(`[Failover] Enqueued publish_post for scheduled_post ${post.id}`);
+      }
+    } catch (err) {
+      console.error('[Failover] Heartbeat cron error:', err.message);
+    } finally {
+      heartbeatRunning = false;
+    }
+  }, { scheduled: true, timezone: 'UTC' });
+
+  scheduledJobs = [engagementJob, ugcJob, insightsJob, heartbeatJob];
   console.log(`[ProactiveSync] ${scheduledJobs.length} jobs scheduled`);
 
   return function stopScheduledJobs() {
