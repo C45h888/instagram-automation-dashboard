@@ -5,6 +5,7 @@
 
 const cron = require('node-cron');
 const { getSupabaseAdmin, logAudit } = require('../config/supabase');
+const { clearCredentialCache } = require('../helpers/agent-helpers');
 const {
   fetchAndStoreComments,
   fetchAndStoreConversations,
@@ -37,6 +38,71 @@ const UGC_MAX_HASHTAGS = 5;
 
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// ── Error Handling Helpers ──────────────────────────────────────────────────
+
+// A1: In-memory rate-limit circuit breaker
+const _rateLimitedAccounts = new Map(); // accountId → unblocked_at ms
+
+function isAccountRateLimited(accountId) {
+  const unblocked = _rateLimitedAccounts.get(accountId);
+  if (!unblocked) return false;
+  if (Date.now() >= unblocked) {
+    _rateLimitedAccounts.delete(accountId);
+    return false;
+  }
+  return true;
+}
+
+function markAccountRateLimited(accountId, retryAfterSeconds) {
+  const cooldown = (retryAfterSeconds || 3600) * 1000;
+  _rateLimitedAccounts.set(accountId, Date.now() + cooldown);
+  console.warn(`[ProactiveSync] Account ${accountId} rate-limited for ${retryAfterSeconds || 3600}s`);
+}
+
+// A2: Auth-failure disconnect (async, called fire-and-forget from handleFetchError)
+async function markAccountDisconnectedOnAuthFailure(accountId, errorMessage) {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) return;
+  try {
+    await supabase
+      .from('instagram_business_accounts')
+      .update({ is_connected: false, connection_status: 'disconnected' })
+      .eq('id', accountId);
+
+    await supabase
+      .from('system_alerts')
+      .insert({
+        alert_type: 'auth_failure',
+        business_account_id: accountId,
+        message: `Proactive sync auth failure: ${errorMessage}`,
+        details: { source: 'proactive_sync', error: errorMessage, occurred_at: new Date().toISOString() },
+        resolved: false,
+      });
+
+    clearCredentialCache(accountId);
+    console.error(`[ProactiveSync] Account ${accountId} disconnected due to auth_failure`);
+  } catch (err) {
+    console.warn(`[ProactiveSync] Failed to mark account ${accountId} disconnected:`, err.message);
+  }
+}
+
+// A3: Result error-handler (sync — callers use return value for flow control)
+function handleFetchError(result, accountId) {
+  if (!result || result.success) return { skip: false, break: false };
+
+  if (result.error_category === 'auth_failure') {
+    markAccountDisconnectedOnAuthFailure(accountId, result.error || 'auth_failure').catch(() => {});
+    return { skip: true, break: false };
+  }
+
+  if (result.error_category === 'rate_limit') {
+    markAccountRateLimited(accountId, result.retry_after_seconds);
+    return { skip: false, break: true };
+  }
+
+  return { skip: false, break: false };
 }
 
 /**
@@ -141,30 +207,51 @@ async function proactiveEngagementSync() {
   }
 
   for (const account of accounts) {
+    // Rate-limit circuit breaker
+    if (isAccountRateLimited(account.id)) {
+      console.log(`[ProactiveSync:engagement] Account ${account.id} rate-limited, skipping`);
+      await logSyncAudit('engagement', account.id, { success: false, error: 'rate_limited', skipped: true });
+      continue;
+    }
+
     try {
       // --- Comments for recent posts ---
       const recentMedia = await getRecentMedia(account.id, 48);
       let totalComments = 0;
+      let commentAuthFailed = false;
       const postsToCheck = recentMedia.slice(0, ENGAGEMENT_MAX_POSTS);
 
       for (const media of postsToCheck) {
         const result = await fetchAndStoreComments(account.id, media.instagram_media_id, 50);
         if (result.success) totalComments += result.count;
+
+        const { skip, break: brk } = handleFetchError(result, account.id);
+        if (skip) { commentAuthFailed = true; break; }
+        if (brk) break;
+
         await delay(INTER_ITEM_DELAY_MS);
       }
 
       await logSyncAudit('comments', account.id, {
-        success: true,
+        success: !commentAuthFailed,
         posts_checked: postsToCheck.length,
         total_comments: totalComments,
       });
 
+      if (commentAuthFailed) continue; // auth failure — skip rest of this account
+
       // --- Conversations ---
       const convResult = await fetchAndStoreConversations(account.id, 20);
+      const { skip: convSkip, break: convBrk } = handleFetchError(convResult, account.id);
       await logSyncAudit('conversations', account.id, {
-        success: convResult.success,
+        success: convResult.success && !convSkip,
         count: convResult.count,
       });
+
+      if (convSkip || convBrk) {
+        await delay(INTER_ACCOUNT_DELAY_MS);
+        continue;
+      }
 
       // --- Messages for open-window conversations ---
       if (convResult.success && convResult.conversations) {
@@ -172,13 +259,17 @@ async function proactiveEngagementSync() {
           .filter(c => c.within_window || c.messaging_window?.is_open)
           .slice(0, ENGAGEMENT_MAX_CONVERSATIONS);
 
+        let msgAuthFailed = false;
         for (const conv of openConvs) {
-          await fetchAndStoreMessages(account.id, conv.id, 20);
+          const msgResult = await fetchAndStoreMessages(account.id, conv.id, 20);
+          const { skip, break: brk } = handleFetchError(msgResult, account.id);
+          if (skip) { msgAuthFailed = true; break; }
+          if (brk) break;
           await delay(INTER_ITEM_DELAY_MS);
         }
 
         await logSyncAudit('messages', account.id, {
-          success: true,
+          success: !msgAuthFailed,
           conversations_checked: openConvs.length,
         });
       }
@@ -214,29 +305,48 @@ async function proactiveUgcSync() {
   }
 
   for (const account of accounts) {
+    // Rate-limit circuit breaker
+    if (isAccountRateLimited(account.id)) {
+      console.log(`[ProactiveSync:ugc] Account ${account.id} rate-limited, skipping`);
+      await logSyncAudit('ugc', account.id, { success: false, error: 'rate_limited', skipped: true });
+      continue;
+    }
+
     try {
       // --- Tagged media ---
       const tagResult = await fetchAndStoreTaggedMedia(account.id, 50);
+      const { skip: tagSkip, break: tagBrk } = handleFetchError(tagResult, account.id);
       await logSyncAudit('ugc_tagged', account.id, {
-        success: tagResult.success,
+        success: tagResult.success && !tagSkip,
         count: tagResult.count,
       });
+
+      if (tagSkip || tagBrk) {
+        await delay(INTER_ACCOUNT_DELAY_MS);
+        continue;
+      }
 
       await delay(INTER_ITEM_DELAY_MS);
 
       // --- Hashtag media ---
       const hashtags = await getMonitoredHashtags(account.id);
       let totalHashtagMedia = 0;
+      let hashAuthFailed = false;
       const hashtagsToCheck = hashtags.slice(0, UGC_MAX_HASHTAGS);
 
       for (const hashtag of hashtagsToCheck) {
         const hashResult = await fetchAndStoreHashtagMedia(account.id, hashtag, 25);
         if (hashResult.success) totalHashtagMedia += hashResult.count;
+
+        const { skip, break: brk } = handleFetchError(hashResult, account.id);
+        if (skip) { hashAuthFailed = true; break; }
+        if (brk) break;
+
         await delay(INTER_ITEM_DELAY_MS);
       }
 
       await logSyncAudit('ugc_hashtags', account.id, {
-        success: true,
+        success: !hashAuthFailed,
         hashtags_checked: hashtagsToCheck.length,
         total_media: totalHashtagMedia,
       });
@@ -270,16 +380,27 @@ async function proactiveInsightsSync() {
   }
 
   for (const account of accounts) {
+    // Rate-limit circuit breaker
+    if (isAccountRateLimited(account.id)) {
+      console.log(`[ProactiveSync:insights] Account ${account.id} rate-limited, skipping`);
+      await logSyncAudit('insights', account.id, { success: false, error: 'rate_limited', skipped: true });
+      continue;
+    }
+
     try {
       const sevenDaysAgo = Math.floor((Date.now() - 7 * 24 * 3600000) / 1000);
       const now = Math.floor(Date.now() / 1000);
 
       const result = await fetchAndStoreMediaInsights(account.id, sevenDaysAgo, now);
+      const { skip, break: brk } = handleFetchError(result, account.id);
 
       await logSyncAudit('media_insights', account.id, {
-        success: result.success,
+        success: result.success && !skip,
         count: result.count,
+        error: result.success ? undefined : result.error,
       });
+
+      if (skip || brk) continue;
 
       await delay(INTER_ACCOUNT_DELAY_MS);
 
@@ -405,4 +526,7 @@ module.exports = {
   getActiveAccounts,
   getRecentMedia,
   getMonitoredHashtags,
+  // Shared in-memory rate-limit circuit breaker — used by post-fallback.js
+  isAccountRateLimited,
+  markAccountRateLimited,
 };

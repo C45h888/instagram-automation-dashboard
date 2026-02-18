@@ -269,6 +269,88 @@ async function handleInsightsRequest(req, res, _startTime, metricTypeOverride) {
   }
 }
 
+// ============================================
+// HELPER: IDEMPOTENCY KEY
+// ============================================
+
+const crypto = require('crypto');
+
+/**
+ * Returns a deterministic SHA-256 hex digest from an action seed string.
+ * Used as idempotency_key in post_queue to prevent duplicate in-flight rows.
+ * @param {string} seed - e.g. 'reply_comment:123456789'
+ * @returns {string} 64-char hex digest
+ */
+function buildIdempotencyKey(seed) {
+  return crypto.createHash('sha256').update(seed).digest('hex');
+}
+
+// ============================================
+// HELPER: POST QUEUE INSERT
+// ============================================
+
+/**
+ * Inserts an intent row into post_queue before an outgoing IG API call.
+ * On unique-constraint conflict (row already in-flight for this idempotency_key),
+ * returns the existing row's id instead of throwing.
+ * @param {object} supabase - Supabase admin client
+ * @param {{ business_account_id: string, action_type: string, payload: object, idempotency_key: string }} params
+ * @returns {Promise<string|null>} UUID of the queue row, or null on unexpected error
+ */
+async function insertQueueRow(supabase, { business_account_id, action_type, payload, idempotency_key }) {
+  try {
+    const { data, error } = await supabase
+      .from('post_queue')
+      .insert({ business_account_id, action_type, payload, idempotency_key, status: 'pending' })
+      .select('id')
+      .single();
+
+    if (error) {
+      // 23505 = unique_violation — row already active for this idempotency_key
+      if (error.code === '23505') {
+        const { data: existing } = await supabase
+          .from('post_queue')
+          .select('id')
+          .eq('idempotency_key', idempotency_key)
+          .not('status', 'in', '("sent","dlq")')
+          .single();
+        console.warn(`⚠️ Queue duplicate suppressed [${action_type}], existing row: ${existing?.id}`);
+        return existing?.id || null;
+      }
+      console.warn(`⚠️ Queue insert failed [${action_type}]:`, error.message);
+      return null;
+    }
+    return data.id;
+  } catch (err) {
+    console.warn(`⚠️ Queue insert error [${action_type}]:`, err.message);
+    return null;
+  }
+}
+
+// ============================================
+// HELPER: POST QUEUE UPDATE
+// ============================================
+
+/**
+ * Updates a post_queue row with the provided fields.
+ * Silently no-ops if id is null (queue disabled or insert failed).
+ * @param {object} supabase - Supabase admin client
+ * @param {string|null} id - post_queue UUID
+ * @param {object} fields - Columns to update (status, instagram_id, error, etc.)
+ */
+async function updateQueueRow(supabase, id, fields) {
+  if (!id) return;
+  try {
+    const { error } = await supabase
+      .from('post_queue')
+      .update(fields)
+      .eq('id', id);
+    if (error) console.warn(`⚠️ Queue update failed [${id}]:`, error.message);
+  } catch (err) {
+    console.warn(`⚠️ Queue update error [${id}]:`, err.message);
+  }
+}
+
 module.exports = {
   ensureMediaRecord,
   syncHashtagsFromCaptions,
@@ -277,4 +359,7 @@ module.exports = {
   categorizeIgError,
   handleInsightsRequest,
   GRAPH_API_BASE,
+  buildIdempotencyKey,
+  insertQueueRow,
+  updateQueueRow,
 };

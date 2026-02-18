@@ -37,5 +37,6 @@ router.use(require('./agents/engagement'));
 router.use(require('./agents/publishing'));
 router.use(require('./agents/analytics'));
 router.use(require('./agents/oversight'));
+router.use(require('./agents/queue'));
 
 module.exports = router;

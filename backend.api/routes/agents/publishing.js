@@ -9,6 +9,9 @@ const {
   resolveAccountCredentials,
   categorizeIgError,
   GRAPH_API_BASE,
+  buildIdempotencyKey,
+  insertQueueRow,
+  updateQueueRow,
 } = require('../../helpers/agent-helpers');
 
 // ============================================
@@ -22,6 +25,7 @@ const {
 router.post('/publish-post', async (req, res) => {
   const startTime = Date.now();
   const { business_account_id, image_url, caption, media_type, scheduled_post_id } = req.body;
+  const fallbackEnabled = process.env.POST_FALLBACK_ENABLED === 'true';
 
   try {
     if (!business_account_id || !image_url || !caption) {
@@ -31,6 +35,29 @@ router.post('/publish-post', async (req, res) => {
     }
 
     const type = (media_type || 'IMAGE').toUpperCase();
+
+    // --- Queue: pre-log intent before 2-step publish (creation_id not yet known) ---
+    let queueId = null;
+    if (fallbackEnabled) {
+      const supabase = getSupabaseAdmin();
+      if (supabase) {
+        // Use scheduled_post_id for stable dedup; fall back to image_url hash
+        const idemSeed = scheduled_post_id
+          ? `publish_post:${scheduled_post_id}`
+          : `publish_post:${buildIdempotencyKey(image_url).slice(0, 16)}`;
+        queueId = await insertQueueRow(supabase, {
+          business_account_id,
+          action_type: 'publish_post',
+          payload: {
+            image_url,
+            caption,
+            media_type: type,
+            scheduled_post_id: scheduled_post_id || null
+          },
+          idempotency_key: buildIdempotencyKey(idemSeed)
+        });
+      }
+    }
 
     const { igUserId, pageToken, userId } = await resolveAccountCredentials(business_account_id);
 
@@ -52,6 +79,13 @@ router.post('/publish-post', async (req, res) => {
 
     if (!creationId) throw new Error('Failed to create media container');
 
+    // --- Queue: persist creation_id so cron retries skip Step 1 ---
+    if (queueId) {
+      await updateQueueRow(getSupabaseAdmin(), queueId, {
+        payload: { image_url, caption, media_type: type, scheduled_post_id: scheduled_post_id || null, creation_id: creationId }
+      });
+    }
+
     // Step 2: Publish media container
     const publishRes = await axios.post(`${GRAPH_API_BASE}/${igUserId}/media_publish`, null, {
       params: { creation_id: creationId, access_token: pageToken },
@@ -60,6 +94,14 @@ router.post('/publish-post', async (req, res) => {
 
     const mediaId = publishRes.data.id;
     const latency = Date.now() - startTime;
+
+    // --- Queue: mark sent ---
+    if (queueId) {
+      await updateQueueRow(getSupabaseAdmin(), queueId, {
+        status: 'sent',
+        instagram_id: mediaId
+      });
+    }
 
     // Update scheduled_posts table if scheduled_post_id provided
     if (scheduled_post_id) {
@@ -115,11 +157,26 @@ router.post('/publish-post', async (req, res) => {
       success: true
     });
 
-    res.json({ id: mediaId });
+    res.json({ id: mediaId, job_id: queueId });
 
   } catch (error) {
     const latency = Date.now() - startTime;
     const errorMessage = error.response?.data?.error?.message || error.message;
+    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
+
+    // --- Queue: mark failed or dlq ---
+    if (queueId) {
+      const nextRetryAt = retryable
+        ? new Date(Date.now() + Math.min(Math.pow(2, 1) * 60000, 3600000)).toISOString()
+        : null;
+      await updateQueueRow(getSupabaseAdmin(), queueId, {
+        status: retryable ? 'failed' : 'dlq',
+        retry_count: 1,
+        error: errorMessage,
+        error_category,
+        next_retry_at: nextRetryAt
+      });
+    }
 
     await logApiRequest({
       endpoint: '/publish-post',
@@ -131,7 +188,6 @@ router.post('/publish-post', async (req, res) => {
     });
 
     console.error('❌ Post publish failed:', errorMessage);
-    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
     res.status(error.response?.status || 500).json({
       error: errorMessage,
       code: error.response?.data?.error?.code,

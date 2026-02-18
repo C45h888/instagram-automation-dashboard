@@ -17,6 +17,9 @@ const {
 // Proactive sync (Bus 1: backend-driven cron data sync)
 const { initScheduledJobs } = require('./services/proactive-sync');
 
+// Post fallback (Bus 2: outgoing IG write retry queue)
+const { initPostFallbackJob } = require('./services/post-fallback');
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -601,6 +604,14 @@ async function startServer() {
     console.error('[ProactiveSync] Failed to initialize:', cronError.message);
   }
 
+  // Initialize post fallback cron (Bus 2: outgoing IG write retry queue)
+  let stopPostFallback = () => {};
+  try {
+    stopPostFallback = initPostFallbackJob();
+  } catch (fallbackErr) {
+    console.error('[PostFallback] Failed to initialize:', fallbackErr.message);
+  }
+
   // Start Express server
   const server = app.listen(PORT, '0.0.0.0', async () => {
     console.log('\n' + '='.repeat(60));
@@ -626,8 +637,9 @@ async function startServer() {
   const gracefulShutdown = async (signal) => {
     console.log(`\n📴 ${signal} received, shutting down gracefully...`);
 
-    // Stop proactive sync cron jobs before closing server
+    // Stop cron jobs before closing server
     stopCronJobs();
+    stopPostFallback();
 
     server.close(async () => {
       console.log('🔒 HTTP server closed');

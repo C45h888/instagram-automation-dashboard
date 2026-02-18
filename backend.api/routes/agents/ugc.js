@@ -9,6 +9,9 @@ const {
   resolveAccountCredentials,
   categorizeIgError,
   GRAPH_API_BASE,
+  buildIdempotencyKey,
+  insertQueueRow,
+  updateQueueRow,
 } = require('../../helpers/agent-helpers');
 const {
   fetchAndStoreHashtagMedia,
@@ -95,6 +98,7 @@ router.get('/tags', async (req, res) => {
 router.post('/repost-ugc', async (req, res) => {
   const startTime = Date.now();
   const { business_account_id, permission_id } = req.body;
+  const fallbackEnabled = process.env.POST_FALLBACK_ENABLED === 'true';
 
   try {
     if (!business_account_id || !permission_id) {
@@ -106,6 +110,7 @@ router.post('/repost-ugc', async (req, res) => {
     const supabase = getSupabaseAdmin();
 
     // Step 1: Fetch permission record — must exist and be 'granted'
+    // These checks are preconditions, not retryable failures. No queue row inserted if they fail.
     const { data: permission, error: permError } = await supabase
       .from('ugc_permissions')
       .select('id, ugc_discovered_id, username, status, business_account_id')
@@ -147,6 +152,17 @@ router.post('/repost-ugc', async (req, res) => {
       return res.status(400).json({ error: 'UGC content has no media URL', code: 'NO_MEDIA_URL' });
     }
 
+    // --- Queue: pre-log intent (preconditions passed, safe to queue) ---
+    let queueId = null;
+    if (fallbackEnabled) {
+      queueId = await insertQueueRow(supabase, {
+        business_account_id,
+        action_type: 'repost_ugc',
+        payload: { permission_id },
+        idempotency_key: buildIdempotencyKey(`repost_ugc:${permission_id}`)
+      });
+    }
+
     // Step 3: Resolve credentials and publish (2-step: container → publish)
     const { igUserId, pageToken, userId } = await resolveAccountCredentials(business_account_id);
 
@@ -162,6 +178,13 @@ router.post('/repost-ugc', async (req, res) => {
     const creationId = createRes.data.id;
     if (!creationId) throw new Error('Failed to create media container');
 
+    // --- Queue: persist creation_id so cron retries skip Step 1 ---
+    if (queueId) {
+      await updateQueueRow(supabase, queueId, {
+        payload: { permission_id, creation_id: creationId }
+      });
+    }
+
     const publishRes = await axios.post(`${GRAPH_API_BASE}/${igUserId}/media_publish`, null, {
       params: { creation_id: creationId, access_token: pageToken },
       timeout: 15000
@@ -169,6 +192,14 @@ router.post('/repost-ugc', async (req, res) => {
 
     const mediaId = publishRes.data.id;
     const latency = Date.now() - startTime;
+
+    // --- Queue: mark sent ---
+    if (queueId) {
+      await updateQueueRow(supabase, queueId, {
+        status: 'sent',
+        instagram_id: mediaId
+      });
+    }
 
     // Mark permission as reposted and link published media
     await supabase
@@ -198,11 +229,26 @@ router.post('/repost-ugc', async (req, res) => {
       success: true
     });
 
-    res.json({ success: true, id: mediaId, original_author: ugcDiscovered.username });
+    res.json({ success: true, id: mediaId, original_author: ugcDiscovered.username, job_id: queueId });
 
   } catch (error) {
     const latency = Date.now() - startTime;
     const errorMessage = error.response?.data?.error?.message || error.message;
+    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
+
+    // --- Queue: mark failed or dlq ---
+    if (queueId) {
+      const nextRetryAt = retryable
+        ? new Date(Date.now() + Math.min(Math.pow(2, 1) * 60000, 3600000)).toISOString()
+        : null;
+      await updateQueueRow(getSupabaseAdmin(), queueId, {
+        status: retryable ? 'failed' : 'dlq',
+        retry_count: 1,
+        error: errorMessage,
+        error_category,
+        next_retry_at: nextRetryAt
+      });
+    }
 
     await logApiRequest({
       endpoint: '/repost-ugc',
@@ -214,7 +260,6 @@ router.post('/repost-ugc', async (req, res) => {
     });
 
     console.error('❌ UGC repost failed:', errorMessage);
-    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
     res.status(error.response?.status || 500).json({
       error: errorMessage,
       code: error.response?.data?.error?.code,

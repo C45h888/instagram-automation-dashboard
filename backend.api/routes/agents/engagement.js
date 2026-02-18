@@ -11,6 +11,9 @@ const {
   ensureMediaRecord,
   categorizeIgError,
   GRAPH_API_BASE,
+  buildIdempotencyKey,
+  insertQueueRow,
+  updateQueueRow,
 } = require('../../helpers/agent-helpers');
 const {
   fetchAndStoreComments,
@@ -29,6 +32,7 @@ const {
 router.post('/reply-comment', async (req, res) => {
   const startTime = Date.now();
   const { business_account_id, comment_id, reply_text, post_id } = req.body;
+  const fallbackEnabled = process.env.POST_FALLBACK_ENABLED === 'true';
 
   try {
     if (!business_account_id || !comment_id || !reply_text) {
@@ -45,6 +49,20 @@ router.post('/reply-comment', async (req, res) => {
       return res.status(400).json({ error: 'reply_text exceeds 2200 character limit' });
     }
 
+    // --- Queue: pre-log intent before outgoing IG call ---
+    let queueId = null;
+    if (fallbackEnabled) {
+      const supabase = getSupabaseAdmin();
+      if (supabase) {
+        queueId = await insertQueueRow(supabase, {
+          business_account_id,
+          action_type: 'reply_comment',
+          payload: { comment_id, reply_text, post_id: post_id || null },
+          idempotency_key: buildIdempotencyKey(`reply_comment:${comment_id}`)
+        });
+      }
+    }
+
     const { igUserId, pageToken, userId } = await resolveAccountCredentials(business_account_id);
 
     const replyRes = await axios.post(`${GRAPH_API_BASE}/${comment_id}/replies`, null, {
@@ -56,6 +74,14 @@ router.post('/reply-comment', async (req, res) => {
     });
 
     const latency = Date.now() - startTime;
+
+    // --- Queue: mark sent ---
+    if (queueId) {
+      await updateQueueRow(getSupabaseAdmin(), queueId, {
+        status: 'sent',
+        instagram_id: replyRes.data.id
+      });
+    }
 
     await logApiRequest({
       endpoint: '/reply-comment',
@@ -100,11 +126,29 @@ router.post('/reply-comment', async (req, res) => {
       console.warn('⚠️ Comment reply write-through error:', wtErr.message);
     }
 
-    res.json({ success: true, id: replyRes.data.id });
+    res.json({ success: true, id: replyRes.data.id, job_id: queueId });
 
   } catch (error) {
     const latency = Date.now() - startTime;
     const errorMessage = error.response?.data?.error?.message || error.message;
+    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
+
+    // --- Queue: mark failed or dlq ---
+    if (fallbackEnabled) {
+      const qId = await _getQueueId(business_account_id, buildIdempotencyKey(`reply_comment:${comment_id}`));
+      if (qId) {
+        const nextRetryAt = retryable
+          ? new Date(Date.now() + Math.min(Math.pow(2, 1) * 60000, 3600000)).toISOString()
+          : null;
+        await updateQueueRow(getSupabaseAdmin(), qId, {
+          status: retryable ? 'failed' : 'dlq',
+          retry_count: 1,
+          error: errorMessage,
+          error_category,
+          next_retry_at: nextRetryAt
+        });
+      }
+    }
 
     await logApiRequest({
       endpoint: '/reply-comment',
@@ -116,7 +160,6 @@ router.post('/reply-comment', async (req, res) => {
     });
 
     console.error('❌ Comment reply failed:', errorMessage);
-    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
     res.status(error.response?.status || 500).json({
       error: errorMessage,
       code: error.response?.data?.error?.code,
@@ -138,6 +181,7 @@ router.post('/reply-comment', async (req, res) => {
 router.post('/reply-dm', async (req, res) => {
   const startTime = Date.now();
   const { business_account_id, conversation_id, recipient_id, message_text } = req.body;
+  const fallbackEnabled = process.env.POST_FALLBACK_ENABLED === 'true';
 
   try {
     if (!business_account_id || !conversation_id || !message_text) {
@@ -154,6 +198,21 @@ router.post('/reply-dm', async (req, res) => {
       return res.status(400).json({ error: 'message_text exceeds 1000 character limit' });
     }
 
+    // --- Queue: pre-log intent ---
+    let queueId = null;
+    if (fallbackEnabled) {
+      const supabase = getSupabaseAdmin();
+      if (supabase) {
+        const msgHash = buildIdempotencyKey(message_text).slice(0, 8);
+        queueId = await insertQueueRow(supabase, {
+          business_account_id,
+          action_type: 'reply_dm',
+          payload: { conversation_id, recipient_id: recipient_id || null, message_text },
+          idempotency_key: buildIdempotencyKey(`reply_dm:${conversation_id}:${msgHash}`)
+        });
+      }
+    }
+
     const { pageToken, userId } = await resolveAccountCredentials(business_account_id);
 
     const dmRes = await axios.post(`${GRAPH_API_BASE}/${conversation_id}/messages`, null, {
@@ -165,6 +224,14 @@ router.post('/reply-dm', async (req, res) => {
     });
 
     const latency = Date.now() - startTime;
+
+    // --- Queue: mark sent ---
+    if (queueId) {
+      await updateQueueRow(getSupabaseAdmin(), queueId, {
+        status: 'sent',
+        instagram_id: dmRes.data.id
+      });
+    }
 
     await logApiRequest({
       endpoint: '/reply-dm',
@@ -217,11 +284,31 @@ router.post('/reply-dm', async (req, res) => {
       console.warn('⚠️ DM reply write-through error:', wtErr.message);
     }
 
-    res.json({ success: true, id: dmRes.data.id });
+    res.json({ success: true, id: dmRes.data.id, job_id: queueId });
 
   } catch (error) {
     const latency = Date.now() - startTime;
     const errorMessage = error.response?.data?.error?.message || error.message;
+    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
+
+    // --- Queue: mark failed or dlq ---
+    if (fallbackEnabled && conversation_id && message_text) {
+      const msgHash = buildIdempotencyKey(message_text).slice(0, 8);
+      const seed = buildIdempotencyKey(`reply_dm:${conversation_id}:${msgHash}`);
+      const qId = await _getQueueId(business_account_id, seed);
+      if (qId) {
+        const nextRetryAt = retryable
+          ? new Date(Date.now() + Math.min(Math.pow(2, 1) * 60000, 3600000)).toISOString()
+          : null;
+        await updateQueueRow(getSupabaseAdmin(), qId, {
+          status: retryable ? 'failed' : 'dlq',
+          retry_count: 1,
+          error: errorMessage,
+          error_category,
+          next_retry_at: nextRetryAt
+        });
+      }
+    }
 
     await logApiRequest({
       endpoint: '/reply-dm',
@@ -233,7 +320,6 @@ router.post('/reply-dm', async (req, res) => {
     });
 
     console.error('❌ DM reply failed:', errorMessage);
-    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
     res.status(error.response?.status || 500).json({
       error: errorMessage,
       code: error.response?.data?.error?.code,
@@ -382,6 +468,7 @@ router.get('/conversation-messages', async (req, res) => {
 router.post('/send-dm', async (req, res) => {
   const startTime = Date.now();
   const { business_account_id, recipient_id, recipient_username, message_text } = req.body;
+  const fallbackEnabled = process.env.POST_FALLBACK_ENABLED === 'true';
 
   try {
     if (!business_account_id || !recipient_id || !message_text) {
@@ -398,6 +485,21 @@ router.post('/send-dm', async (req, res) => {
       return res.status(400).json({ error: 'message_text exceeds 1000 character limit' });
     }
 
+    // --- Queue: pre-log intent ---
+    let queueId = null;
+    if (fallbackEnabled) {
+      const supabase = getSupabaseAdmin();
+      if (supabase) {
+        const msgHash = buildIdempotencyKey(message_text).slice(0, 8);
+        queueId = await insertQueueRow(supabase, {
+          business_account_id,
+          action_type: 'send_dm',
+          payload: { recipient_id, recipient_username: recipient_username || null, message_text },
+          idempotency_key: buildIdempotencyKey(`send_dm:${recipient_id}:${msgHash}`)
+        });
+      }
+    }
+
     const { igUserId, pageToken, userId } = await resolveAccountCredentials(business_account_id);
 
     const dmRes = await axios.post(`${GRAPH_API_BASE}/${igUserId}/messages`, {
@@ -409,6 +511,14 @@ router.post('/send-dm', async (req, res) => {
     });
 
     const latency = Date.now() - startTime;
+
+    // --- Queue: mark sent ---
+    if (queueId) {
+      await updateQueueRow(getSupabaseAdmin(), queueId, {
+        status: 'sent',
+        instagram_id: dmRes.data.message_id || dmRes.data.id
+      });
+    }
 
     await logApiRequest({
       endpoint: '/send-dm',
@@ -450,11 +560,31 @@ router.post('/send-dm', async (req, res) => {
       console.warn('⚠️ Send-DM write-through error:', wtErr.message);
     }
 
-    res.json({ success: true, message_id: dmRes.data.message_id || dmRes.data.id });
+    res.json({ success: true, message_id: dmRes.data.message_id || dmRes.data.id, job_id: queueId });
 
   } catch (error) {
     const latency = Date.now() - startTime;
     const errorMessage = error.response?.data?.error?.message || error.message;
+    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
+
+    // --- Queue: mark failed or dlq ---
+    if (fallbackEnabled && recipient_id && message_text) {
+      const msgHash = buildIdempotencyKey(message_text).slice(0, 8);
+      const seed = buildIdempotencyKey(`send_dm:${recipient_id}:${msgHash}`);
+      const qId = await _getQueueId(business_account_id, seed);
+      if (qId) {
+        const nextRetryAt = retryable
+          ? new Date(Date.now() + Math.min(Math.pow(2, 1) * 60000, 3600000)).toISOString()
+          : null;
+        await updateQueueRow(getSupabaseAdmin(), qId, {
+          status: retryable ? 'failed' : 'dlq',
+          retry_count: 1,
+          error: errorMessage,
+          error_category,
+          next_retry_at: nextRetryAt
+        });
+      }
+    }
 
     await logApiRequest({
       endpoint: '/send-dm',
@@ -466,7 +596,6 @@ router.post('/send-dm', async (req, res) => {
     });
 
     console.error('❌ Send DM failed:', errorMessage);
-    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
     res.status(error.response?.status || 500).json({
       error: errorMessage,
       code: error.response?.data?.error?.code,
@@ -476,5 +605,28 @@ router.post('/send-dm', async (req, res) => {
     });
   }
 });
+
+// ============================================
+// INTERNAL: resolve active queue row id from idempotency key
+// ============================================
+// Used in catch blocks where queueId may not have been captured in scope
+// due to early credential resolution failure. No-ops if queue is disabled.
+
+async function _getQueueId(businessAccountId, idempotencyKey) {
+  try {
+    const supabase = getSupabaseAdmin();
+    if (!supabase) return null;
+    const { data } = await supabase
+      .from('post_queue')
+      .select('id')
+      .eq('idempotency_key', idempotencyKey)
+      .eq('business_account_id', businessAccountId)
+      .not('status', 'in', '("sent","dlq")')
+      .maybeSingle();
+    return data?.id || null;
+  } catch {
+    return null;
+  }
+}
 
 module.exports = router;
