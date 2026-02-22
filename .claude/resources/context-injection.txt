@@ -1,33 +1,112 @@
-Context Dump: Architecture Shift from Render to Hetzner
-Your current architecture (pre-shift) was likely hosted on Render (from render.yaml – a platform for easy web app deploys like Vercel/Heroku). The shift to Hetzner VPS (self-managed server with Docker) is a strategic move for more control, cost savings, and customization (e.g., LangChain integration). Here's a full context dump:
-Before: Render Architecture
+services:
+  # ================================
+  # Ollama AI Model Server
+  # ================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - agent-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s  # Increased for model pull time
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 8G
+        reservations:
+          cpus: '2.0'
+          memory: 6G
 
-How it Worked: Render auto-builds/deploys from GitHub (frontend as static site with index.html, backend as Node service). Env vars in dashboard. Simple, serverless-like.
-Pros (Why You Used It): Easy setup, auto-scaling, free tier, built-in CI/CD. Good for prototyping (e.g., early commits with mocks).
-Cons (Why Shift): Limited control (no custom Docker, VPS-level access), higher costs for scale (~$25/month for basic), no easy local AI hosting (LangChain/Ollama needs persistent server).
+  # ================================
+  # Redis Cache (for agent)
+  # ================================
+  redis:
+    image: redis:7-alpine
+    container_name: agent-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - agent-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
 
-After: Hetzner VPS Architecture
+  # ================================
+  # LangChain Agent (Instagram Automation)
+  # ================================
+  langchain-agent:
+    container_name: langchain-agent
+    build:
+      context: .
+      dockerfile: dockerfile
+    restart: unless-stopped
+    ports:
+      - "3002:3002"
+    env_file:
+      - .env
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_MODEL=hf.co/MaziyarPanahi/Nemotron-Orchestrator-8B-GGUF:Q5_K_M
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MAX_CONCURRENT_LLM=4
+    depends_on:
+      ollama:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - agent-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
 
-How it Will Work: VPS (e.g., CX21: 2 vCPU, 4GB RAM, €4.79/month) running Docker Compose (backend + frontend services). Nginx serves frontend, proxies to backend. Supabase for DB (external). Cloudflare Tunnel for secure exposure if needed.
-Pros: Full control (custom Docker, SSH access), cheap (scale to GPU for Ollama), persistent (run 24/7), private (host LangChain locally). Better for production (custom monitoring, logs).
-Cons: More setup (SSH, firewalls), manual deploys (git pull + docker up), maintenance (updates).
+# ================================
+# Networks
+# ================================
+networks:
+  agent-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/16
 
-Key Differences & Benefits of the Shift
-
-Hosting Model: Render (serverless, auto) → Hetzner (VPS, manual) – more power for AI/custom.
-Cost: Render (~$20–50/month for scale) → Hetzner (€5–20/month) – 70% savings.
-Control: Render (limited) → Hetzner (full SSH/Docker) – enables LangChain/Ollama integration.
-Performance: Render (global CDN) → Hetzner (EU servers, ~50ms to Mumbai) – add Cloudflare CDN for edge.
-Security: Similar (both HTTPS), but Hetzner allows finer firewalls.
-
-Step-by-Step Shift Plan
-
-Prep (1 hour): Backup Render data/DB. Export env vars.
-Setup Hetzner (30 min): Create VPS (Ubuntu 22.04), SSH key, install Docker/Compose.
-Clone & Configure (30 min):git clone repo, copy .env.production, adjust for VPS (e.g., ports).
-Build & Run (15 min):docker compose up -d – test locally first.
-Secure & Domain (1 hour): UFW firewall (allow 80/22/3001), point domain A record to VPS IP, Certbot for SSL.
-Migrate Data (30 min): Dump/restore Supabase if needed (but hosted Supabase stays external).
-Monitor & Scale: Add UptimeRobot, logs to Supabase or external.
-
-This shift makes your app more self-contained and AI-ready. Proceed – it's a great move! 🚀
+# ================================
+# Volumes
+# ================================
+volumes:
+  ollama-data:
+    driver: local

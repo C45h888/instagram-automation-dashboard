@@ -1,0 +1,104 @@
+# ================================
+# Local Development Stack
+# Both frontend + backend, env from .env.development
+# Logs mounted to ./logs/ on host for analysis
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml up --build
+#   docker compose -f docker-compose.dev.yml logs -f
+#   docker compose -f docker-compose.dev.yml logs -f backend
+#   docker compose -f docker-compose.dev.yml logs -f frontend
+# ================================
+
+services:
+
+  # ================================
+  # Backend API (Express)
+  # ================================
+  backend:
+    container_name: instagram-backend-dev
+    build:
+      context: ./backend.api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+
+    env_file:
+      - .env.development
+
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+
+    volumes:
+      # App logs (winston / morgan output)
+      - ./logs/backend:/app/logs
+
+    networks:
+      - instagram-network
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ================================
+  # Frontend (Nginx + React/Vite build)
+  # ================================
+  frontend:
+    container_name: instagram-frontend-dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - VITE_AUTH_MODE
+        - VITE_META_APP_ID
+        - VITE_META_APP_SECRET
+        - VITE_OAUTH_REDIRECT_URI
+        - VITE_SUPABASE_URL
+        - VITE_SUPABASE_ANON_KEY
+        - VITE_API_BASE_URL
+        - VITE_API_URL
+        - VITE_WEBHOOK_URL
+        - VITE_WEBHOOK_VERIFY_TOKEN
+        - VITE_SHOW_ADMIN_LINK
+        - VITE_INSTAGRAM_APP_ID
+        - N8N_BASE_URL
+        - N8N_DM_WEBHOOK
+        - N8N_COMMENT_WEBHOOK
+        - N8N_ORDER_WEBHOOK
+
+    env_file:
+      - .env.development
+
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+
+    depends_on:
+      backend:
+        condition: service_healthy
+
+    volumes:
+      # Nginx access + error logs mounted to host
+      - ./logs/nginx:/var/log/nginx
+
+    networks:
+      - instagram-network
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+# ================================
+# Networks
+# ================================
+networks:
+  instagram-network:
+    driver: bridge

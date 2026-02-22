@@ -69,3 +69,4 @@ trace.zip
 *.njsproj
 *.sln
 *.sw?
+.env.production
