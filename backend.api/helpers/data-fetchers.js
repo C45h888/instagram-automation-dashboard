@@ -12,6 +12,7 @@ const {
   categorizeIgError,
   GRAPH_API_BASE,
 } = require('./agent-helpers');
+const { mapRawPostToUgcContent } = require('./ugc-field-map');
 const { getAccountInsights } = require('../services/instagram-tokens');
 
 // ============================================
@@ -364,7 +365,7 @@ async function fetchAndStoreMessages(businessAccountId, conversationId, limit = 
 // ============================================
 
 /**
- * Searches hashtag media and upserts to ugc_discovered.
+ * Searches hashtag media and upserts to ugc_content.
  * Extracted from: routes/agents/ugc.js POST /search-hashtag
  *
  * @param {string} businessAccountId - UUID
@@ -421,32 +422,17 @@ async function fetchAndStoreHashtagMedia(businessAccountId, hashtag, limit = 25)
       owner_id: item.owner?.id || null,
     }));
 
-    // Supabase write-through: raw UGC for agent scoring pipeline
+    // Supabase write-through: raw UGC into unified ugc_content (agent enriches quality fields later)
     if (media.length > 0) {
       try {
         const supabase = getSupabaseAdmin();
         if (supabase) {
           const ugcRecords = media
             .filter(m => m.id)
-            .map(m => ({
-              business_account_id: businessAccountId,
-              instagram_media_id: m.id,
-              source: 'hashtag',
-              source_hashtag: cleanHashtag,
-              username: m.username || null,
-              caption: (m.caption || '').slice(0, 2000),
-              media_type: m.media_type || null,
-              media_url: m.media_url || m.thumbnail_url || null,
-              permalink: m.permalink || null,
-              like_count: m.like_count || 0,
-              comments_count: m.comments_count || 0,
-              post_timestamp: m.timestamp || null,
-              quality_score: null,
-              quality_tier: null,
-            }));
+            .map(m => mapRawPostToUgcContent(m, businessAccountId, 'hashtag', cleanHashtag));
           const { error: upsertErr } = await supabase
-            .from('ugc_discovered')
-            .upsert(ugcRecords, { onConflict: 'business_account_id,instagram_media_id', ignoreDuplicates: false });
+            .from('ugc_content')
+            .upsert(ugcRecords, { onConflict: 'business_account_id,visitor_post_id', ignoreDuplicates: false });
           if (upsertErr) console.warn('[DataFetcher] UGC hashtag upsert failed:', upsertErr.message);
         }
       } catch (wtErr) {
@@ -483,7 +469,7 @@ async function fetchAndStoreHashtagMedia(businessAccountId, hashtag, limit = 25)
 // ============================================
 
 /**
- * Fetches tagged posts and upserts to ugc_discovered.
+ * Fetches tagged posts and upserts to ugc_content.
  * Extracted from: routes/agents/ugc.js GET /tags
  *
  * @param {string} businessAccountId - UUID
@@ -518,32 +504,17 @@ async function fetchAndStoreTaggedMedia(businessAccountId, limit = 25) {
 
     const taggedPosts = tagsRes.data.data || [];
 
-    // Supabase write-through: raw tagged UGC for agent scoring pipeline
+    // Supabase write-through: raw tagged UGC into unified ugc_content (agent enriches quality fields later)
     if (taggedPosts.length > 0) {
       try {
         const supabase = getSupabaseAdmin();
         if (supabase) {
           const ugcRecords = taggedPosts
             .filter(p => p.id)
-            .map(p => ({
-              business_account_id: businessAccountId,
-              instagram_media_id: p.id,
-              source: 'tagged',
-              source_hashtag: null,
-              username: p.username || null,
-              caption: (p.caption || '').slice(0, 2000),
-              media_type: p.media_type || null,
-              media_url: p.media_url || p.thumbnail_url || null,
-              permalink: p.permalink || null,
-              like_count: p.like_count || 0,
-              comments_count: p.comments_count || 0,
-              post_timestamp: p.timestamp || null,
-              quality_score: null,
-              quality_tier: null,
-            }));
+            .map(p => mapRawPostToUgcContent(p, businessAccountId, 'tagged', null));
           const { error: upsertErr } = await supabase
-            .from('ugc_discovered')
-            .upsert(ugcRecords, { onConflict: 'business_account_id,instagram_media_id', ignoreDuplicates: false });
+            .from('ugc_content')
+            .upsert(ugcRecords, { onConflict: 'business_account_id,visitor_post_id', ignoreDuplicates: false });
           if (upsertErr) console.warn('[DataFetcher] UGC tags upsert failed:', upsertErr.message);
         }
       } catch (wtErr) {

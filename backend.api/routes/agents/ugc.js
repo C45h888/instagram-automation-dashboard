@@ -17,6 +17,7 @@ const {
   fetchAndStoreHashtagMedia,
   fetchAndStoreTaggedMedia,
 } = require('../../helpers/data-fetchers');
+const { mapRawPostToUgcContent } = require('../../helpers/ugc-field-map');
 
 // ============================================
 // ENDPOINT 1: POST /search-hashtag (UGC Discovery)
@@ -113,7 +114,7 @@ router.post('/repost-ugc', async (req, res) => {
     // These checks are preconditions, not retryable failures. No queue row inserted if they fail.
     const { data: permission, error: permError } = await supabase
       .from('ugc_permissions')
-      .select('id, ugc_discovered_id, username, status, business_account_id')
+      .select('id, ugc_content_id, status, business_account_id')
       .eq('id', permission_id)
       .eq('business_account_id', business_account_id)
       .single();
@@ -133,21 +134,21 @@ router.post('/repost-ugc', async (req, res) => {
       });
     }
 
-    // Step 2: Fetch UGC media data from ugc_discovered
-    const { data: ugcDiscovered, error: ugcError } = await supabase
-      .from('ugc_discovered')
-      .select('id, media_url, media_type, caption, username')
-      .eq('id', permission.ugc_discovered_id)
+    // Step 2: Fetch UGC media data from unified ugc_content
+    const { data: ugcContent, error: ugcError } = await supabase
+      .from('ugc_content')
+      .select('id, media_url, media_type, message, author_username')
+      .eq('id', permission.ugc_content_id)
       .single();
 
-    if (ugcError || !ugcDiscovered) {
+    if (ugcError || !ugcContent) {
       return res.status(404).json({
         error: 'UGC content record not found',
         code: 'CONTENT_NOT_FOUND'
       });
     }
 
-    const mediaUrl = ugcDiscovered.media_url;
+    const mediaUrl = ugcContent.media_url;
     if (!mediaUrl) {
       return res.status(400).json({ error: 'UGC content has no media URL', code: 'NO_MEDIA_URL' });
     }
@@ -166,9 +167,9 @@ router.post('/repost-ugc', async (req, res) => {
     // Step 3: Resolve credentials and publish (2-step: container → publish)
     const { igUserId, pageToken, userId } = await resolveAccountCredentials(business_account_id);
 
-    const caption = ugcDiscovered.caption
-      ? `📸 @${ugcDiscovered.username}: ${ugcDiscovered.caption}\n\n#repost`
-      : `📸 @${ugcDiscovered.username}\n\n#repost`;
+    const caption = ugcContent.message
+      ? `📸 @${ugcContent.author_username}: ${ugcContent.message}\n\n#repost`
+      : `📸 @${ugcContent.author_username}\n\n#repost`;
 
     const createRes = await axios.post(`${GRAPH_API_BASE}/${igUserId}/media`, null, {
       params: { image_url: mediaUrl, caption, access_token: pageToken },
@@ -225,11 +226,11 @@ router.post('/repost-ugc', async (req, res) => {
       action: 'repost',
       resource_type: 'ugc_permissions',
       resource_id: mediaId,
-      details: { permission_id, ugc_discovered_id: permission.ugc_discovered_id, author: ugcDiscovered.username },
+      details: { permission_id, ugc_content_id: permission.ugc_content_id, author: ugcContent.author_username },
       success: true
     });
 
-    res.json({ success: true, id: mediaId, original_author: ugcDiscovered.username, job_id: queueId });
+    res.json({ success: true, id: mediaId, original_author: ugcContent.author_username, job_id: queueId });
 
   } catch (error) {
     const latency = Date.now() - startTime;
@@ -303,25 +304,13 @@ router.post('/sync-ugc', async (req, res) => {
     let syncedCount = 0;
 
     if (taggedPosts.length > 0) {
-      const records = taggedPosts.map(post => ({
-        business_account_id,
-        instagram_media_id: post.id,
-        username: post.username || null,
-        media_type: post.media_type,
-        media_url: post.media_url || post.thumbnail_url || null,
-        caption: post.caption || null,
-        permalink: post.permalink,
-        post_timestamp: post.timestamp,
-        like_count: post.like_count || 0,
-        comments_count: post.comments_count || 0,
-        source: 'tagged',
-        quality_tier: null,
-        quality_score: null
-      }));
+      const records = taggedPosts.map(post =>
+        mapRawPostToUgcContent(post, business_account_id, 'tagged', null)
+      );
 
       const { error: upsertError } = await supabase
-        .from('ugc_discovered')
-        .upsert(records, { onConflict: 'business_account_id,instagram_media_id', ignoreDuplicates: false });
+        .from('ugc_content')
+        .upsert(records, { onConflict: 'business_account_id,visitor_post_id', ignoreDuplicates: false });
 
       if (!upsertError) syncedCount = records.length;
     }
