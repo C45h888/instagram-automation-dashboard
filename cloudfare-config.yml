@@ -1,6 +1,0 @@
-tunnel: instagram-automation-backend
-credentials-file: /path/to/credentials.json
-ingress:
-  - hostname: api.888intelligenceautomation.in
-    service: http://localhost:3001
-  - service: http_status:404

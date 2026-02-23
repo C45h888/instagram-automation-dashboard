@@ -321,7 +321,7 @@ router.post('/sync-ugc', async (req, res) => {
 
       const { error: upsertError } = await supabase
         .from('ugc_discovered')
-        .upsert(records, { onConflict: 'instagram_media_id', ignoreDuplicates: false });
+        .upsert(records, { onConflict: 'business_account_id,instagram_media_id', ignoreDuplicates: false });
 
       if (!upsertError) syncedCount = records.length;
     }

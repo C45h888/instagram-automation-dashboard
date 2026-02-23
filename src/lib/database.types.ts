@@ -62,6 +62,33 @@ export type Database = {
         }
         Relationships: []
       }
+      agent_heartbeats: {
+        Row: {
+          agent_id: string
+          created_at: string
+          id: string
+          last_beat_at: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          agent_id: string
+          created_at?: string
+          id?: string
+          last_beat_at?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          agent_id?: string
+          created_at?: string
+          id?: string
+          last_beat_at?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       analytics_reports: {
         Row: {
           business_account_id: string
@@ -193,6 +220,87 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      attribution_models: {
+        Row: {
+          business_account_id: string
+          created_at: string | null
+          id: string
+          last_updated: string | null
+          learning_notes: string | null
+          performance_metrics: Json | null
+          weights: Json
+        }
+        Insert: {
+          business_account_id: string
+          created_at?: string | null
+          id?: string
+          last_updated?: string | null
+          learning_notes?: string | null
+          performance_metrics?: Json | null
+          weights?: Json
+        }
+        Update: {
+          business_account_id?: string
+          created_at?: string | null
+          id?: string
+          last_updated?: string | null
+          learning_notes?: string | null
+          performance_metrics?: Json | null
+          weights?: Json
+        }
+        Relationships: []
+      }
+      attribution_review_queue: {
+        Row: {
+          attribution_score: number | null
+          business_account_id: string
+          concerns: Json | null
+          created_at: string | null
+          customer_email: string | null
+          fraud_risk: boolean | null
+          full_attribution_data: Json | null
+          id: string
+          order_id: string
+          order_value: number | null
+          quality_score: number | null
+          review_status: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+        }
+        Insert: {
+          attribution_score?: number | null
+          business_account_id: string
+          concerns?: Json | null
+          created_at?: string | null
+          customer_email?: string | null
+          fraud_risk?: boolean | null
+          full_attribution_data?: Json | null
+          id?: string
+          order_id: string
+          order_value?: number | null
+          quality_score?: number | null
+          review_status?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+        }
+        Update: {
+          attribution_score?: number | null
+          business_account_id?: string
+          concerns?: Json | null
+          created_at?: string | null
+          customer_email?: string | null
+          fraud_risk?: boolean | null
+          full_attribution_data?: Json | null
+          id?: string
+          order_id?: string
+          order_value?: number | null
+          quality_score?: number | null
+          review_status?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+        }
+        Relationships: []
       }
       audit_log: {
         Row: {
@@ -932,7 +1040,7 @@ export type Database = {
         Row: {
           ai_generated: boolean | null
           automation_workflow_id: string | null
-          conversation_id: string
+          conversation_id: string | null
           created_at: string
           delivered_at: string | null
           error_code: string | null
@@ -946,8 +1054,8 @@ export type Database = {
           message_text: string | null
           message_type: string
           read_at: string | null
+          recipient_instagram_id: string
           send_status: string
-          sender_instagram_id: string
           sender_username: string | null
           sent_at: string
           sent_by_user_id: string | null
@@ -957,7 +1065,7 @@ export type Database = {
         Insert: {
           ai_generated?: boolean | null
           automation_workflow_id?: string | null
-          conversation_id: string
+          conversation_id?: string | null
           created_at?: string
           delivered_at?: string | null
           error_code?: string | null
@@ -971,8 +1079,8 @@ export type Database = {
           message_text?: string | null
           message_type?: string
           read_at?: string | null
+          recipient_instagram_id: string
           send_status?: string
-          sender_instagram_id: string
           sender_username?: string | null
           sent_at: string
           sent_by_user_id?: string | null
@@ -982,7 +1090,7 @@ export type Database = {
         Update: {
           ai_generated?: boolean | null
           automation_workflow_id?: string | null
-          conversation_id?: string
+          conversation_id?: string | null
           created_at?: string
           delivered_at?: string | null
           error_code?: string | null
@@ -996,8 +1104,8 @@ export type Database = {
           message_text?: string | null
           message_type?: string
           read_at?: string | null
+          recipient_instagram_id?: string
           send_status?: string
-          sender_instagram_id?: string
           sender_username?: string | null
           sent_at?: string
           sent_by_user_id?: string | null
@@ -1039,6 +1147,7 @@ export type Database = {
           permalink: string | null
           published_at: string | null
           reach: number | null
+          saves: number | null
           scheduled_for: string | null
           shares_count: number | null
           status: string
@@ -1062,6 +1171,7 @@ export type Database = {
           permalink?: string | null
           published_at?: string | null
           reach?: number | null
+          saves?: number | null
           scheduled_for?: string | null
           shares_count?: number | null
           status?: string
@@ -1085,6 +1195,7 @@ export type Database = {
           permalink?: string | null
           published_at?: string | null
           reach?: number | null
+          saves?: number | null
           scheduled_for?: string | null
           shares_count?: number | null
           status?: string
@@ -1162,6 +1273,186 @@ export type Database = {
         }
         Relationships: []
       }
+      outbound_queue_jobs: {
+        Row: {
+          action_type: string
+          business_account_id: string | null
+          completed_at: string | null
+          created_at: string
+          endpoint: string
+          error_category: string | null
+          id: string
+          idempotency_key: string
+          job_id: string
+          last_error: string | null
+          max_retries: number
+          next_retry_at: string | null
+          payload: Json
+          priority: string
+          retry_count: number
+          source: string
+          status: string
+        }
+        Insert: {
+          action_type: string
+          business_account_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          endpoint: string
+          error_category?: string | null
+          id?: string
+          idempotency_key: string
+          job_id: string
+          last_error?: string | null
+          max_retries?: number
+          next_retry_at?: string | null
+          payload?: Json
+          priority?: string
+          retry_count?: number
+          source: string
+          status?: string
+        }
+        Update: {
+          action_type?: string
+          business_account_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          endpoint?: string
+          error_category?: string | null
+          id?: string
+          idempotency_key?: string
+          job_id?: string
+          last_error?: string | null
+          max_retries?: number
+          next_retry_at?: string | null
+          payload?: Json
+          priority?: string
+          retry_count?: number
+          source?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "outbound_queue_jobs_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
+            referencedRelation: "instagram_business_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      oversight_chat_sessions: {
+        Row: {
+          business_account_id: string
+          created_at: string
+          dashboard_user_id: string
+          id: string
+          is_active: boolean
+          last_answer: string | null
+          last_latency_ms: number | null
+          last_question: string | null
+          last_tools_used: Json | null
+          messages: Json
+          session_title: string | null
+          total_queries: number
+          updated_at: string
+        }
+        Insert: {
+          business_account_id: string
+          created_at?: string
+          dashboard_user_id?: string
+          id?: string
+          is_active?: boolean
+          last_answer?: string | null
+          last_latency_ms?: number | null
+          last_question?: string | null
+          last_tools_used?: Json | null
+          messages?: Json
+          session_title?: string | null
+          total_queries?: number
+          updated_at?: string
+        }
+        Update: {
+          business_account_id?: string
+          created_at?: string
+          dashboard_user_id?: string
+          id?: string
+          is_active?: boolean
+          last_answer?: string | null
+          last_latency_ms?: number | null
+          last_question?: string | null
+          last_tools_used?: Json | null
+          messages?: Json
+          session_title?: string | null
+          total_queries?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "oversight_chat_sessions_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
+            referencedRelation: "instagram_business_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      post_queue: {
+        Row: {
+          action_type: string
+          business_account_id: string
+          created_at: string
+          error: string | null
+          error_category: string | null
+          id: string
+          idempotency_key: string
+          instagram_id: string | null
+          next_retry_at: string | null
+          payload: Json
+          retry_count: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          action_type: string
+          business_account_id: string
+          created_at?: string
+          error?: string | null
+          error_category?: string | null
+          id?: string
+          idempotency_key: string
+          instagram_id?: string | null
+          next_retry_at?: string | null
+          payload: Json
+          retry_count?: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          action_type?: string
+          business_account_id?: string
+          created_at?: string
+          error?: string | null
+          error_category?: string | null
+          id?: string
+          idempotency_key?: string
+          instagram_id?: string | null
+          next_retry_at?: string | null
+          payload?: Json
+          retry_count?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_queue_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
+            referencedRelation: "instagram_business_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       prompt_templates: {
         Row: {
           created_at: string | null
@@ -1192,6 +1483,90 @@ export type Database = {
           template?: string
           updated_at?: string | null
           version?: number
+        }
+        Relationships: []
+      }
+      sales_attributions: {
+        Row: {
+          all_signals: Json | null
+          attribution_confidence: string | null
+          attribution_method: string | null
+          attribution_score: number | null
+          attribution_version: string | null
+          auto_approved: boolean | null
+          business_account_id: string
+          converting_post: Json | null
+          created_at: string | null
+          customer_email: string | null
+          customer_journey: string | null
+          id: string
+          journey_timeline: Json | null
+          llm_skipped: boolean | null
+          model_scores: Json | null
+          order_date: string | null
+          order_id: string
+          order_number: string | null
+          order_value: number | null
+          processed_at: string | null
+          products_purchased: Json | null
+          run_id: string | null
+          strategy_used: string | null
+          total_touchpoints: number | null
+          validation_results: Json | null
+        }
+        Insert: {
+          all_signals?: Json | null
+          attribution_confidence?: string | null
+          attribution_method?: string | null
+          attribution_score?: number | null
+          attribution_version?: string | null
+          auto_approved?: boolean | null
+          business_account_id: string
+          converting_post?: Json | null
+          created_at?: string | null
+          customer_email?: string | null
+          customer_journey?: string | null
+          id?: string
+          journey_timeline?: Json | null
+          llm_skipped?: boolean | null
+          model_scores?: Json | null
+          order_date?: string | null
+          order_id: string
+          order_number?: string | null
+          order_value?: number | null
+          processed_at?: string | null
+          products_purchased?: Json | null
+          run_id?: string | null
+          strategy_used?: string | null
+          total_touchpoints?: number | null
+          validation_results?: Json | null
+        }
+        Update: {
+          all_signals?: Json | null
+          attribution_confidence?: string | null
+          attribution_method?: string | null
+          attribution_score?: number | null
+          attribution_version?: string | null
+          auto_approved?: boolean | null
+          business_account_id?: string
+          converting_post?: Json | null
+          created_at?: string | null
+          customer_email?: string | null
+          customer_journey?: string | null
+          id?: string
+          journey_timeline?: Json | null
+          llm_skipped?: boolean | null
+          model_scores?: Json | null
+          order_date?: string | null
+          order_id?: string
+          order_number?: string | null
+          order_value?: number | null
+          processed_at?: string | null
+          products_purchased?: Json | null
+          run_id?: string | null
+          strategy_used?: string | null
+          total_touchpoints?: number | null
+          validation_results?: Json | null
         }
         Relationships: []
       }
@@ -1294,6 +1669,50 @@ export type Database = {
           },
           {
             foreignKeyName: "scheduled_posts_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
+            referencedRelation: "instagram_business_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      system_alerts: {
+        Row: {
+          alert_type: string
+          business_account_id: string | null
+          created_at: string | null
+          details: Json | null
+          id: string
+          message: string
+          resolved: boolean
+          resolved_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          alert_type: string
+          business_account_id?: string | null
+          created_at?: string | null
+          details?: Json | null
+          id?: string
+          message: string
+          resolved?: boolean
+          resolved_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          alert_type?: string
+          business_account_id?: string | null
+          created_at?: string | null
+          details?: Json | null
+          id?: string
+          message?: string
+          resolved?: boolean
+          resolved_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "system_alerts_business_account_id_fkey"
             columns: ["business_account_id"]
             isOneToOne: false
             referencedRelation: "instagram_business_accounts"

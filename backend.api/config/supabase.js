@@ -475,27 +475,16 @@ async function logApiRequest(userIdOrObj, endpoint, method, responseTime, status
       return;
     }
 
-    const hourBucket = new Date();
-    hourBucket.setMinutes(0, 0, 0);
-
-    // Use sentinel UUID for NULL business_account_id to make unique constraint work with upserts
-    // PostgreSQL treats each NULL as distinct, breaking upsert logic
-    const SENTINEL_UUID = '00000000-0000-0000-0000-000000000000';
-
-    const { error } = await admin.from('api_usage').upsert({
-      user_id: userId_v,
-      business_account_id: businessAccountId_v || SENTINEL_UUID,
+    const { error } = await admin.from('api_usage').insert({
+      user_id: userId_v || null,
+      business_account_id: businessAccountId_v || null,
       endpoint: endpoint_v,
       method: method_v,
       response_time_ms: responseTime_v,
       status_code: statusCode_v,
       success: success_v,
-      hour_bucket: hourBucket.toISOString(),
       request_count: 1,
       created_at: new Date().toISOString()
-    }, {
-      onConflict: 'user_id,business_account_id,endpoint,method,hour_bucket',
-      ignoreDuplicates: false  // Update existing rows
     });
 
     if (error) {

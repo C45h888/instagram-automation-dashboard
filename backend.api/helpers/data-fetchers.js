@@ -446,7 +446,7 @@ async function fetchAndStoreHashtagMedia(businessAccountId, hashtag, limit = 25)
             }));
           const { error: upsertErr } = await supabase
             .from('ugc_discovered')
-            .upsert(ugcRecords, { onConflict: 'instagram_media_id', ignoreDuplicates: false });
+            .upsert(ugcRecords, { onConflict: 'business_account_id,instagram_media_id', ignoreDuplicates: false });
           if (upsertErr) console.warn('[DataFetcher] UGC hashtag upsert failed:', upsertErr.message);
         }
       } catch (wtErr) {
@@ -543,7 +543,7 @@ async function fetchAndStoreTaggedMedia(businessAccountId, limit = 25) {
             }));
           const { error: upsertErr } = await supabase
             .from('ugc_discovered')
-            .upsert(ugcRecords, { onConflict: 'instagram_media_id', ignoreDuplicates: false });
+            .upsert(ugcRecords, { onConflict: 'business_account_id,instagram_media_id', ignoreDuplicates: false });
           if (upsertErr) console.warn('[DataFetcher] UGC tags upsert failed:', upsertErr.message);
         }
       } catch (wtErr) {
