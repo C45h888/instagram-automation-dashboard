@@ -115,7 +115,8 @@ async function getActiveAccounts() {
   const { data, error } = await supabase
     .from('instagram_business_accounts')
     .select('id, instagram_business_id, user_id')
-    .eq('is_connected', true);
+    .eq('is_connected', true)
+    .eq('connection_status', 'active');
 
   if (error) {
     console.error('[ProactiveSync] Failed to fetch active accounts:', error.message);

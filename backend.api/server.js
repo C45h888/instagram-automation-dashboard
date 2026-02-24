@@ -364,7 +364,7 @@ function validateEnvCreds() {
   }
 
   if (!process.env.AGENT_URL) {
-    console.warn('⚠️  AGENT_URL not configured - oversight/chat proxy will return 500');
+    console.warn('⚠️  AGENT_URL not configured - oversight/chat proxy and webhook→agent forwarding disabled');
   }
 }
 

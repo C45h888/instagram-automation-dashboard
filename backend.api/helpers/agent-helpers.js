@@ -94,23 +94,27 @@ function clearCredentialCache(businessAccountId) {
  * Ensures an instagram_media record exists for the given Instagram media ID.
  * Returns the Supabase UUID for use as FK in instagram_comments.media_id.
  * Creates a minimal stub if the record doesn't exist yet.
+ *
+ * @param {Object} extraFields - Optional fields to enrich the row (e.g. caption, media_type).
+ *   Only applied when the row is new or when the existing row has no caption (stub enrichment).
  */
-async function ensureMediaRecord(supabase, instagramMediaId, businessAccountId) {
+async function ensureMediaRecord(supabase, instagramMediaId, businessAccountId, extraFields = {}) {
+  // Only skip if existing row already has a caption — otherwise fall through to enrich the stub
   const { data: existing } = await supabase
     .from('instagram_media')
-    .select('id')
+    .select('id, caption')
     .eq('instagram_media_id', instagramMediaId)
     .limit(1)
     .single();
 
-  if (existing) return existing.id;
+  if (existing?.caption) return existing.id;
 
   const { data: created, error } = await supabase
     .from('instagram_media')
-    .upsert({
-      instagram_media_id: instagramMediaId,
-      business_account_id: businessAccountId,
-    }, { onConflict: 'instagram_media_id' })
+    .upsert(
+      { instagram_media_id: instagramMediaId, business_account_id: businessAccountId, ...extraFields },
+      { onConflict: 'instagram_media_id' }
+    )
     .select('id')
     .single();
 

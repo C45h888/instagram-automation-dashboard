@@ -75,7 +75,7 @@ async function fetchAndStoreComments(businessAccountId, mediaId, limit = 50) {
                 business_account_id: businessAccountId,
                 created_at: c.timestamp,
                 like_count: c.like_count || 0,
-                processed_by_automation: false,
+                // processed_by_automation omitted — DB DEFAULT false on insert, preserved on update
               }));
             const { error: upsertErr } = await supabase
               .from('instagram_comments')
