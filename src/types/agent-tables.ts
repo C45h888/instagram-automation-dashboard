@@ -163,7 +163,7 @@ export type AgentType = Database['public']['Enums']['automation_type']
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── attribution_models.weights ────────────────────────────────────────────────
-/** Default: { first_touch: 0.25, last_touch: 0.25, linear: 0.25, time_decay: 0.25 } */
+/** Default (from agent): { first_touch: 0.20, last_touch: 0.40, linear: 0.20, time_decay: 0.20 } */
 export interface AttributionModelWeights {
   first_touch: number
   last_touch:  number
@@ -232,58 +232,93 @@ export const PostSelectionFactorsSchema = z.object({
 
 // ── analytics_reports.instagram_metrics ──────────────────────────────────────
 export interface InstagramReportMetrics {
-  impressions?:     number
-  reach?:           number
-  profile_views?:   number
-  website_clicks?:  number
-  follower_growth?: number
+  impressions?:         number
+  reach?:               number
+  profile_views?:       number
+  website_clicks?:      number
+  follower_growth?:     number
+  // Agent-written fields (analytics_tools.aggregate_metrics)
+  followers_count?:     number
+  posts_published?:     number
+  total_likes?:         number
+  total_comments?:      number
+  total_saves?:         number
+  total_shares?:        number
+  avg_engagement_rate?: number
 }
-export const InstagramReportMetricsSchema = z.object({
-  impressions:     z.number().int().optional(),
-  reach:           z.number().int().optional(),
-  profile_views:   z.number().int().optional(),
-  website_clicks:  z.number().int().optional(),
-  follower_growth: z.number().int().optional(),
+export const InstagramReportMetricsSchema = z.looseObject({
+  impressions:         z.number().optional(),
+  reach:               z.number().optional(),
+  profile_views:       z.number().optional(),
+  website_clicks:      z.number().optional(),
+  follower_growth:     z.number().optional(),
+  followers_count:     z.number().optional(),
+  posts_published:     z.number().optional(),
+  total_likes:         z.number().optional(),
+  total_comments:      z.number().optional(),
+  total_saves:         z.number().optional(),
+  total_shares:        z.number().optional(),
+  avg_engagement_rate: z.number().optional(),
 })
 
 // ── analytics_reports.media_metrics ──────────────────────────────────────────
 export interface MediaReportMetrics {
-  total_posts?:         number
-  avg_likes?:           number
-  avg_comments?:        number
-  avg_reach?:           number
-  avg_engagement_rate?: number
-  top_performing?:      Array<{
+  total_posts?:           number
+  total_posts_in_period?: number
+  avg_likes?:             number
+  avg_comments?:          number
+  avg_likes_per_post?:    number
+  avg_comments_per_post?: number
+  avg_reach?:             number
+  avg_engagement_rate?:   number
+  top_performing?:        Array<{
     media_id:        string
     engagement:      number
     caption_snippet: string
   }>
+  // Agent-written fields (analytics_tools.aggregate_metrics)
+  best_post?:             Record<string, unknown>
+  worst_post?:            Record<string, unknown>
+  by_media_type?:         Record<string, unknown>
 }
-export const MediaReportMetricsSchema = z.object({
-  total_posts:         z.number().int().optional(),
-  avg_likes:           z.number().optional(),
-  avg_comments:        z.number().optional(),
-  avg_reach:           z.number().optional(),
-  avg_engagement_rate: z.number().optional(),
-  top_performing:      z.array(z.object({
+export const MediaReportMetricsSchema = z.looseObject({
+  total_posts:           z.number().int().optional(),
+  total_posts_in_period: z.number().int().optional(),
+  avg_likes:             z.number().optional(),
+  avg_comments:          z.number().optional(),
+  avg_likes_per_post:    z.number().optional(),
+  avg_comments_per_post: z.number().optional(),
+  avg_reach:             z.number().optional(),
+  avg_engagement_rate:   z.number().optional(),
+  top_performing:        z.array(z.object({
     media_id:        z.string(),
     engagement:      z.number(),
     caption_snippet: z.string(),
   })).optional(),
+  best_post:             z.record(z.string(), z.unknown()).optional(),
+  worst_post:            z.record(z.string(), z.unknown()).optional(),
+  by_media_type:         z.record(z.string(), z.unknown()).optional(),
 })
 
 // ── analytics_reports.revenue_metrics ────────────────────────────────────────
 export interface RevenueReportMetrics {
-  attributed_revenue?: number
-  attribution_count?:  number
-  avg_order_value?:    number
-  conversion_rate?:    number   // 0–1
+  attributed_revenue?:    number
+  attribution_count?:     number
+  avg_order_value?:       number
+  conversion_rate?:       number   // 0–1
+  // Agent-written fields (supabase_service.get_attribution_revenue)
+  attributed_orders?:     number
+  avg_attribution_score?: number
+  top_touchpoint_type?:   string
 }
-export const RevenueReportMetricsSchema = z.object({
-  attributed_revenue: z.number().optional(),
-  attribution_count:  z.number().int().optional(),
-  avg_order_value:    z.number().optional(),
-  conversion_rate:    z.number().min(0).max(1).optional(),
+export const RevenueReportMetricsSchema = z.looseObject({
+  attributed_revenue:    z.number().optional(),
+  attribution_count:     z.number().int().optional(),
+  avg_order_value:       z.number().optional(),
+  conversion_rate:       z.number().min(0).max(1).optional(),
+  attributed_orders:     z.number().int().optional(),
+  avg_attribution_score: z.number().optional(),
+  top_touchpoint_type:   z.string().optional(),
 })
 
 // ── analytics_reports.insights ───────────────────────────────────────────────
@@ -300,18 +335,39 @@ export const ReportInsightsSchema = z.object({
 
 // ── analytics_reports.historical_comparison ──────────────────────────────────
 export interface HistoricalComparison {
+  // Legacy flat shape (kept for backward compatibility)
   period?:             string   // e.g. 'vs_last_7d', 'vs_last_30d'
   impressions_delta?:  number
   reach_delta?:        number
   engagement_delta?:   number
   follower_delta?:     number
+  // Agent-written shape (analytics_tools.build_historical_comparison)
+  previous_period?:    { start_date?: string; end_date?: string }
+  changes?:            Record<string, {
+    previous:   number
+    current:    number
+    change_pct: number
+    trend:      string
+  }>
+  note?:               string
 }
-export const HistoricalComparisonSchema = z.object({
+export const HistoricalComparisonSchema = z.looseObject({
   period:            z.string().optional(),
   impressions_delta: z.number().optional(),
   reach_delta:       z.number().optional(),
   engagement_delta:  z.number().optional(),
   follower_delta:    z.number().optional(),
+  previous_period:   z.object({
+    start_date: z.string().optional(),
+    end_date:   z.string().optional(),
+  }).optional(),
+  changes:           z.record(z.string(), z.object({
+    previous:   z.number(),
+    current:    z.number(),
+    change_pct: z.number(),
+    trend:      z.string(),
+  })).optional(),
+  note:              z.string().optional(),
 })
 
 // ── ugc_content.quality_factors ──────────────────────────────────────────────

@@ -14,18 +14,34 @@ import type {
   AttributionReviewStatus,
   AttributionModel,
   AttributionFilterState,
+  AttributionModelWeights,
 } from '@/types'
 import { DEFAULT_ATTRIBUTION_FILTERS } from '@/types'
 import { useAuthStore } from '../stores/authStore'
+
+/**
+ * Fallback weights matching the Python agent's _DEFAULT_WEIGHTS.
+ * Source of truth: weekly_attribution_learning.py:32-37 and
+ * supabase_service.py:get_attribution_model_weights() default_weights.
+ * Used when no attribution_models row exists for the business account.
+ */
+const FALLBACK_WEIGHTS: AttributionModelWeights = {
+  first_touch: 0.20,
+  last_touch:  0.40,
+  linear:      0.20,
+  time_decay:  0.20,
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Result interface
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface UseAttributionQueueResult {
-  queue:         AttributionReview[]
-  model:         AttributionModel | null
-  isLoading:     boolean
+  queue:           AttributionReview[]
+  model:           AttributionModel | null
+  /** Agent default weights — use `model?.weights ?? fallbackWeights` when model is null */
+  fallbackWeights: AttributionModelWeights
+  isLoading:       boolean
   error:         string | null
   filters:       AttributionFilterState
   setFilters:    (f: AttributionFilterState) => void
@@ -128,9 +144,10 @@ export function useAttributionQueue(businessAccountId: string | null): UseAttrib
         : null
 
   return {
-    queue:     queueQuery.data ?? [],
-    model:     modelQuery.data ?? null,
-    isLoading: queueQuery.isLoading || modelQuery.isLoading,
+    queue:           queueQuery.data ?? [],
+    model:           modelQuery.data ?? null,
+    fallbackWeights: FALLBACK_WEIGHTS,
+    isLoading:       queueQuery.isLoading || modelQuery.isLoading,
     error,
     filters,
     setFilters,

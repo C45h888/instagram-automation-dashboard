@@ -15,6 +15,42 @@ const router = express.Router();
 const axios = require('axios');
 const { logApiRequest } = require('../../config/supabase');
 
+// ─────────────────────────────────────────────────────────────────────────────
+// normalizeAgentSseChunk
+//
+// The Python agent emits one error shape during streaming:
+//   {"error": "timeout"}                           ← asyncio.TimeoutError
+//
+// The normalizer defensively handles any {"error": "...", "message": "..."} shape
+// in case future agent versions add more error types.
+//
+// The backend itself injects: {"type": "error", "content": "."} on stream/conn errors.
+//
+// This function transforms agent-originated error lines to the backend shape so
+// the frontend receives exactly one error format: {type, content}.
+//
+// Safe on incomplete chunks: JSON parse failure passes the line through verbatim.
+// Non-error lines (token, done, SSE pings) are never touched.
+// ─────────────────────────────────────────────────────────────────────────────
+function normalizeAgentSseChunk(chunkStr) {
+  return chunkStr.split('\n').map(line => {
+    if (!line.startsWith('data: ')) return line;
+    try {
+      const parsed = JSON.parse(line.slice(6));
+      // Already normalized (backend-injected shape has a 'type' key) — pass through
+      if (parsed.type) return line;
+      // Agent error shape → normalize to {type, content}
+      if (parsed.error) {
+        const normalized = { type: 'error', content: parsed.message || parsed.error };
+        return `data: ${JSON.stringify(normalized)}`;
+      }
+    } catch (_) {
+      // Not JSON (token chunk, ping comment, etc.) — pass through verbatim
+    }
+    return line;
+  }).join('\n');
+}
+
 // ============================================
 // ENDPOINT 8: POST /oversight/chat
 // ============================================
@@ -129,9 +165,9 @@ router.post('/oversight/chat', async (req, res) => {
 
     agentStream = agentRes.data;
 
-    // Pipe agent SSE chunks to client verbatim
+    // Pipe agent SSE chunks to client, normalizing error shapes in transit
     agentStream.on('data', (chunk) => {
-      if (!res.writableEnded) res.write(chunk);
+      if (!res.writableEnded) res.write(normalizeAgentSseChunk(chunk.toString()));
     });
 
     agentStream.on('end', async () => {

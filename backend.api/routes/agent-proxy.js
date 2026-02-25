@@ -32,11 +32,15 @@ router.use(validateAgentApiKey);
 // ── Domain sub-routers ─────────────────────────────────────────────────────────
 // Imported from routes/agents/ — each file owns one functional domain.
 // Express matches routes in registration order; conflicts resolve to first match.
+//
+// NOTE: oversight.js is intentionally NOT here. The oversight/chat endpoint is a
+// frontend → backend → agent flow. A browser cannot safely supply X-API-Key, so
+// it cannot go through validateAgentApiKey. It is mounted directly in server.js
+// at /api/instagram BEFORE this router, without agent key auth.
 router.use(require('./agents/ugc'));
 router.use(require('./agents/engagement'));
 router.use(require('./agents/publishing'));
 router.use(require('./agents/analytics'));
-router.use(require('./agents/oversight'));
 router.use(require('./agents/queue'));
 router.use(require('./agents/heartbeat'));
 

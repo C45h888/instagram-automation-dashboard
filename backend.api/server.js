@@ -41,8 +41,11 @@ const rawOrigins = [
   'https://www.888intelligenceautomation.in',  // Production www
   'https://api.888intelligenceautomation.in',  // Production API
   'https://app.888intelligenceautomation.in',  // Production app
+  'http://localhost:8080',                     // Docker: frontend nginx (host port 8080 → container :80)
+  'http://localhost:3000',                     // Vite dev server (outside Docker)
   'http://localhost:3002',                     // Agent (development)
-  'http://instagram-agent:3002'                // Agent (Docker network)
+  'http://instagram-frontend:80',              // Docker internal: frontend container
+  'http://instagram-agent:3002'                // Docker internal: agent container
 ];
 
 // SAFETY NET: Filter out undefined/null/empty strings to prevent CORS errors
@@ -406,11 +409,22 @@ try {
   console.error('❌ Failed to load Instagram API routes:', error.message);
 }
 
+// ✅ Oversight proxy (dashboard → agent SSE, no agent API key required)
+// Mounted separately from agent-proxy so validateAgentApiKey does NOT apply.
+// Auth boundary: CORS (allowedOrigins) + agent-side rate limit (20/min per user).
+try {
+  const oversightRoutes = require('./routes/agents/oversight');
+  app.use('/api/instagram', oversightRoutes);
+  console.log('✅ Oversight proxy routes loaded (POST /api/instagram/oversight/chat)');
+} catch (error) {
+  console.error('❌ Failed to load oversight routes:', error.message);
+}
+
 // ✅ Agent proxy routes (Path C - Agent → Backend → Graph API)
 try {
   const agentProxyRoutes = require('./routes/agent-proxy');
   app.use('/api/instagram', agentProxyRoutes);
-  console.log('✅ Agent proxy routes loaded (13 endpoints: search-hashtag, tags, send-dm, publish-post, insights, account-insights, media-insights, reply-comment, reply-dm, oversight/chat, post-comments, conversations, conversation-messages)');
+  console.log('✅ Agent proxy routes loaded (12 endpoints: search-hashtag, tags, send-dm, publish-post, insights, account-insights, media-insights, reply-comment, reply-dm, post-comments, conversations, conversation-messages)');
 } catch (error) {
   console.error('❌ Failed to load agent proxy routes:', error.message);
 }
