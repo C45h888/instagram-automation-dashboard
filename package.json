@@ -19,7 +19,6 @@
     "tunnel:status": "node scripts/tunnel-manager-unified.js status",
     "tunnel:stop": "node scripts/tunnel-manager-unified.js stop",
     "tunnel:test": "node scripts/tunnel-manager-unified.js test",
-  
     "// ============ TESTING ENDPOINTS ============": "",
     "test:backend": "curl http://localhost:3001/health",
     "test:webhook": "curl https://api.888intelligenceautomation.in/health",
@@ -55,7 +54,6 @@
     "// ============ DATABASE MANAGEMENT ============": "",
     "db:types": "npx supabase gen types typescript --project-id uromexjprcrjfmhkmgxa > src/lib/database.types.ts",
     "db:status": "npx supabase status",
-    
     "// ============ PRODUCTION DEPLOYMENT ============": "",
     "start": "npm run backend",
     "start:tunnels": "npm run tunnel",
@@ -84,6 +82,7 @@
     "recharts": "^2.7.2",
     "supabase": "^2.39.2",
     "tailwind": "^4.0.0",
+    "zod": "^4.3.6",
     "zustand": "^5.0.7"
   },
   "devDependencies": {

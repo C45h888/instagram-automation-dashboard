@@ -68,7 +68,7 @@ export type Database = {
           created_at: string
           id: string
           last_beat_at: string
-          status: string
+          status: 'alive' | 'down'
           updated_at: string
         }
         Insert: {
@@ -76,7 +76,7 @@ export type Database = {
           created_at?: string
           id?: string
           last_beat_at?: string
-          status?: string
+          status?: 'alive' | 'down'
           updated_at?: string
         }
         Update: {
@@ -84,7 +84,7 @@ export type Database = {
           created_at?: string
           id?: string
           last_beat_at?: string
-          status?: string
+          status?: 'alive' | 'down'
           updated_at?: string
         }
         Relationships: []
@@ -1887,87 +1887,6 @@ export type Database = {
           },
           {
             foreignKeyName: "ugc_content_business_account_id_fkey"
-            columns: ["business_account_id"]
-            isOneToOne: false
-            referencedRelation: "instagram_business_accounts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      ugc_discovered: {
-        Row: {
-          business_account_id: string
-          caption: string | null
-          comments_count: number | null
-          created_at: string | null
-          id: string
-          instagram_media_id: string
-          like_count: number | null
-          media_type: string | null
-          media_url: string | null
-          permalink: string | null
-          post_timestamp: string | null
-          quality_factors: Json | null
-          quality_score: number
-          quality_tier: string
-          run_id: string | null
-          source: string
-          source_hashtag: string | null
-          updated_at: string | null
-          username: string
-        }
-        Insert: {
-          business_account_id: string
-          caption?: string | null
-          comments_count?: number | null
-          created_at?: string | null
-          id?: string
-          instagram_media_id: string
-          like_count?: number | null
-          media_type?: string | null
-          media_url?: string | null
-          permalink?: string | null
-          post_timestamp?: string | null
-          quality_factors?: Json | null
-          quality_score: number
-          quality_tier: string
-          run_id?: string | null
-          source: string
-          source_hashtag?: string | null
-          updated_at?: string | null
-          username: string
-        }
-        Update: {
-          business_account_id?: string
-          caption?: string | null
-          comments_count?: number | null
-          created_at?: string | null
-          id?: string
-          instagram_media_id?: string
-          like_count?: number | null
-          media_type?: string | null
-          media_url?: string | null
-          permalink?: string | null
-          post_timestamp?: string | null
-          quality_factors?: Json | null
-          quality_score?: number
-          quality_tier?: string
-          run_id?: string | null
-          source?: string
-          source_hashtag?: string | null
-          updated_at?: string | null
-          username?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ugc_discovered_business_account_id_fkey"
-            columns: ["business_account_id"]
-            isOneToOne: false
-            referencedRelation: "active_dm_summary"
-            referencedColumns: ["business_account_id"]
-          },
-          {
-            foreignKeyName: "ugc_discovered_business_account_id_fkey"
             columns: ["business_account_id"]
             isOneToOne: false
             referencedRelation: "instagram_business_accounts"

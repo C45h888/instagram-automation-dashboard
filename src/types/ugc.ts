@@ -5,6 +5,10 @@
 // =====================================
 
 import type { Database } from '../lib/database.types';
+import type { UGCQualityFactors } from './agent-tables';
+
+// Re-export so consumers only need one import for UGC types
+export type { UGCQualityFactors };
 
 // ==========================================
 // DATABASE TYPES (Re-exported from Supabase)
@@ -176,6 +180,12 @@ export interface PermissionRequestResponse {
 
 export interface UGCContentWithPermission extends UGCContent {
   permission?: UGCPermission;
+}
+
+/** Typed overlay for UGCContent when quality_factors needs to be accessed safely.
+ *  Use this instead of raw UGCContent when the agent quality data is in scope. */
+export interface UGCContentTyped extends Omit<UGCContent, 'quality_factors'> {
+  quality_factors: UGCQualityFactors | null;
 }
 
 export interface CampaignWithStats extends UGCCampaign {
