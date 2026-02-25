@@ -18,11 +18,13 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/authStore'
 import { OversightMessagesArraySchema } from '../types/oversight'
+import type { Json } from '../lib/database.types'
 import type {
   OversightSession,
   OversightMessage,
-  OversightSSEEvent,
+  OversightSSEPayload,
 } from '@/types'
+import { isAgentToken, isAgentDone, isAgentError, getSSEErrorMessage } from '@/types'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Result interface
@@ -117,16 +119,13 @@ export function useOversightChat(businessAccountId: string | null): UseOversight
     setIsStreaming(false)
   }, [])
 
-  // ── Parse a single SSE event string into OversightSSEEvent ────────────────
-  const parseSSEEvent = (raw: string): OversightSSEEvent | null => {
+  // ── Parse a single SSE event string into the raw agent payload ────────────
+  const parseSSEEvent = (raw: string): OversightSSEPayload | null => {
     const lines = raw.split('\n')
-    let eventType = 'token'
-    let dataStr   = ''
+    let dataStr = ''
 
     for (const line of lines) {
-      if (line.startsWith('event:')) {
-        eventType = line.slice(6).trim()
-      } else if (line.startsWith('data:')) {
+      if (line.startsWith('data:')) {
         dataStr = line.slice(5).trim()
       }
     }
@@ -134,7 +133,7 @@ export function useOversightChat(businessAccountId: string | null): UseOversight
     if (!dataStr) return null
 
     try {
-      return JSON.parse(dataStr) as OversightSSEEvent
+      return JSON.parse(dataStr) as OversightSSEPayload
     } catch {
       // Malformed JSON — ignore
       return null
@@ -158,7 +157,7 @@ export function useOversightChat(businessAccountId: string | null): UseOversight
         // Fire-and-forget Supabase update
         supabase
           .from('oversight_chat_sessions')
-          .update({ messages: updated as unknown as object[] })
+          .update({ messages: updated as unknown as Json })
           .eq('id', sessionId)
           .then(({ error: dbErr }) => {
             if (dbErr) console.error('useOversightChat: persist failed', dbErr.message)
@@ -166,13 +165,8 @@ export function useOversightChat(businessAccountId: string | null): UseOversight
 
         return updated
       })
-
-      // Update activeSession.messages in local state
-      setActiveSession((prev) =>
-        prev?.id === sessionId
-          ? { ...prev, messages: [] }  // will re-parse on next render via useEffect
-          : prev
-      )
+      // setActiveSession intentionally omitted — it would trigger the [activeSession]
+      // useEffect which calls setMessages([]) and wipes the message just appended.
     },
     []
   )
@@ -206,39 +200,27 @@ export function useOversightChat(businessAccountId: string | null): UseOversight
             const event = parseSSEEvent(trimmed)
             if (!event) continue
 
-            switch (event.type) {
-              case 'token':
-                if (event.content) {
-                  accumulated += event.content
-                  setStreamBuffer(accumulated)
-                }
-                break
-
-              case 'done':
-                await persistMessage(sessionId, accumulated)
-                setStreamBuffer('')
-                accumulated = ''
-                cleanup()
-                return
-
-              case 'error':
-                setError(event.error ?? 'Agent stream error')
-                cleanup()
-                return
-
-              // tool_call / tool_result — no UI action needed yet
-              case 'tool_call':
-              case 'tool_result':
-              case 'ping':
-                break
+            if (isAgentToken(event)) {
+              accumulated += event.token
+              setStreamBuffer(accumulated)
+            } else if (isAgentDone(event)) {
+              await persistMessage(sessionId, accumulated)
+              setStreamBuffer('')
+              accumulated = ''
+              cleanup()
+              return
+            } else if (isAgentError(event)) {
+              setError(getSSEErrorMessage(event))
+              cleanup()
+              return
             }
+            // Unknown payload shape — ignore silently
           }
         }
       } catch (err: unknown) {
         if (!cleanedUp.current) {
-          const msg = err instanceof Error ? err.message : String(err)
-          // AbortError is expected on manual close — don't surface it as an error
-          if (msg !== 'AbortError') setError(msg)
+          const isAbort = err instanceof DOMException && err.name === 'AbortError'
+          if (!isAbort) setError(err instanceof Error ? err.message : String(err))
         }
       } finally {
         cleanup()
@@ -297,7 +279,7 @@ export function useOversightChat(businessAccountId: string | null): UseOversight
       // Persist user message to Supabase
       supabase
         .from('oversight_chat_sessions')
-        .update({ messages: updatedMessages as unknown as object[] })
+        .update({ messages: updatedMessages as unknown as Json })
         .eq('id', activeSession.id)
         .then(({ error: dbErr }) => {
           if (dbErr) console.error('useOversightChat: user message persist failed', dbErr.message)
@@ -317,11 +299,11 @@ export function useOversightChat(businessAccountId: string | null): UseOversight
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
-          session_id:          activeSession.id,
           business_account_id: businessAccountId,
           user_id:             user.id,
           question:            question.trim(),
           chat_history:        updatedMessages,
+          stream:              true,
         }),
         signal: abort.signal,
       })
@@ -335,8 +317,8 @@ export function useOversightChat(businessAccountId: string | null): UseOversight
         })
         .catch((err: unknown) => {
           if (!cleanedUp.current) {
-            const msg = err instanceof Error ? err.message : String(err)
-            if (msg !== 'AbortError') setError(msg)
+            const isAbort = err instanceof DOMException && err.name === 'AbortError'
+            if (!isAbort) setError(err instanceof Error ? err.message : String(err))
           }
           cleanup()
         })

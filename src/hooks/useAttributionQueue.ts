@@ -59,10 +59,7 @@ export function useAttributionQueue(businessAccountId: string | null): UseAttrib
 
       // Client-side fraud_risk filter (if enabled)
       if (filters.fraud_risk !== 'all') {
-        items = items.filter((r) => r.fraud_risk_score != null
-          ? (filters.fraud_risk ? r.fraud_risk_score > 0.5 : r.fraud_risk_score <= 0.5)
-          : false
-        )
+        items = items.filter((r) => r.fraud_risk === filters.fraud_risk)
       }
 
       return items

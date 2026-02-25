@@ -85,7 +85,8 @@ export class AgentService {
       return { success: false, data: [], error: 'Invalid businessAccountId format' }
     }
     try {
-      let query = (supabase as ReturnType<typeof supabase['from']>)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let query = (supabase as any)
         .from(table as string)
         .select('*', { count: 'exact' })
         .eq('business_account_id', businessAccountId)

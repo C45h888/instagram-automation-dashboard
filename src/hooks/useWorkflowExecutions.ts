@@ -136,8 +136,8 @@ export function useWorkflowExecutions(
     const successful = executions.filter((e) => e.status === 'completed').length
     const failed     = executions.filter((e) => e.status === 'failed').length
     const times      = executions
-      .filter((e) => e.duration_ms != null)
-      .map((e) => e.duration_ms as number)
+      .filter((e) => e.execution_time_ms != null)
+      .map((e) => e.execution_time_ms as number)
     const avgTime_ms = times.length > 0
       ? Math.round(times.reduce((a, b) => a + b, 0) / times.length)
       : 0

@@ -15,8 +15,9 @@ export * from './workflows'
 export * from './oversight'
 
 // Existing domains
+// NOTE: permissions.ts and instagram-media.ts both export 'InstagramMedia' under different
+// shapes and cannot be re-exported together without a name conflict. Existing files
+// import directly from these modules. New code should do the same if needed.
 export * from './ugc'
 export * from './dashboard'
-export * from './permissions'
 export * from './insights'
-export * from './instagram-media'

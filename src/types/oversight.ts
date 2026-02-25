@@ -47,28 +47,67 @@ export const OversightMessagesArraySchema = z.array(OversightMessageSchema)
 // Key SSE rules (from MEMORY.md + backend implementation):
 //  • Headers: text/event-stream; charset=utf-8, Cache-Control: no-cache no-transform,
 //    X-Accel-Buffering: no
-//  • Keep-alive pings arrive as ': ping\n\n' — drop silently
+//  • Keep-alive pings arrive as ': ping\n\n' — drop silently (SSE comment, no data: line)
 //  • 'done' signals end of stream; caller saves final message to Supabase
 //  • 'token' events accumulate in streamBuffer; cleared on 'done'
+//
+// IMPORTANT — dispatch is by FIELD PRESENCE, not a 'type' discriminant.
+// The agent never sets an 'event:' SSE named-event header on the wire.
+// Each data: line is a JSON object identified by which key it carries:
+//
+//  | Agent payload shape                          | Identifying key          |
+//  |----------------------------------------------|--------------------------|
+//  | {"token": "..."}                             | 'token' in payload       |
+//  | {"done": true, "latency_ms": ..., ...}       | 'done' in payload        |
+//  | {"error": "..."}                             | 'error' in payload       |
+//  | {"type": "error", "content": "..."}          | payload.type === 'error' |
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Event type emitted by the oversight chat SSE stream */
-export type OversightSSEEventType =
-  | 'token'        // partial response token — append to streamBuffer
-  | 'tool_call'    // agent invoking a tool
-  | 'tool_result'  // tool execution result
-  | 'done'         // stream complete — persist to DB, clear buffer
-  | 'error'        // unrecoverable error from the agent
-  | 'ping'         // keep-alive comment — drop silently
-
-export interface OversightSSEEvent {
-  type:     OversightSSEEventType
-  content?: string                    // present on 'token' events
-  tool?:    string                    // present on 'tool_call' / 'tool_result'
-  input?:   Record<string, unknown>   // present on 'tool_call'
-  output?:  unknown                   // present on 'tool_result'
-  error?:   string                    // present on 'error'
+/** Partial response token from the agent LLM */
+export interface AgentTokenPayload {
+  token:        string
 }
+
+/** Stream-complete signal, optionally carrying latency metadata */
+export interface AgentDonePayload {
+  done:         true
+  latency_ms?:  number
+  request_id?:  string
+}
+
+/** Unrecoverable error emitted by the agent pipeline */
+export interface AgentErrorPayload {
+  error:    string
+  message?: string
+}
+
+/** Error wrapper injected by the backend (not the agent); uses a 'type' key */
+export interface BackendSSEError {
+  type:    'error'
+  content: string
+}
+
+/** Union of all raw SSE payloads from POST /api/instagram/oversight/chat */
+export type OversightSSEPayload =
+  | AgentTokenPayload
+  | AgentDonePayload
+  | AgentErrorPayload
+  | BackendSSEError
+
+// ── Type guards — use these in readStream, not a switch on .type ───────────
+
+export const isAgentToken = (p: OversightSSEPayload): p is AgentTokenPayload =>
+  'token' in p
+
+export const isAgentDone  = (p: OversightSSEPayload): p is AgentDonePayload =>
+  'done' in p && (p as AgentDonePayload).done === true
+
+export const isAgentError = (p: OversightSSEPayload): p is AgentErrorPayload | BackendSSEError =>
+  'error' in p || ('type' in p && (p as BackendSSEError).type === 'error')
+
+/** Extract the error string from either error shape */
+export const getSSEErrorMessage = (p: AgentErrorPayload | BackendSSEError): string =>
+  'error' in p ? p.error : p.content
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Hook State Interface

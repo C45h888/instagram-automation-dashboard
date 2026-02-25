@@ -74,10 +74,8 @@ export function useScheduledPosts(businessAccountId: string | null): UseSchedule
 
       // Apply client-side search filter if set
       const filtered = filters.search
-        ? items.filter(
-            (p) =>
-              p.caption?.toLowerCase().includes(filters.search.toLowerCase()) ||
-              p.hashtags?.join(' ').toLowerCase().includes(filters.search.toLowerCase())
+        ? items.filter((p) =>
+            p.generated_caption?.toLowerCase().includes(filters.search.toLowerCase())
           )
         : items
 

@@ -396,7 +396,7 @@ export const AuditLogDetailsSchema = z.object({
   run_id:     z.string().optional(),
   table_name: z.string().optional(),
   record_id:  z.string().optional(),
-  changes:    z.record(z.unknown()).optional(),
+  changes:    z.record(z.string(), z.unknown()).optional(),
 }).passthrough().optional()
 
 // ─────────────────────────────────────────────────────────────────────────────
