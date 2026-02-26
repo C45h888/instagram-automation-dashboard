@@ -37,6 +37,9 @@ const UGCManagement = lazy(() => import('./pages/UGCManagement'));
 // Admin pages - only loaded when admin navigates to them
 const AdminLogin = lazy(() => import('./pages/AdminLogin'));
 
+// Agent Terminal - loaded when user navigates to terminal view
+const AgentTerminal = lazy(() => import('./pages/AgentTerminal'));
+
 // Legal pages - loaded when accessed (rare, so perfect for lazy loading)
 const PrivacyPolicy = lazy(() => import('./pages/privacypolicy'));
 const TermsOfService = lazy(() => import('./pages/TermsOfService'));
@@ -420,6 +423,13 @@ function App() {
               <Route path="ugc" element={
                 <ErrorBoundary>
                   <UGCManagement />
+                </ErrorBoundary>
+              } />
+
+              {/* Agent Terminal */}
+              <Route path="agent-terminal" element={
+                <ErrorBoundary>
+                  <AgentTerminal />
                 </ErrorBoundary>
               } />
             </Route>

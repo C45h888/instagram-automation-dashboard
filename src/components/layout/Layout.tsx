@@ -6,7 +6,7 @@ import LegalFooter from '../layout/LegalFooter';
 import {
   Home, Calendar, MessageCircle, BarChart3, Settings,
   Users, Bot, Target, Search, Bell, Menu, X, LogOut,
-  ChevronDown, Plus, Star
+  ChevronDown, Plus, Star, Terminal
 } from 'lucide-react';
 
 interface NavigationItem {
@@ -41,6 +41,7 @@ const Layout: React.FC = () => {
     { name: 'Automations', path: '/automations', icon: <Bot className="w-5 h-5" /> },
     { name: 'Campaigns', path: '/campaigns', icon: <Target className="w-5 h-5" /> },
     { name: 'Audience', path: '/audience', icon: <Users className="w-5 h-5" /> },
+    { name: 'Terminal', path: '/agent-terminal', icon: <Terminal className="w-5 h-5" /> },
     { name: 'Settings', path: '/settings', icon: <Settings className="w-5 h-5" /> },
   ];
 
