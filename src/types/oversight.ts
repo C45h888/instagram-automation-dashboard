@@ -29,6 +29,8 @@ export interface OversightMessage {
   timestamp:   string
   tools_used?: string[]
   latency_ms?: number
+  /** Marks interrupted/incomplete responses (e.g., stream error mid-response) */
+  incomplete?: boolean
 }
 
 export const OversightMessageSchema = z.object({
@@ -37,6 +39,7 @@ export const OversightMessageSchema = z.object({
   timestamp:  z.string(),
   tools_used: z.array(z.string()).optional(),
   latency_ms: z.number().int().optional(),
+  incomplete: z.boolean().optional(),
 })
 
 export const OversightMessagesArraySchema = z.array(OversightMessageSchema)

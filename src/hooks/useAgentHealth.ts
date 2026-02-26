@@ -29,8 +29,9 @@ export interface UseAgentHealthResult {
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const LIVENESS_THRESHOLD_MS = 60_000  // 60 seconds
-const POLL_INTERVAL_MS      = 30_000  // 30 seconds
+/** Threshold for considering the agent alive (last heartbeat within this time) */
+export const LIVENESS_THRESHOLD_MS = 60_000  // 60 seconds
+const POLL_INTERVAL_MS             = 30_000  // 30 seconds
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Hook

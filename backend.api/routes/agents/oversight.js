@@ -13,7 +13,14 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
-const { logApiRequest } = require('../../config/supabase');
+const { logApiRequest, getSupabaseAdmin } = require('../../config/supabase');
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Constants
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Threshold for considering the agent alive (matches frontend LIVENESS_THRESHOLD_MS) */
+const LIVENESS_THRESHOLD_MS = 60_000;  // 60 seconds
 
 // ─────────────────────────────────────────────────────────────────────────────
 // normalizeAgentSseChunk
@@ -76,6 +83,33 @@ router.post('/oversight/chat', async (req, res) => {
 
   if (!business_account_id) {
     return res.status(400).json({ error: 'Missing required field: business_account_id', code: 'MISSING_BUSINESS_ACCOUNT_ID' });
+  }
+
+  // --- Agent liveness check (before establishing SSE connection) ---
+  const supabase = getSupabaseAdmin();
+  if (supabase) {
+    try {
+      const { data: heartbeat } = await supabase
+        .from('agent_heartbeats')
+        .select('last_beat_at, status')
+        .order('last_beat_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      const isAlive = heartbeat && 
+        (Date.now() - new Date(heartbeat.last_beat_at).getTime()) <= LIVENESS_THRESHOLD_MS;
+
+      if (!isAlive) {
+        return res.status(503).json({ 
+          error: 'Agent is not responding - cannot start oversight chat',
+          code: 'AGENT_DOWN' 
+        });
+      }
+    } catch (heartbeatErr) {
+      // If heartbeat table is empty or query fails, log but continue
+      // (agent might be starting up for the first time)
+      console.warn('[Oversight] Heartbeat check failed:', heartbeatErr.message);
+    }
   }
 
   const agentUrl = `${process.env.AGENT_URL}/oversight/chat${isStreaming ? '?stream=true' : ''}`;
@@ -147,6 +181,17 @@ router.post('/oversight/chat', async (req, res) => {
 
   // Flush headers immediately to establish the SSE connection
   res.flushHeaders();
+
+  // Log stream start for observability (completion logged on stream end/error)
+  await logApiRequest({
+    endpoint: '/oversight/chat',
+    method: 'POST',
+    business_account_id,
+    user_id: userIdHeader,
+    success: true,
+    latency: 0,
+    details: { stream: 'started' }
+  });
 
   // Keep-alive ping every 15s (SSE comment lines are ignored by EventSource)
   pingInterval = setInterval(() => {

@@ -18,6 +18,7 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/authStore'
 import { OversightMessagesArraySchema } from '../types/oversight'
+import { LIVENESS_THRESHOLD_MS } from './useAgentHealth'
 import type { Json } from '../lib/database.types'
 import type {
   OversightSession,
@@ -25,6 +26,13 @@ import type {
   OversightSSEPayload,
 } from '@/types'
 import { isAgentToken, isAgentDone, isAgentError, getSSEErrorMessage } from '@/types'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Constants
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Max stream duration derived from existing LIVENESS_THRESHOLD_MS (5 minutes) */
+const MAX_STREAM_DURATION_MS = LIVENESS_THRESHOLD_MS * 5
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Result interface
@@ -142,13 +150,14 @@ export function useOversightChat(businessAccountId: string | null): UseOversight
 
   // ── Persist completed message to Supabase ─────────────────────────────────
   const persistMessage = useCallback(
-    async (sessionId: string, fullContent: string): Promise<void> => {
+    async (sessionId: string, fullContent: string, incomplete = false): Promise<void> => {
       if (!fullContent) return
 
       const assistantMessage: OversightMessage = {
-        role:      'assistant',
-        content:   fullContent,
-        timestamp: new Date().toISOString(),
+        role:        'assistant',
+        content:     fullContent,
+        timestamp:   new Date().toISOString(),
+        ...(incomplete && { incomplete: true }),
       }
 
       setMessages((prev) => {
@@ -210,6 +219,10 @@ export function useOversightChat(businessAccountId: string | null): UseOversight
               cleanup()
               return
             } else if (isAgentError(event)) {
+              // Persist partial response if any content was accumulated
+              if (accumulated) {
+                await persistMessage(sessionId, accumulated, true)
+              }
               setError(getSSEErrorMessage(event))
               cleanup()
               return
@@ -220,7 +233,13 @@ export function useOversightChat(businessAccountId: string | null): UseOversight
       } catch (err: unknown) {
         if (!cleanedUp.current) {
           const isAbort = err instanceof DOMException && err.name === 'AbortError'
-          if (!isAbort) setError(err instanceof Error ? err.message : String(err))
+          if (!isAbort) {
+            // Persist partial response on stream error
+            if (accumulated) {
+              await persistMessage(sessionId, accumulated, true)
+            }
+            setError(err instanceof Error ? err.message : String(err))
+          }
         }
       } finally {
         cleanup()
@@ -295,6 +314,10 @@ export function useOversightChat(businessAccountId: string | null): UseOversight
       const abort = new AbortController()
       abortRef.current = abort
 
+      // Create timeout signal and combine with user abort signal
+      const timeoutSignal = AbortSignal.timeout(MAX_STREAM_DURATION_MS)
+      const combinedSignal = AbortSignal.any([abort.signal, timeoutSignal])
+
       fetch(`${apiBase}/api/instagram/oversight/chat`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -305,7 +328,7 @@ export function useOversightChat(businessAccountId: string | null): UseOversight
           chat_history:        updatedMessages,
           stream:              true,
         }),
-        signal: abort.signal,
+        signal: combinedSignal,
       })
         .then((res) => {
           if (!res.ok || !res.body) {

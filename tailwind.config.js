@@ -28,10 +28,22 @@ export default {
           700: '#999999',
           800: '#b3b3b3',
           900: '#cccccc'
+        },
+        terminal: {
+          green: '#00ff41',
+          cyan: '#00ffff',
+          red: '#ff5555',
+          yellow: '#ffcc00',
+          dim: '#888888',
+          bg: '#000000',
+          'bg-alt': '#0d1117',
+          'bg-panel': '#161b22',
+          border: '#30363d',
         }
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif']
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        mono: ["'JetBrains Mono'", "'Fira Code'", "'Cascadia Code'", 'monospace'],
       },
       spacing: {
         '18': '4.5rem',
@@ -47,7 +59,9 @@ export default {
         'shake': 'shake 0.5s ease-in-out',
         'bounce-soft': 'bounce 1s ease-in-out',
         'pulse-glow': 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-        'shimmer': 'shimmer 2s infinite linear'
+        'shimmer': 'shimmer 2s infinite linear',
+        'blink-cursor': 'blink-cursor 1s step-end infinite',
+        'blink-status': 'blink-cursor 2s step-end infinite'
       },
       keyframes: {
         fadeIn: {
@@ -75,6 +89,10 @@ export default {
         shimmer: {
           '0%': { backgroundPosition: '-200% 0' },
           '100%': { backgroundPosition: '200% 0' }
+        },
+        'blink-cursor': {
+          '0%, 100%': { opacity: '1' },
+          '50%': { opacity: '0' }
         }
       },
       transitionTimingFunction: {

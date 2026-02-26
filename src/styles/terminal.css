@@ -1,0 +1,123 @@
+/* terminal.css — Scoped terminal aesthetic for Agent Dashboard
+ *
+ * Loaded ONLY by src/pages/AgentTerminal.tsx (lazy-loaded).
+ * JetBrains Mono fetched on-demand, not bundled with main app CSS.
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&display=swap');
+
+/* ─── Root scope ─────────────────────────────────────────────────────────── */
+
+.terminal-root {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  background-color: #000;
+  color: #00ff41;
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Override glass morphism inside terminal */
+.terminal-root .glass-morphism-card {
+  backdrop-filter: none;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
+
+/* ─── Scrollbar ──────────────────────────────────────────────────────────── */
+
+.terminal-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.terminal-scroll::-webkit-scrollbar-track {
+  background: #0d1117;
+}
+.terminal-scroll::-webkit-scrollbar-thumb {
+  background: #30363d;
+}
+.terminal-scroll::-webkit-scrollbar-thumb:hover {
+  background: #484f58;
+}
+
+/* Firefox */
+.terminal-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #30363d #0d1117;
+}
+
+/* ─── Blinking cursor ────────────────────────────────────────────────────── */
+
+.terminal-cursor {
+  display: inline-block;
+  width: 0.6em;
+  height: 1.15em;
+  background-color: #00ff41;
+  animation: blink-cursor 1s step-end infinite;
+  vertical-align: text-bottom;
+  margin-left: 1px;
+}
+
+@keyframes blink-cursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* ─── Status indicators ──────────────────────────────────────────────────── */
+
+.terminal-status-alive {
+  color: #00ff41;
+}
+
+.terminal-status-down {
+  color: #ff5555;
+  animation: blink-cursor 2s step-end infinite;
+}
+
+/* ─── Prompt + input ─────────────────────────────────────────────────────── */
+
+.terminal-prompt {
+  color: #00ffff;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.terminal-input {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #00ff41;
+  caret-color: #00ff41;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  width: 100%;
+  resize: none;
+}
+
+.terminal-input::placeholder {
+  color: #888888;
+}
+
+/* ─── Panel dividers ─────────────────────────────────────────────────────── */
+
+.terminal-divider {
+  color: #30363d;
+  margin: 4px 0;
+}
+
+/* ─── Selection override ─────────────────────────────────────────────────── */
+
+.terminal-root ::selection {
+  background-color: rgba(0, 255, 65, 0.2);
+  color: #ffffff;
+}
+
+/* ─── Anchor scroll to bottom ────────────────────────────────────────────── */
+
+.terminal-scroll-anchor {
+  overflow-anchor: auto;
+}
