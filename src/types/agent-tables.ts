@@ -499,6 +499,39 @@ export const DEFAULT_SCHEDULED_POST_FILTERS: ScheduledPostFilterState = {
   search: '',
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Queue Monitor Types (Phase 4)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Parsed summary from GET /post-queue/status */
+export interface QueueStatusSummary {
+  byKey: Record<string, number>  // "{action_type}::{status}" → count
+  total: number
+  timestamp: string
+}
+
+/** DLQ item from GET /post-queue/dlq */
+export interface QueueDLQItem {
+  id: string
+  business_account_id: string
+  action_type: string
+  payload: unknown
+  retry_count: number
+  error: string | null
+  error_category: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** Response from POST /post-queue/retry */
+export interface QueueRetryResult {
+  queue_id: string
+  action_type: string
+  /** retry_count BEFORE reset (5 for DLQ items) */
+  previous_retry_count: number
+  message: string
+}
+
 export interface AlertFilterState {
   type:     'all' | SystemAlertType
   resolved: boolean

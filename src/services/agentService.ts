@@ -28,6 +28,7 @@ import type {
   ScheduledPostStatus,
   SystemAlert,
 } from '@/types'
+import type { QueueStatusSummary, QueueDLQItem, QueueRetryResult, AuditLogEntry } from '@/types'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Response wrappers (same shape as DatabaseService)
@@ -350,6 +351,112 @@ export class AgentService {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       console.error('AgentService.getAnalyticsReports failed:', msg)
+      return { success: false, data: [], error: msg }
+    }
+  }
+
+  // ── Queue Monitor (Backend API - Phase 4) ───────────────────────────────────
+
+  /** API base URL for backend Express routes */
+  private static get apiBase(): string {
+    return import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in'
+  }
+
+  /** Fetch queue status summary from backend API */
+  static async getQueueStatus(): Promise<ServiceResponse<QueueStatusSummary>> {
+    try {
+      const response = await fetch(`${this.apiBase}/api/instagram/post-queue/status`)
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Failed to fetch queue status' }))
+        return { success: false, data: null, error: err.error ?? `HTTP ${response.status}` }
+      }
+      const result = await response.json()
+      return {
+        success: true,
+        data: {
+          byKey: result.summary ?? {},
+          total: result.total ?? 0,
+          timestamp: result.timestamp ?? new Date().toISOString(),
+        },
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('AgentService.getQueueStatus failed:', msg)
+      return { success: false, data: null, error: msg }
+    }
+  }
+
+  /** Fetch DLQ items from backend API */
+  static async getQueueDLQ(limit = 50): Promise<ServiceListResponse<QueueDLQItem>> {
+    try {
+      const response = await fetch(
+        `${this.apiBase}/api/instagram/post-queue/dlq?limit=${Math.min(limit, 200)}`
+      )
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Failed to fetch DLQ' }))
+        return { success: false, data: [], error: err.error ?? `HTTP ${response.status}` }
+      }
+      const result = await response.json()
+      return {
+        success: true,
+        data: result.dlq ?? [],
+        count: result.count ?? 0,
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('AgentService.getQueueDLQ failed:', msg)
+      return { success: false, data: [], error: msg }
+    }
+  }
+
+  /** Retry a failed/DLQ queue item via backend API */
+  static async retryQueueItem(queueId: string): Promise<ServiceResponse<QueueRetryResult>> {
+    if (!isValidUUID(queueId)) {
+      return { success: false, data: null, error: 'Invalid queueId format' }
+    }
+    try {
+      const response = await fetch(`${this.apiBase}/api/instagram/post-queue/retry`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ queue_id: queueId }),
+      })
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Failed to retry item' }))
+        return { success: false, data: null, error: err.error ?? `HTTP ${response.status}` }
+      }
+      const result = await response.json()
+      return {
+        success: true,
+        data: {
+          queue_id: result.queue_id,
+          action_type: result.action_type,
+          previous_retry_count: result.previous_retry_count,
+          message: result.message,
+        },
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('AgentService.retryQueueItem failed:', msg)
+      return { success: false, data: null, error: msg }
+    }
+  }
+
+  // ── Activity Feed (Supabase - Phase 5) ──────────────────────────────────────
+
+  /** Fetch audit log entries from Supabase (client-side filter by business_account_id in details) */
+  static async getAuditLog(limit = 50): Promise<ServiceListResponse<AuditLogEntry>> {
+    try {
+      const { data, error } = await supabase
+        .from('audit_log')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(limit)
+
+      if (error) throw error
+      return { success: true, data: data ?? [] }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('AgentService.getAuditLog failed:', msg)
       return { success: false, data: [], error: msg }
     }
   }

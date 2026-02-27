@@ -420,6 +420,17 @@ try {
   console.error('❌ Failed to load oversight routes:', error.message);
 }
 
+// ✅ Queue monitor routes (dashboard → queue status, DLQ, retry)
+// Mounted separately from agent-proxy so validateAgentApiKey does NOT apply.
+// Auth boundary: CORS (allowedOrigins).
+try {
+  const queueRoutes = require('./routes/agents/queue');
+  app.use('/api/instagram', queueRoutes);
+  console.log('✅ Queue monitor routes loaded (GET /post-queue/status, /dlq, POST /retry)');
+} catch (error) {
+  console.error('❌ Failed to load queue routes:', error.message);
+}
+
 // ✅ Agent proxy routes (Path C - Agent → Backend → Graph API)
 try {
   const agentProxyRoutes = require('./routes/agent-proxy');

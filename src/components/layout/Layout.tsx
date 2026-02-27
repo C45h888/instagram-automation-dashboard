@@ -143,6 +143,14 @@ const Layout: React.FC = () => {
                 <span className="hidden lg:block">Create</span>
               </button>
 
+              <button
+                onClick={() => navigate('/agent-terminal')}
+                className="hidden sm:flex p-2 text-gray-400 hover:text-green-400 transition-colors rounded-lg hover:bg-green-500/10"
+                title="Agent Terminal"
+              >
+                <Terminal className="w-5 h-5" />
+              </button>
+
               <button className="relative p-2 text-gray-400 hover:text-white transition-colors rounded-lg hover:bg-white/5">
                 <Bell className="w-5 h-5" />
                 <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>

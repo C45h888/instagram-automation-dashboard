@@ -11,9 +11,13 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../stores/authStore'
 import { useAgentHealth } from '../../hooks/useAgentHealth'
 import { useOversightChat } from '../../hooks/useOversightChat'
+import { useQueueMonitor } from '../../hooks/useQueueMonitor'
+import { useActivityFeed } from '../../hooks/useActivityFeed'
 import TerminalStatusBar from './TerminalStatusBar'
 import TerminalInput from './TerminalInput'
 import TerminalScrollArea from './TerminalScrollArea'
+import ActivityFeedPanel from './ActivityFeedPanel'
+import QueueMonitorPanel from './QueueMonitorPanel'
 
 type PanelView = 'chat' | 'feed' | 'queue'
 
@@ -24,6 +28,8 @@ export default function AgentTerminalDashboard() {
   // Core hooks
   const agentHealth = useAgentHealth(businessAccountId)
   const oversightChat = useOversightChat(businessAccountId)
+  const queueMonitor = useQueueMonitor()
+  const activityFeed = useActivityFeed(businessAccountId)
 
   // Panel visibility (responsive)
   const [activeView, setActiveView] = useState<PanelView>('chat')
@@ -71,10 +77,10 @@ export default function AgentTerminalDashboard() {
             <TerminalStatusBar
               agentStatus={agentHealth.agentStatus}
               uptime={uptime}
-              activeTaskCount={0}
+              activeTaskCount={queueMonitor.summary?.total ?? 0}
               alertCount={agentHealth.alerts.length}
-              queuedCount={0}
-              isLoading={agentHealth.isLoading}
+              queuedCount={queueMonitor.totalQueued}
+              isLoading={agentHealth.isLoading || queueMonitor.isLoading}
             />
           </div>
           {/* Close button */}
@@ -107,16 +113,17 @@ export default function AgentTerminalDashboard() {
 
       {/* ── Central Grid ─────────────────────────────────────────────── */}
       <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[280px_1fr_280px] xl:grid-cols-[280px_1fr_280px]">
-        {/* Left Panel — Activity Feed (placeholder until Phase 5) */}
+        {/* Left Panel — Activity Feed */}
         <aside
           className={`border-r border-terminal-border bg-terminal-bg overflow-hidden ${
             activeView === 'feed' ? 'block' : 'hidden lg:block'
           }`}
         >
-          <TerminalScrollArea className="h-full p-3">
-            <div className="text-terminal-dim text-xs mb-2">-- ACTIVITY FEED --</div>
-            <div className="text-terminal-dim text-xs">awaiting data...</div>
-          </TerminalScrollArea>
+          <ActivityFeedPanel
+            events={activityFeed.events}
+            isLoading={activityFeed.isLoading}
+            error={activityFeed.error}
+          />
         </aside>
 
         {/* Center Panel — Oversight Chat */}
@@ -188,16 +195,20 @@ export default function AgentTerminalDashboard() {
           </TerminalScrollArea>
         </main>
 
-        {/* Right Panel — Queue Monitor (placeholder until Phase 4) */}
+        {/* Right Panel — Queue Monitor */}
         <aside
           className={`border-l border-terminal-border bg-terminal-bg overflow-hidden ${
             activeView === 'queue' ? 'block' : 'hidden lg:block'
           }`}
         >
-          <TerminalScrollArea className="h-full p-3">
-            <div className="text-terminal-dim text-xs mb-2">-- QUEUE MONITOR --</div>
-            <div className="text-terminal-dim text-xs">awaiting data...</div>
-          </TerminalScrollArea>
+          <QueueMonitorPanel
+            summary={queueMonitor.summary}
+            dlqItems={queueMonitor.dlqItems}
+            isLoading={queueMonitor.isLoading}
+            error={queueMonitor.error}
+            onRetry={queueMonitor.retryItem}
+            isRetrying={queueMonitor.isRetrying}
+          />
         </aside>
       </div>
 
