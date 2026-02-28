@@ -26,7 +26,7 @@ export default function TerminalScrollArea({
     if (autoScroll && anchorRef.current) {
       anchorRef.current.scrollIntoView({ behavior: 'smooth' })
     }
-  })
+  }, [autoScroll, children])
 
   return (
     <div

@@ -15,7 +15,7 @@ import type { QueueStatusSummary, QueueDLQItem } from '@/types'
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface UseQueueMonitorResult {
-  summary: QueueStatusSummary | null
+  summary: QueueStatusSummary
   dlqItems: QueueDLQItem[]
   totalQueued: number
   totalDLQ: number
@@ -71,19 +71,23 @@ export function useQueueMonitor(): UseQueueMonitorResult {
       if (!result.success) throw new Error(result.error ?? 'Failed to retry item')
       return result.data
     },
-    onSuccess: () => {
-      // Invalidate both queries to refetch
+    onSuccess: (_, queueId) => {
+      // Optimistically remove from DLQ cache immediately
+      queryClient.setQueryData<QueueDLQItem[]>(['queue-monitor', 'dlq'], (old) =>
+        old?.filter((item) => item.id !== queueId) ?? []
+      )
+      // Invalidate both queries to refetch fresh data
       queryClient.invalidateQueries({ queryKey: ['queue-monitor', 'status'] })
       queryClient.invalidateQueries({ queryKey: ['queue-monitor', 'dlq'] })
     },
   })
 
   // ── Derived values ───────────────────────────────────────────────────────
-  const summary = statusQuery.data ?? null
+  const summary = statusQuery.data ?? { byKey: {}, total: 0, timestamp: new Date().toISOString() }
   const dlqItems = dlqQuery.data ?? []
 
   // Calculate totals from summary
-  const totalQueued = summary?.total ?? 0
+  const totalQueued = summary.total ?? 0
   const totalDLQ = dlqItems.length
 
   // Combined error state

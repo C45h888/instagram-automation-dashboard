@@ -6,7 +6,7 @@
  * (since audit_log stores it in details JSONB, not as a column).
  */
 
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { AgentService } from '../services/agentService'
 import type { AuditLogEntry } from '@/types'
@@ -33,8 +33,6 @@ const POLL_INTERVAL_MS = 30_000 // 30 seconds
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function useActivityFeed(businessAccountId: string | null): UseActivityFeedResult {
-  const queryClient = useQueryClient()
-
   // ── Raw audit log query ───────────────────────────────────────────────────
   const rawQuery = useQuery({
     queryKey: ['activity-feed', 'raw', businessAccountId],

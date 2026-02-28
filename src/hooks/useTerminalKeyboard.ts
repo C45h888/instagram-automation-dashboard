@@ -8,7 +8,9 @@
  * - Escape: Close/clear
  */
 
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useState } from 'react'
+
+const STORAGE_KEY = 'terminal-command-history'
 
 export interface UseTerminalKeyboardOptions {
   /** Called when Ctrl+L is pressed */
@@ -34,6 +36,8 @@ export interface UseTerminalKeyboardResult {
   historyUp: () => string | undefined
   /** Manually trigger history down */
   historyDown: () => string | undefined
+  /** Add command to history */
+  addToHistory: (command: string) => void
 }
 
 const MAX_HISTORY = 100
@@ -51,6 +55,30 @@ export function useTerminalKeyboard({
   const historyRef = useRef<string[]>([])
   const historyIndexRef = useRef<number>(-1)
   const elementRef = useRef<HTMLElement | null>(null)
+  const [historyLoaded, setHistoryLoaded] = useState(false)
+
+  // Load history from sessionStorage on mount
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(STORAGE_KEY)
+      if (saved) {
+        historyRef.current = JSON.parse(saved)
+        historyIndexRef.current = historyRef.current.length
+      }
+    } catch (e) {
+      console.warn('Failed to load terminal history:', e)
+    }
+    setHistoryLoaded(true)
+  }, [])
+
+  // Save history to sessionStorage when it changes
+  const saveHistory = useCallback(() => {
+    try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(historyRef.current))
+    } catch (e) {
+      console.warn('Failed to save terminal history:', e)
+    }
+  }, [])
 
   // Add command to history
   const addToHistory = useCallback((command: string) => {
@@ -68,7 +96,8 @@ export function useTerminalKeyboard({
     }
 
     historyIndexRef.current = history.length
-  }, [])
+    saveHistory()
+  }, [saveHistory])
 
   // History navigation
   const historyUp = useCallback(() => {
@@ -156,5 +185,6 @@ export function useTerminalKeyboard({
     register,
     historyUp,
     historyDown,
+    addToHistory,
   }
 }

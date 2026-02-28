@@ -124,6 +124,7 @@ export default function ActivityFeedPanel({
             return (
               <div key={`${event.id}-${index}`} className="text-xs font-mono">
                 <span className="text-terminal-dim">[{time}]</span>{' '}
+                {isError && <span className="text-terminal-red">[ERROR] </span>}
                 <span className={isError ? 'text-terminal-red' : eventColor}>
                   {eventText}
                 </span>

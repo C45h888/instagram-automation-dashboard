@@ -5,7 +5,7 @@
  * Shows summary counts by action_type × status, with retry capability.
  */
 
-import { useMemo, type ReactNode } from 'react'
+import { useMemo } from 'react'
 import type { QueueStatusSummary, QueueDLQItem } from '@/types'
 
 interface QueueMonitorPanelProps {
@@ -179,7 +179,7 @@ export default function QueueMonitorPanel({
                   <button
                     onClick={() => !isRetrying && onRetry(item.id)}
                     disabled={isRetrying}
-                    className={`text-terminal-underline ${
+                    className={`underline ${
                       isRetrying ? 'text-terminal-dim' : 'text-terminal-cyan hover:text-terminal-green'
                     }`}
                   >
