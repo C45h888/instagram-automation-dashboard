@@ -21,6 +21,7 @@ import TerminalScrollArea from './TerminalScrollArea'
 import ActivityFeedPanel from './ActivityFeedPanel'
 import QueueMonitorPanel from './QueueMonitorPanel'
 import MetricsOverviewPanel from './MetricsOverviewPanel'
+import AnimatedSpiralBackground from './AnimatedSpiralBackground'
 
 type PanelView = 'chat' | 'feed' | 'queue' | 'metrics'
 
@@ -124,8 +125,16 @@ export default function AgentTerminalDashboard() {
   return (
     <div
       className="terminal-root fixed inset-0 z-[60] grid grid-rows-[auto_1fr_auto]"
-      style={{ background: '#000' }}
     >
+      {/* ── Animated Spiral Background ───────────────────────────────── */}
+      <div className="fixed inset-0 z-[-1] pointer-events-none" style={{ background: '#000' }}>
+        <AnimatedSpiralBackground
+          intensity={0.3}
+          maxParticles={300}
+          spawnRate={0.4}
+        />
+      </div>
+
       {/* ── Top Status Bar ───────────────────────────────────────────── */}
       <header>
         <div className="flex items-center justify-between">
