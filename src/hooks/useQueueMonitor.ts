@@ -6,6 +6,7 @@
  * Provides retry mutation for failed/DLQ items.
  */
 
+import { useCallback } from 'react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { AgentService } from '../services/agentService'
 import type { QueueStatusSummary, QueueDLQItem } from '@/types'
@@ -102,15 +103,15 @@ export function useQueueMonitor(): UseQueueMonitorResult {
       : null
 
   // ── Retry handler ─────────────────────────────────────────────────────────
-  const retryItem = async (queueId: string): Promise<void> => {
+  const retryItem = useCallback(async (queueId: string): Promise<void> => {
     await retryMutation.mutateAsync(queueId)
-  }
+  }, [retryMutation])
 
   // ── Refetch handler ──────────────────────────────────────────────────────
-  const refetch = () => {
+  const refetch = useCallback(() => {
     statusQuery.refetch()
     dlqQuery.refetch()
-  }
+  }, [statusQuery, dlqQuery])
 
   return {
     summary,

@@ -1,34 +1,59 @@
-Backend Analysis
-Framework: Express.js (Node.js), port 3001
-DB client: @supabase/supabase-js v2
-Queue infrastructure: None — no Bull, BullMQ, Redis, or any job queue exists in the backend
-Retry infrastructure: None on the backend side either — axios calls go straight to the Instagram Graph API with a 10-15s timeout, and errors just return HTTP 5xx
-
-What This Reveals About the Gap
-The data bus is:
-
-
-Agent decision → httpx POST → Express endpoint → axios → Instagram Graph API
-There are two failure windows, not one:
-
-Agent → Backend (what you identified): if Express is down/restarting, the httpx call fails after 2 retries and the action is silently dropped
-Backend → Instagram Graph API (equally dangerous): if the Graph API rate-limits or returns a 5xx, Express returns an error to the agent, which marks the job as failed — also silently dropped
-Neither side has a queue. A queued job at the agent level survives window #1 but still can't survive window #2 without the backend also handling its own retry. However, the backend returns the Instagram response directly, so the agent sees the full outcome — meaning queueing on the agent side alone covers both windows as long as the queue worker re-attempts the full agent→backend→IG chain.
-
-Updated Recommendation
-Given zero queue infrastructure on the backend, this pushes clearly toward Approach B (Queue-First) because:
-
-The backend is stateless Express — it will be restarted on deploys, and there's no graceful drain. Approach A's direct-first path hits this window every deploy.
-node-cron is the only scheduler in the backend — no job processing. Any retry logic must live in the agent.
-The backend already writes to Supabase on success (scheduled_posts, ugc_permissions, instagram_dm_messages) — so the agent queue can use the Supabase state to detect what got through and skip duplicates (idempotency key = scheduled_post_id, comment_id, permission_id).
-One important nuance for the queue design: separate idempotency handling per action type since some actions (publish-post) have a natural dedup key already in the DB (scheduled_post_id), while others (reply-comment) need the job_id embedded in the Redis entry to prevent double-firing.
-
-Which approach do you want to go with, and should I start building it?
-
-The background agent failed but I already got the backend info directly. The user's question was about which approach to use. I've already presented both approaches and done the backend analysis. Now I should wait for the user to decide.
-
-Already got it covered — I read the backend files directly while the agent was running. The analysis above has everything from the backend.
-
-The background agent hit a permissions wall in its sandboxed context, but the direct tools in this session have full access to /tmp/backend-api-e3d534b/. No action needed on your end.
-
-Ball's in your court — Approach A or B, and do you want to start building?
+[plugin:vite:react-babel] /Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/src/components/agent-terminal/TerminalScrollArea.tsx: Unexpected token, expected "," (34:6)
+  37 |     >
+/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/src/components/agent-terminal/TerminalScrollArea.tsx:34:6
+32 |      {/* overflow-anchor:none on wrapper + auto on anchor child = manual scroll anchoring */}
+33 |      <div
+34 |        ref={scrollRef}
+   |        ^
+35 |        className={`terminal-scroll overflow-y-auto overflow-x-hidden ${className}`}
+36 |        style={{ overflowAnchor: 'none' }}
+    at constructor (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:367:19)
+    at TypeScriptParserMixin.raise (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:6627:19)
+    at TypeScriptParserMixin.unexpected (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:6647:16)
+    at TypeScriptParserMixin.expect (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:6927:12)
+    at TypeScriptParserMixin.parseParenAndDistinguishExpression (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:11660:14)
+    at TypeScriptParserMixin.parseExprAtom (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:11326:23)
+    at TypeScriptParserMixin.parseExprAtom (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:4794:20)
+    at TypeScriptParserMixin.parseExprSubscripts (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:11076:23)
+    at TypeScriptParserMixin.parseUpdate (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:11061:21)
+    at TypeScriptParserMixin.parseMaybeUnary (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:11041:23)
+    at TypeScriptParserMixin.parseMaybeUnary (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:9852:18)
+    at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:10894:61)
+    at TypeScriptParserMixin.parseExprOps (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:10899:23)
+    at TypeScriptParserMixin.parseMaybeConditional (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:10876:23)
+    at TypeScriptParserMixin.parseMaybeAssign (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:10826:21)
+    at TypeScriptParserMixin.parseMaybeAssign (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:9801:20)
+    at TypeScriptParserMixin.parseExpressionBase (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:10779:23)
+    at /Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:10775:39
+    at TypeScriptParserMixin.allowInAnd (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:12422:16)
+    at TypeScriptParserMixin.parseExpression (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:10775:17)
+    at TypeScriptParserMixin.parseReturnStatement (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:13142:28)
+    at TypeScriptParserMixin.parseStatementContent (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:12798:21)
+    at TypeScriptParserMixin.parseStatementContent (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:9527:18)
+    at TypeScriptParserMixin.parseStatementLike (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:12767:17)
+    at TypeScriptParserMixin.parseStatementListItem (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:12747:17)
+    at TypeScriptParserMixin.parseBlockOrModuleBlockBody (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:13316:61)
+    at TypeScriptParserMixin.parseBlockBody (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:13309:10)
+    at TypeScriptParserMixin.parseBlock (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:13297:10)
+    at TypeScriptParserMixin.parseFunctionBody (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:12101:24)
+    at TypeScriptParserMixin.parseFunctionBodyAndFinish (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:12087:10)
+    at TypeScriptParserMixin.parseFunctionBodyAndFinish (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:9248:18)
+    at /Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:13445:12
+    at TypeScriptParserMixin.withSmartMixTopicForbiddingContext (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:12404:14)
+    at TypeScriptParserMixin.parseFunction (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:13444:10)
+    at TypeScriptParserMixin.parseExportDefaultExpression (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:13907:19)
+    at TypeScriptParserMixin.parseExportDefaultExpression (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:9487:18)
+    at TypeScriptParserMixin.parseExport (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:13828:25)
+    at TypeScriptParserMixin.parseExport (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:9470:20)
+    at TypeScriptParserMixin.parseStatementContent (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:12878:27)
+    at TypeScriptParserMixin.parseStatementContent (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:9527:18)
+    at TypeScriptParserMixin.parseStatementLike (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:12767:17)
+    at TypeScriptParserMixin.parseModuleItem (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:12744:17)
+    at TypeScriptParserMixin.parseBlockOrModuleBlockBody (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:13316:36)
+    at TypeScriptParserMixin.parseBlockBody (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:13309:10)
+    at TypeScriptParserMixin.parseProgram (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:12625:10)
+    at TypeScriptParserMixin.parseTopLevel (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:12615:25)
+    at TypeScriptParserMixin.parse (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:14492:10)
+    at TypeScriptParserMixin.parse (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:10144:18)
+    at parse (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/parser/lib/index.js:14526:38)
+    at parser (/Users/kamii/commited branch instagram automations front end /instagram-automation-dashboard/node_modules/@babel/core/lib/parser/index.js:41:34

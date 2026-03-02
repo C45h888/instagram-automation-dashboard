@@ -7,7 +7,7 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { useTerminalKeyboard } from '../../hooks/useTerminalKeyboard'
+import { useTerminalKeyboard } from '@/hooks/useTerminalKeyboard'
 
 interface TerminalInputProps {
   onSubmit: (input: string) => void

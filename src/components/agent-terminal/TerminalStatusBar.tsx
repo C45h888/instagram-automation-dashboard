@@ -5,6 +5,8 @@
  * Single-line monospace display — pure presentational component.
  */
 
+import { memo, useState, useEffect } from 'react'
+
 interface TerminalStatusBarProps {
   agentStatus: 'alive' | 'down'
   uptime: string
@@ -14,7 +16,7 @@ interface TerminalStatusBarProps {
   isLoading: boolean
 }
 
-export default function TerminalStatusBar({
+const TerminalStatusBar = memo(function TerminalStatusBar({
   agentStatus,
   uptime,
   activeTaskCount,
@@ -22,7 +24,13 @@ export default function TerminalStatusBar({
   queuedCount,
   isLoading,
 }: TerminalStatusBarProps) {
-  const now = new Date()
+  const [now, setNow] = useState(() => new Date())
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000)
+    return () => clearInterval(id)
+  }, [])
+
   const timestamp = now.toISOString().replace('T', ' ').slice(0, 19) + ' UTC'
 
   if (isLoading) {
@@ -70,8 +78,10 @@ export default function TerminalStatusBar({
         </span>
       </div>
 
-      {/* Timestamp */}
+      {/* Live timestamp — ticks every second */}
       <span className="text-terminal-dim hidden md:inline">{timestamp}</span>
     </div>
   )
-}
+})
+
+export default TerminalStatusBar

@@ -28,6 +28,7 @@ export default function TerminalScrollArea({
     }
   }, [autoScroll, children])
 
+  // overflow-anchor:none on wrapper + auto on anchor child = manual scroll anchoring
   return (
     <div
       ref={scrollRef}

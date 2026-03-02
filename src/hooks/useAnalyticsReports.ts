@@ -52,6 +52,7 @@ export function useAnalyticsReports(
     },
     enabled:              !!businessAccountId,
     staleTime:            10 * 60 * 1000,
+    refetchInterval:      10 * 60 * 1000,
     gcTime:               20 * 60 * 1000,
     retry:                3,
     retryDelay:           (i) => Math.min(1000 * 2 ** i, 30_000),

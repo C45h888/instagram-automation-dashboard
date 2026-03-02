@@ -5,11 +5,11 @@
  * Shows summary counts by action_type × status, with retry capability.
  */
 
-import { useMemo } from 'react'
+import { useMemo, memo } from 'react'
 import type { QueueStatusSummary, QueueDLQItem } from '@/types'
 
 interface QueueMonitorPanelProps {
-  summary: QueueStatusSummary | null
+  summary: QueueStatusSummary
   dlqItems: QueueDLQItem[]
   isLoading: boolean
   error: string | null
@@ -23,13 +23,13 @@ interface ParsedSummary {
   byAction: Record<string, { pending: number; processing: number; sent: number; failed: number; dlq: number }>
 }
 
-function parseSummary(summary: QueueStatusSummary | null): ParsedSummary {
+function parseSummary(summary: QueueStatusSummary): ParsedSummary {
   const result: ParsedSummary = {
     actionTypes: [],
     byAction: {},
   }
 
-  if (!summary?.byKey) return result
+  if (!summary.byKey) return result
 
   const actionTypes = new Set<string>()
 
@@ -86,7 +86,7 @@ function getStatusColor(status: string, count: number): string {
   }
 }
 
-export default function QueueMonitorPanel({
+const QueueMonitorPanel = memo(function QueueMonitorPanel({
   summary,
   dlqItems,
   isLoading,
@@ -96,8 +96,8 @@ export default function QueueMonitorPanel({
 }: QueueMonitorPanelProps) {
   const parsed = useMemo(() => parseSummary(summary), [summary])
 
-  // Loading state
-  if (isLoading && !summary) {
+  // Loading state — summary always has default value, check byKey emptiness instead
+  if (isLoading && Object.keys(summary.byKey).length === 0) {
     return (
       <div className="h-full p-3">
         <div className="text-terminal-dim text-xs mb-2">-- QUEUE MONITOR --</div>
@@ -198,4 +198,6 @@ export default function QueueMonitorPanel({
       )}
     </div>
   )
-}
+})
+
+export default QueueMonitorPanel

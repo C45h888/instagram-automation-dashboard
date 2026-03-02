@@ -5,7 +5,7 @@
  * Shows reverse-chronological list of agent operations.
  */
 
-import { useMemo } from 'react'
+import { useMemo, memo } from 'react'
 import type { AuditLogEntry } from '@/types'
 
 interface ActivityFeedPanelProps {
@@ -69,7 +69,7 @@ function formatEvent(event: AuditLogEntry): string {
   }
 }
 
-export default function ActivityFeedPanel({
+const ActivityFeedPanel = memo(function ActivityFeedPanel({
   events,
   isLoading,
   error,
@@ -113,16 +113,16 @@ export default function ActivityFeedPanel({
         <div className="text-terminal-dim text-xs">no recent activity</div>
       ) : (
         <div className="space-y-1">
-          {sortedEvents.map((event, index) => {
+          {sortedEvents.map((event) => {
             const time = formatTime(event.created_at)
             const eventText = formatEvent(event)
             const eventColor = getEventColor(event.event_type)
-            const isError = event.success === false || 
-              event.event_type === 'post_failed_permanent' || 
+            const isError = event.success === false ||
+              event.event_type === 'post_failed_permanent' ||
               event.event_type === 'auth_failure'
 
             return (
-              <div key={`${event.id}-${index}`} className="text-xs font-mono">
+              <div key={event.id} className="text-xs font-mono">
                 <span className="text-terminal-dim">[{time}]</span>{' '}
                 {isError && <span className="text-terminal-red">[ERROR] </span>}
                 <span className={isError ? 'text-terminal-red' : eventColor}>
@@ -135,4 +135,6 @@ export default function ActivityFeedPanel({
       )}
     </div>
   )
-}
+})
+
+export default ActivityFeedPanel

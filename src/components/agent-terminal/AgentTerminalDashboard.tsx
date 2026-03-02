@@ -6,15 +6,14 @@
  * Responsive: sidebars collapse on smaller screens.
  */
 
-import { useState, useCallback, useMemo, useEffect } from 'react'
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAuthStore } from '../../stores/authStore'
-import { useAgentHealth } from '../../hooks/useAgentHealth'
-import { useOversightChat } from '../../hooks/useOversightChat'
-import { useQueueMonitor } from '../../hooks/useQueueMonitor'
-import { useActivityFeed } from '../../hooks/useActivityFeed'
-import { useAnalyticsReports } from '@/hooks/useAnalyticsReports'
-import ErrorBoundary from '../ErrorBoundary'
+import { useAuthStore } from '@/stores/authStore'
+import { useAgentHealth } from '@/hooks/useAgentHealth'
+import { useOversightChat } from '@/hooks/useOversightChat'
+import { useQueueMonitor } from '@/hooks/useQueueMonitor'
+import { useActivityFeed } from '@/hooks/useActivityFeed'
+import ErrorBoundary from '@/components/ErrorBoundary'
 import TerminalStatusBar from './TerminalStatusBar'
 import TerminalInput from './TerminalInput'
 import TerminalScrollArea from './TerminalScrollArea'
@@ -27,15 +26,9 @@ type PanelView = 'chat' | 'feed' | 'queue' | 'metrics'
 
 /** Hook to track previous value for comparison */
 function usePrevious<T>(value: T): T | undefined {
-  const [prev, setPrev] = useState<T | undefined>(undefined)
-  const [curr, setCurr] = useState<T>(value)
-
-  useEffect(() => {
-    setPrev(curr)
-    setCurr(value)
-  }, [value])
-
-  return prev
+  const ref = useRef<T | undefined>(undefined)
+  useEffect(() => { ref.current = value })
+  return ref.current
 }
 
 export default function AgentTerminalDashboard() {
@@ -47,13 +40,9 @@ export default function AgentTerminalDashboard() {
   const oversightChat = useOversightChat(businessAccountId)
   const queueMonitor = useQueueMonitor()
   const activityFeed = useActivityFeed(businessAccountId)
-  const analytics = useAnalyticsReports(businessAccountId, 2)
 
   // Panel visibility (responsive)
   const [activeView, setActiveView] = useState<PanelView>('chat')
-
-  // Mobile detection for responsive layout
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 1024)
 
   // Track previous message length for auto-scroll
   const prevMessageLength = usePrevious(oversightChat.messages.length)
@@ -61,18 +50,10 @@ export default function AgentTerminalDashboard() {
   // Command history for keyboard navigation
   const [commandHistory, setCommandHistory] = useState<string[]>([])
 
-  // Handle window resize for responsive layout
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 1024)
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [])
-
-  // Clear chat messages (Ctrl+L)
+  // Clear chat messages (Ctrl+L) — re-selects active session to reset scroll/display
   const handleClearScreen = useCallback(() => {
-    // Note: Messages are persisted in Supabase, this only clears the display
-    // To truly clear, we'd need to update the session in Supabase
-    oversightChat.selectSession(oversightChat.activeSession?.id || '')
+    if (!oversightChat.activeSession) return
+    oversightChat.selectSession(oversightChat.activeSession.id)
   }, [oversightChat])
 
   // Derive uptime from heartbeats
@@ -108,10 +89,7 @@ export default function AgentTerminalDashboard() {
       if (!oversightChat.activeSession) {
         await oversightChat.startSession()
       }
-      // Small delay to ensure session is created before sending
-      setTimeout(() => {
-        oversightChat.sendMessage(input)
-      }, 100)
+      oversightChat.sendMessage(input)
     },
     [oversightChat]
   )
@@ -127,13 +105,7 @@ export default function AgentTerminalDashboard() {
       className="terminal-root fixed inset-0 z-[60] grid grid-rows-[auto_1fr_auto]"
     >
       {/* ── Animated Spiral Background ───────────────────────────────── */}
-      <div className="fixed inset-0 z-[-1] pointer-events-none" style={{ background: '#000' }}>
-        <AnimatedSpiralBackground
-          intensity={0.3}
-          maxParticles={300}
-          spawnRate={0.4}
-        />
-      </div>
+      <AnimatedSpiralBackground />
 
       {/* ── Top Status Bar ───────────────────────────────────────────── */}
       <header>
@@ -188,7 +160,7 @@ export default function AgentTerminalDashboard() {
       )}
 
       {/* ── Mobile Tab Bar (< 1024px) ────────────────────────────────── */}
-      <div className="flex lg:hidden border-b border-terminal-border bg-terminal-bg-alt" style={{ display: isMobile ? 'flex' : 'none' }}>
+      <div className="flex lg:hidden border-b border-terminal-border bg-terminal-bg-alt">
         {(['feed', 'chat', 'queue', 'metrics'] as const).map((view) => (
           <button
             key={view}
@@ -208,7 +180,7 @@ export default function AgentTerminalDashboard() {
       <div className="min-h-0 grid grid-cols-1 lg:grid-cols-[240px_1fr_240px_260px] xl:grid-cols-[280px_1fr_280px_260px] overflow-hidden">
         {/* Left Panel — Activity Feed */}
         <aside
-          className={`border-r border-terminal-border bg-terminal-bg overflow-hidden ${
+          className={`border-r border-terminal-border bg-transparent overflow-hidden ${
             activeView === 'feed' ? 'flex' : 'hidden lg:flex'
           }`}
         >
@@ -223,7 +195,7 @@ export default function AgentTerminalDashboard() {
 
         {/* Center Panel — Oversight Chat */}
         <main
-          className={`bg-terminal-bg overflow-hidden flex flex-col ${
+          className={`bg-transparent overflow-hidden flex flex-col ${
             activeView === 'chat' ? 'flex' : 'hidden lg:flex'
           }`}
         >
@@ -295,7 +267,7 @@ export default function AgentTerminalDashboard() {
 
         {/* Right Panel — Queue Monitor */}
         <aside
-          className={`border-l border-terminal-border bg-terminal-bg overflow-hidden ${
+          className={`border-l border-terminal-border bg-transparent overflow-hidden ${
             activeView === 'queue' ? 'flex' : 'hidden lg:flex'
           }`}
         >
@@ -313,7 +285,7 @@ export default function AgentTerminalDashboard() {
 
         {/* Right Panel — Metrics Overview */}
         <aside
-          className={`border-l border-terminal-border bg-terminal-bg overflow-hidden ${
+          className={`border-l border-terminal-border bg-transparent overflow-hidden ${
             activeView === 'metrics' ? 'flex' : 'hidden xl:flex'
           }`}
         >

@@ -8,7 +8,7 @@
  * - Escape: Close/clear
  */
 
-import { useEffect, useRef, useCallback, useState } from 'react'
+import { useEffect, useRef, useCallback } from 'react'
 
 const STORAGE_KEY = 'terminal-command-history'
 
@@ -55,7 +55,6 @@ export function useTerminalKeyboard({
   const historyRef = useRef<string[]>([])
   const historyIndexRef = useRef<number>(-1)
   const elementRef = useRef<HTMLElement | null>(null)
-  const [historyLoaded, setHistoryLoaded] = useState(false)
 
   // Load history from sessionStorage on mount
   useEffect(() => {
@@ -68,7 +67,6 @@ export function useTerminalKeyboard({
     } catch (e) {
       console.warn('Failed to load terminal history:', e)
     }
-    setHistoryLoaded(true)
   }, [])
 
   // Save history to sessionStorage when it changes
@@ -179,7 +177,8 @@ export function useTerminalKeyboard({
     return () => {
       element.removeEventListener('keydown', handleKeyDown)
     }
-  }, [inputFocused, isStreaming, onClearScreen, onCancel, onEscape, historyUp, historyDown])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inputFocused, isStreaming, onClearScreen, onCancel, onEscape, historyUp, historyDown, elementRef])
 
   return {
     register,

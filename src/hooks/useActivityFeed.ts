@@ -7,7 +7,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query'
-import { useMemo } from 'react'
+import { useMemo, useCallback } from 'react'
 import { AgentService } from '../services/agentService'
 import type { AuditLogEntry } from '@/types'
 
@@ -65,9 +65,9 @@ export function useActivityFeed(businessAccountId: string | null): UseActivityFe
     : null
 
   // ── Refetch handler ─────────────────────────────────────────────────────────
-  const refetch = () => {
+  const refetch = useCallback(() => {
     rawQuery.refetch()
-  }
+  }, [rawQuery])
 
   return {
     events,
