@@ -1,5 +1,5 @@
 # ================================
-# Unified Stack — All 5 Services
+# Unified Stack — All 6 Services
 # ================================
 # Dashboard services build locally (faster, uses current working code).
 # Agent builds from GitHub remote (agent/ subfolder as build context).
@@ -14,8 +14,10 @@
 #   docker compose -f docker-compose.unified.yml logs -f
 #   docker compose -f docker-compose.unified.yml ps
 #
-# One-time Ollama model pull (after first up):
-#   docker exec -it ollama ollama pull hf.co/MaziyarPanahi/Nemotron-Orchestrator-8B-GGUF:Q5_K_M
+# Startup order (automatic):
+#   ollama → ollama-init (pulls model) → langchain-agent
+#   redis  ──────────────────────────────────────────────┘
+#   backend ─────────────────────────────────────────────┘
 # ================================
 
 version: '3.9'
@@ -29,6 +31,13 @@ services:
     image: ollama/ollama:latest
     container_name: ollama
     restart: unless-stopped
+     # Wait for Ollama to be ready, then pull the model (if not already cached).
+    # startup.sh uses `ollama pull` which is available inside this container.
+    command: >
+      sh -c "ollama serve &
+             until curl -sf http://localhost:11434/api/tags > /dev/null 2>&1; do sleep 3; done &&
+             bash /startup.sh;
+             wait"
     ports:
       - "11434:11434"
     volumes:
@@ -49,6 +58,25 @@ services:
         reservations:
           cpus: '2.0'
           memory: 6G
+
+  # ================================
+  # Ollama Model Init (one-shot)
+  # Pulls the Nemotron model into the shared ollama-data volume.
+  # On first boot: downloads ~5GB — langchain-agent waits for this to finish.
+  # On subsequent boots: model already cached, completes in seconds.
+  # ================================
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: ollama-init
+    restart: "no"
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    entrypoint: ["ollama", "pull", "hf.co/MaziyarPanahi/Nemotron-Orchestrator-8B-GGUF:Q5_K_M"]
+    depends_on:
+      ollama:
+        condition: service_healthy
+    networks:
+      - instagram-network
 
   # ================================
   # Redis (agent rate-limiter + outbound job queue)
@@ -94,7 +122,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3001
-      - AGENT_URL=http://langchain-agent:3002    # Docker-internal: backend → agent
+      - AGENT_URL=${AGENT_URL:-http://langchain-agent:3002}    # Docker-internal: backend → agent
     volumes:
       - backend-logs:/app/logs
     networks:
@@ -133,10 +161,10 @@ services:
       - OLLAMA_HOST=http://ollama:11434          # Docker-internal: agent → ollama
       - REDIS_HOST=redis                         # Docker-internal: agent → redis
       - REDIS_PORT=6379
-      - BACKEND_API_URL=http://backend:3001      # Docker-internal: agent → backend
+      - BACKEND_API_URL=${BACKEND_API_URL:-http://backend:3001}      # Docker-internal: agent → backend
     depends_on:
-      ollama:
-        condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully  # Model must be pulled before agent starts
       redis:
         condition: service_healthy
       backend:
@@ -176,6 +204,7 @@ services:
         VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
         VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
         VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+        VITE_AGENT_URL: ${VITE_AGENT_URL}
         VITE_WEBHOOK_URL: ${VITE_WEBHOOK_URL}
         VITE_WEBHOOK_VERIFY_TOKEN: ${VITE_WEBHOOK_VERIFY_TOKEN}
         VITE_SHOW_ADMIN_LINK: ${VITE_SHOW_ADMIN_LINK}

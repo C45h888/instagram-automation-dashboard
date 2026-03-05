@@ -247,13 +247,17 @@ Login to your domain registrar's DNS management panel and add these records:
 | A | @ | YOUR_VPS_IP | 3600 |
 | A | api | YOUR_VPS_IP | 3600 |
 | A | www | YOUR_VPS_IP | 3600 |
+| A | agent | YOUR_VPS_IP | 3600 |
 
 **Example for 888intelligenceautomation.in:**
 ```
 A     @     123.45.67.89    3600   (points 888intelligenceautomation.in)
 A     api   123.45.67.89    3600   (points api.888intelligenceautomation.in)
 A     www   123.45.67.89    3600   (points www.888intelligenceautomation.in)
+A     agent 123.45.67.89    3600   (points agent.888intelligenceautomation.in)
 ```
+
+> **Important:** The `agent` subdomain is required for the LangChain Oversight Brain agent. Configure this A record in Cloudflare with Proxy status set to "Proxied" (not "DNS only").
 
 ### Step 3: Verify DNS Propagation
 
@@ -261,12 +265,14 @@ A     www   123.45.67.89    3600   (points www.888intelligenceautomation.in)
 # Check DNS resolution (may take 5-30 minutes)
 nslookup 888intelligenceautomation.in
 nslookup api.888intelligenceautomation.in
+nslookup agent.888intelligenceautomation.in
 
 # Or use dig
 dig 888intelligenceautomation.in +short
 dig api.888intelligenceautomation.in +short
+dig agent.888intelligenceautomation.in +short
 
-# Both should return YOUR_VPS_IP
+# All should return YOUR_VPS_IP
 ```
 
 **Wait for DNS propagation before proceeding to SSL setup!**

@@ -41,6 +41,7 @@ const rawOrigins = [
   'https://www.888intelligenceautomation.in',  // Production www
   'https://api.888intelligenceautomation.in',  // Production API
   'https://app.888intelligenceautomation.in',  // Production app
+  'https://agent.888intelligenceautomation.in', // Production agent
   'http://localhost:8080',                     // Docker: frontend nginx (host port 8080 → container :80)
   'http://localhost:3000',                     // Vite dev server (outside Docker)
   'http://localhost:3002',                     // Agent (development)
