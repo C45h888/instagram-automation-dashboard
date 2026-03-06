@@ -77,51 +77,50 @@ async function exchangeForPageToken(userAccessToken) {
       };
     }
 
-    // ===== STEP 3: Find page with Instagram Business account =====
-    const pageWithIG = pages.find(
+    // ===== STEP 3: Filter all pages with an Instagram Business account =====
+    const pagesWithIG = pages.filter(
       page => page.instagram_business_account && page.instagram_business_account.id
     );
 
-    if (!pageWithIG) {
+    if (pagesWithIG.length === 0) {
       console.error('❌ No Instagram Business account connected to any page');
-
-      // Log page names for debugging
       const pageNames = pages.map(p => p.name).join(', ');
       console.error(`   Pages found: ${pageNames}`);
-
       return {
         success: false,
-        error: 'No Instagram Business Account connected. Please connect an Instagram Business Account to your Facebook Page.'
+        error: 'No Instagram Business Account connected. Please connect an Instagram Business Account to your Facebook Page.',
+        errorCode: 'NO_IG_BUSINESS_ACCOUNT'
       };
     }
 
-    if (pages.length > 1) {
-      console.warn('⚠️  User has multiple Facebook pages');
-      console.warn(`   Using page with IG: ${pageWithIG.name} (ID: ${pageWithIG.id})`);
+    // ===== STEP 4: Return — single page auto-selects, multiple pages require picker =====
+    if (pagesWithIG.length === 1) {
+      const page = pagesWithIG[0];
+      console.log(`✅ Auto-selected Facebook page: "${page.name}" (ID: ${page.id})`);
+      console.log(`✅ Instagram Business account: ${page.instagram_business_account.id}`);
+      return {
+        success: true,
+        requiresSelection: false,
+        pageAccessToken: page.access_token,
+        pageId: page.id,
+        pageName: page.name,
+        igBusinessAccountId: page.instagram_business_account.id,
+        tokenType: 'page'
+      };
     }
 
-    console.log(`✅ Selected Facebook page: "${pageWithIG.name}" (ID: ${pageWithIG.id})`);
-    console.log(`   Page token length: ${pageWithIG.access_token?.length || 0}`);
-    console.log(`✅ Found Instagram Business account: ${pageWithIG.instagram_business_account.id}`);
-
-    // ===== STEP 4: Return success response =====
-    const result = {
+    // Multiple pages — return full list for frontend page picker modal
+    console.log(`⚠️  Multiple pages with IG accounts found (${pagesWithIG.length}), returning list for picker`);
+    return {
       success: true,
-      pageAccessToken: pageWithIG.access_token,
-      pageId: pageWithIG.id,
-      pageName: pageWithIG.name,
-      igBusinessAccountId: pageWithIG.instagram_business_account.id,
-      expiresIn: 5184000, // 60 days (standard for page tokens)
-      tokenType: 'page'
+      requiresSelection: true,
+      pages: pagesWithIG.map(page => ({
+        pageId: page.id,
+        pageName: page.name,
+        pageAccessToken: page.access_token,
+        igBusinessAccountId: page.instagram_business_account.id
+      }))
     };
-
-    console.log('✅ Page token exchange successful');
-    console.log('   Page ID:', result.pageId);
-    console.log('   Page Name:', result.pageName);
-    console.log('   IG Business Account:', result.igBusinessAccountId);
-    console.log('   Expires In:', result.expiresIn, 'seconds (60 days)');
-
-    return result;
 
   } catch (error) {
     console.error('❌ Page token exchange failed');
