@@ -411,7 +411,7 @@ async function storePageToken({ userId, igBusinessAccountId, pageAccessToken, pa
         last_sync_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }, {
-        onConflict: 'instagram_business_id', // FIXED: Only instagram_business_id has unique constraint
+        onConflict: 'user_id,instagram_business_id',
         ignoreDuplicates: false
       })
       .select()

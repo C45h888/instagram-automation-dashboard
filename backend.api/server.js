@@ -308,7 +308,6 @@ app.get('/status', async (req, res) => {
     },
     configuration: {
       supabase_configured: !!process.env.SUPABASE_SERVICE_KEY,
-      encryption_enabled: !!process.env.ENCRYPTION_KEY,
       agent_api_key_configured: !!process.env.AGENT_API_KEY
     }
   };
@@ -579,7 +578,6 @@ async function startServer() {
   console.log(`   Supabase URL: ${process.env.SUPABASE_URL || 'Not configured'}`);
   console.log(`   Service Key: ${process.env.SUPABASE_SERVICE_KEY ? '✅ Configured' : '❌ Missing'}`);
   console.log(`   Anon Key: ${process.env.SUPABASE_ANON_KEY ? '✅ Configured' : '❌ Missing'}`);
-  console.log(`   Encryption: ${process.env.ENCRYPTION_KEY ? '✅ Enabled' : '⚠️  Disabled'}`);
 
   // Initialize Supabase with resilient connection
   console.log('\n🔄 Initializing Supabase connection...');
@@ -654,7 +652,7 @@ async function startServer() {
     console.log('\n🔐 Security:');
     console.log('   CORS: Configured for allowed origins');
     console.log('   Database: Direct connection with IP whitelisting');
-    console.log('   Encryption: ' + (process.env.ENCRYPTION_KEY ? 'Enabled' : 'Disabled'));
+    console.log('   Encryption: Vault-based (Supabase pgsodium)');
 
     console.log('\n' + '='.repeat(60) + '\n');
   });

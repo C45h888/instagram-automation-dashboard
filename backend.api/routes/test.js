@@ -394,35 +394,12 @@ router.post('/test-instagram', async (req, res) => {
     });
     
     if (!linkResult.success) throw new Error(linkResult.error);
-    
-    // Test storing credentials
-    const credResult = await supabaseHelpers.storeInstagramCredentials(
-      testUserId,
-      linkResult.data.id,
-      {
-        accessToken: 'test_token_' + Date.now(),
-        refreshToken: 'test_refresh_' + Date.now(),
-        scope: ['instagram_basic', 'instagram_manage_comments'],
-        expiresAt: new Date(Date.now() + 3600000).toISOString()
-      }
-    );
-    
-    if (!credResult.success) throw new Error(credResult.error);
-    
-    // Test retrieving credentials
-    const getCredResult = await supabaseHelpers.getInstagramCredentials(
-      testUserId,
-      linkResult.data.id
-    );
-    
+
     res.json({
       test: 'instagram_helpers',
       success: true,
       results: {
-        accountLinked: linkResult.success,
-        credentialsStored: credResult.success,
-        credentialsRetrieved: getCredResult.success,
-        encryptionWorking: credResult.data?.access_token_encrypted?.includes('isEncrypted')
+        accountLinked: linkResult.success
       },
       cleanup: {
         message: 'Test data created with test IDs',

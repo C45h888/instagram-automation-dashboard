@@ -2505,6 +2505,7 @@ router.post('/refresh-token', async (req, res) => {
       .select('expires_at')
       .eq('user_id', userId)
       .eq('business_account_id', businessAccountId)
+      .eq('token_type', 'page')
       .single();
 
     if (fetchError || !credentials) {
@@ -2606,23 +2607,33 @@ router.post('/refresh-token', async (req, res) => {
 
       console.log('[Token] New expiration date:', newExpiresAt.toISOString());
 
-      // ===== STEP 6: Update database with new token =====
+      // ===== STEP 6: Encrypt the refreshed token then update database =====
+      const { data: newEncryptedToken, error: encryptErr } = await supabase
+        .rpc('encrypt_instagram_token', { token: access_token });
+
+      if (encryptErr || !newEncryptedToken) {
+        console.error('[Token] ❌ Failed to encrypt refreshed token:', encryptErr?.message);
+        throw new Error(`Failed to encrypt refreshed token: ${encryptErr?.message || 'null result'}`);
+      }
+
       const { error: updateError } = await supabase
         .from('instagram_credentials')
         .update({
-          page_access_token: access_token,
+          access_token_encrypted: newEncryptedToken,
           expires_at: newExpiresAt.toISOString(),
+          last_refreshed_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
         .eq('user_id', userId)
-        .eq('business_account_id', businessAccountId);
+        .eq('business_account_id', businessAccountId)
+        .eq('token_type', 'page');
 
       if (updateError) {
         console.error('[Token] ❌ Database update failed:', updateError.message);
         throw updateError;
       }
 
-      console.log('[Token] ✅ Database updated with new token and expiration');
+      console.log('[Token] ✅ Database updated with encrypted token and new expiration');
 
       // Bust cached credentials so the next call fetches the refreshed token from DB
       clearCredentialCache(businessAccountId);
@@ -2868,7 +2879,7 @@ async function callRefreshTokenEndpoint(userId, businessAccountId) {
  * instead of using background cron jobs or auto-refresh mechanisms.
  *
  * Flow:
- * 1. Retrieve page_access_token from instagram_credentials table
+ * 1. Retrieve and decrypt access_token_encrypted from instagram_credentials table
  * 2. Call Meta's /me endpoint as a lightweight "ping" to validate the token
  * 3. Return status: 'active' if successful, 'expired' if authentication fails
  *
@@ -3375,25 +3386,37 @@ router.post('/sync/ugc', async (req, res) => {
     // Get Supabase client
     const supabase = getSupabaseAdmin();
 
-    // Get credentials
-    const { data: credentials, error: credError } = await supabase
-      .from('instagram_credentials')
-      .select('instagram_business_id, page_access_token')
-      .eq('business_account_id', businessAccountId)
+    // Get instagram_business_id and user_id from the business accounts table
+    const { data: bizAccount, error: bizError } = await supabase
+      .from('instagram_business_accounts')
+      .select('user_id, instagram_business_id')
+      .eq('id', businessAccountId)
       .single();
 
-    if (credError || !credentials) {
+    if (bizError || !bizAccount) {
       return res.status(404).json({
         success: false,
-        error: 'Credentials not found'
+        error: 'Business account not found'
+      });
+    }
+
+    // Retrieve and decrypt the page token via the proper token service
+    let pageToken;
+    try {
+      pageToken = await retrievePageToken(bizAccount.user_id, businessAccountId);
+    } catch (tokenErr) {
+      return res.status(401).json({
+        success: false,
+        error: tokenErr.message,
+        code: tokenErr.code || 'TOKEN_ERROR'
       });
     }
 
     // Execute sync
     const result = await syncTaggedPosts(
       businessAccountId,
-      credentials.instagram_business_id,
-      credentials.page_access_token
+      bizAccount.instagram_business_id,
+      pageToken
     );
 
     res.json(result);
@@ -3430,25 +3453,37 @@ router.post('/sync/posts', async (req, res) => {
     // Get Supabase client
     const supabase = getSupabaseAdmin();
 
-    // Get credentials
-    const { data: credentials, error: credError } = await supabase
-      .from('instagram_credentials')
-      .select('instagram_business_id, page_access_token')
-      .eq('business_account_id', businessAccountId)
+    // Get instagram_business_id and user_id from the business accounts table
+    const { data: bizAccount, error: bizError } = await supabase
+      .from('instagram_business_accounts')
+      .select('user_id, instagram_business_id')
+      .eq('id', businessAccountId)
       .single();
 
-    if (credError || !credentials) {
+    if (bizError || !bizAccount) {
       return res.status(404).json({
         success: false,
-        error: 'Credentials not found'
+        error: 'Business account not found'
+      });
+    }
+
+    // Retrieve and decrypt the page token via the proper token service
+    let pageToken;
+    try {
+      pageToken = await retrievePageToken(bizAccount.user_id, businessAccountId);
+    } catch (tokenErr) {
+      return res.status(401).json({
+        success: false,
+        error: tokenErr.message,
+        code: tokenErr.code || 'TOKEN_ERROR'
       });
     }
 
     // Execute sync
     const result = await syncBusinessPosts(
       businessAccountId,
-      credentials.instagram_business_id,
-      credentials.page_access_token
+      bizAccount.instagram_business_id,
+      pageToken
     );
 
     res.json(result);

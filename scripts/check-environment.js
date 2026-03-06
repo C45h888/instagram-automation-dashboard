@@ -37,7 +37,6 @@ if (fs.existsSync('.env')) {
     { key: 'SUPABASE_URL', desc: 'Database URL' },
     { key: 'SUPABASE_SERVICE_KEY', desc: 'Service role key' },
     { key: 'SUPABASE_ANON_KEY', desc: 'Anonymous key' },
-    { key: 'ENCRYPTION_KEY', desc: 'Token encryption' },
     { key: 'CLOUDFLARE_TUNNEL_TOKEN', desc: 'API tunnel token' },
     { key: 'PORT', desc: 'Backend port' },
     { key: 'STATIC_IP', desc: 'Backend static IP' }

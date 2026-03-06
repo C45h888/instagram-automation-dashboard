@@ -30,7 +30,6 @@ const requiredAlways = [
 
 // Required for production
 const requiredProduction = [
-  { key: 'ENCRYPTION_KEY', pattern: /^[a-f0-9]{64}$/, desc: '32-byte hex encryption key' },
   { key: 'CLOUDFLARE_TUNNEL_TOKEN', pattern: /^eyJ/, desc: 'Cloudflare tunnel token' },
   { key: 'STATIC_IP', pattern: /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/, desc: 'Backend static IP for Supabase whitelist' }
 ];

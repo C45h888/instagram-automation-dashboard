@@ -39,11 +39,6 @@ const getConfig = () => {
   return SUPABASE_CONFIG[env] || SUPABASE_CONFIG.development;
 };
 
-// Encryption configuration
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
-const algorithm = 'aes-256-gcm';
-const key = ENCRYPTION_KEY ? Buffer.from(ENCRYPTION_KEY, 'hex') : null;
-
 // =============================================================================
 // MODULE STATE
 // =============================================================================
@@ -326,65 +321,6 @@ async function checkHealth() {
 }
 
 // =============================================================================
-// ENCRYPTION UTILITIES (Preserved for Instagram credentials)
-// =============================================================================
-
-const encrypt = (text) => {
-  if (!key) {
-    console.warn('⚠️  Encryption key not available - storing unencrypted');
-    return { encrypted: text, iv: null, authTag: null, isEncrypted: false };
-  }
-  
-  try {
-    const iv = crypto.randomBytes(16);
-    const cipher = crypto.createCipheriv(algorithm, key, iv);
-    
-    let encrypted = cipher.update(text, 'utf8', 'hex');
-    encrypted += cipher.final('hex');
-    
-    const authTag = cipher.getAuthTag();
-    
-    return {
-      encrypted,
-      iv: iv.toString('hex'),
-      authTag: authTag.toString('hex'),
-      isEncrypted: true
-    };
-  } catch (error) {
-    console.error('Encryption error:', error);
-    throw new Error('Failed to encrypt data');
-  }
-};
-
-const decrypt = (encryptedData) => {
-  if (!encryptedData.isEncrypted || !encryptedData.iv || !encryptedData.authTag) {
-    return encryptedData.encrypted;
-  }
-  
-  if (!key) {
-    throw new Error('Encryption key not available for decryption');
-  }
-  
-  try {
-    const decipher = crypto.createDecipheriv(
-      algorithm,
-      key,
-      Buffer.from(encryptedData.iv, 'hex')
-    );
-    
-    decipher.setAuthTag(Buffer.from(encryptedData.authTag, 'hex'));
-    
-    let decrypted = decipher.update(encryptedData.encrypted, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
-    
-    return decrypted;
-  } catch (error) {
-    console.error('Decryption error:', error);
-    throw new Error('Failed to decrypt data');
-  }
-};
-
-// =============================================================================
 // AUDIT LOGGING (Direct to Supabase)
 // =============================================================================
 
@@ -567,86 +503,6 @@ const supabaseHelpers = {
     }
   },
 
-  async storeInstagramCredentials(userId, businessAccountId, credentials) {
-    try {
-      const admin = getSupabaseAdmin();
-      if (!admin) throw new Error('Database not connected');
-      
-      const encryptedAccessToken = encrypt(credentials.accessToken);
-      const encryptedRefreshToken = credentials.refreshToken ? encrypt(credentials.refreshToken) : null;
-      
-      const { data, error } = await admin
-        .from('instagram_credentials')
-        .insert({
-          user_id: userId,
-          business_account_id: businessAccountId,
-          access_token_encrypted: JSON.stringify(encryptedAccessToken),
-          refresh_token_encrypted: encryptedRefreshToken ? JSON.stringify(encryptedRefreshToken) : null,
-          token_type: 'Bearer',
-          scope: credentials.scope || [],
-          expires_at: credentials.expiresAt,
-          is_active: true
-        })
-        .select()
-        .single();
-      
-      if (error) throw error;
-      
-      await logAudit('instagram_credentials_stored', userId, {
-        action: 'create',
-        resource_type: 'instagram_credentials',
-        resource_id: data.id,
-        details: { 
-          business_account_id: businessAccountId, 
-          encrypted: encryptedAccessToken.isEncrypted 
-        }
-      });
-      
-      return { success: true, data };
-    } catch (error) {
-      console.error('Error storing credentials:', error);
-      return { success: false, error: error.message };
-    }
-  },
-
-  async getInstagramCredentials(userId, businessAccountId) {
-    try {
-      const admin = getSupabaseAdmin();
-      if (!admin) throw new Error('Database not connected');
-      
-      const { data, error } = await admin
-        .from('instagram_credentials')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('business_account_id', businessAccountId)
-        .eq('is_active', true)
-        .single();
-      
-      if (error) throw error;
-      
-      const accessTokenData = JSON.parse(data.access_token_encrypted);
-      const decryptedAccessToken = decrypt(accessTokenData);
-      
-      let decryptedRefreshToken = null;
-      if (data.refresh_token_encrypted) {
-        const refreshTokenData = JSON.parse(data.refresh_token_encrypted);
-        decryptedRefreshToken = decrypt(refreshTokenData);
-      }
-      
-      return {
-        success: true,
-        data: {
-          ...data,
-          access_token: decryptedAccessToken,
-          refresh_token: decryptedRefreshToken
-        }
-      };
-    } catch (error) {
-      console.error('Error getting credentials:', error);
-      return { success: false, error: error.message };
-    }
-  },
-
   async getUserInstagramAccounts(userId) {
     try {
       const admin = getSupabaseAdmin();
@@ -790,10 +646,6 @@ module.exports = {
   getConnectionInfo,
   checkHealth,
   testConnection,
-  
-  // Encryption utilities
-  encrypt,
-  decrypt,
   
   // Logging functions
   logApiRequest,
