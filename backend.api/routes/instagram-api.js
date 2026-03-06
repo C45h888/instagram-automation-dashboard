@@ -267,6 +267,60 @@ router.post('/exchange-token', async (req, res) => {
 });
 
 // ==========================================
+// ACCOUNT TRANSFER / RELEASE
+// ==========================================
+
+/**
+ * POST /api/instagram/release-account
+ * Current owner releases their IG account so a requesting user can connect it.
+ * Called when user clicks "Release Account" in the NotificationDropdown.
+ */
+router.post('/release-account', async (req, res) => {
+  try {
+    const { userId, instagramBusinessId } = req.body;
+
+    if (!userId || !instagramBusinessId) {
+      return res.status(400).json({ error: 'userId and instagramBusinessId are required' });
+    }
+
+    const supabase = getSupabaseAdmin();
+
+    // Deactivate credentials for this user
+    await supabase
+      .from('instagram_credentials')
+      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .eq('user_id', userId)
+      .eq('token_type', 'page');
+
+    // Delete the business account row so the requesting user can claim it
+    const { error: deleteError } = await supabase
+      .from('instagram_business_accounts')
+      .delete()
+      .eq('user_id', userId)
+      .eq('instagram_business_id', instagramBusinessId);
+
+    if (deleteError) {
+      console.error('❌ release-account delete failed:', deleteError.message);
+      return res.status(500).json({ error: 'Failed to release account', details: deleteError.message });
+    }
+
+    // Resolve the pending transfer alert so it disappears from owner's notification centre
+    await supabase
+      .from('system_alerts')
+      .update({ resolved: true, resolved_at: new Date().toISOString() })
+      .eq('alert_type', 'account_transfer_request')
+      .filter('details->>instagram_business_id', 'eq', instagramBusinessId);
+
+    console.log(`✅ Account ${instagramBusinessId} released by user ${userId}`);
+    return res.json({ success: true, message: 'Account released. The requesting user can now reconnect.' });
+
+  } catch (error) {
+    console.error('❌ release-account error:', error);
+    return res.status(500).json({ error: 'Internal server error', message: error.message });
+  }
+});
+
+// ==========================================
 // INSTAGRAM API ROUTES
 // ==========================================
 // All routes automatically rate limited and logged
@@ -2875,33 +2929,6 @@ async function fetchDynamicScope(token, supabase, credentialId = null) {
   }
 }
 
-/**
- * Calls the /refresh-token endpoint to refresh an access token
- * @param {string} userId - User UUID
- * @param {string} businessAccountId - Business account UUID
- * @returns {Promise<Object>} - { success: boolean, data?: object, error?: string }
- */
-async function callRefreshTokenEndpoint(userId, businessAccountId) {
-  try {
-    // ✅ v3 OPTIMIZATION: Reuse existing /refresh-token endpoint
-    const API_BASE = process.env.API_BASE_URL || 'http://localhost:3001';
-
-    const response = await axios.post(`${API_BASE}/api/instagram/refresh-token`, {
-      userId,
-      businessAccountId
-    });
-
-    return {
-      success: response.data.success,
-      data: response.data.data
-    };
-  } catch (error) {
-    return {
-      success: false,
-      error: error.response?.data?.error || error.message
-    };
-  }
-}
 
 // ==========================================
 // TOKEN VALIDATION ENDPOINT
@@ -3084,53 +3111,9 @@ router.post('/validate-token', async (req, res) => {
       });
     }
 
-    // ===== STEP 1.5: Check expiration and auto-refresh if needed (v3 OPTIMIZATION) =====
-    const now = new Date();
-    const expiresAt = new Date(credentials.expires_at);
-    const secondsUntilExpiry = Math.floor((expiresAt - now) / 1000);
-
-    // ✅ v3 OPTIMIZATION: Auto-refresh via /refresh-token endpoint (code reuse)
-    if (secondsUntilExpiry > 0 && secondsUntilExpiry < 86400) {
-      console.log(`⚠️  Token expires in ${Math.floor(secondsUntilExpiry / 3600)}h - auto-refreshing...`);
-
-      // Call existing /refresh-token endpoint instead of duplicating logic
-      const refreshResult = await callRefreshTokenEndpoint(userId, businessAccountId);
-
-      if (refreshResult.success) {
-        console.log('✅ Token auto-refreshed successfully via /refresh-token endpoint');
-
-        // ✅ v3 OPTIMIZATION: Resilient audit logging
-        try {
-          await logAudit('token_auto_refreshed', userId, {
-            action: 'auto_refresh',
-            business_account_id: businessAccountId,
-            new_expiry: refreshResult.data?.expires_at,
-            triggered_by: 'validate_token',
-            success: true
-          });
-        } catch (auditError) {
-          console.warn('⚠️  Audit log failed (non-blocking):', auditError.message);
-        }
-
-        // Refetch credentials to get updated token
-        const { data: updatedCreds } = await supabase
-          .from('instagram_credentials')
-          .select('*')
-          .eq('user_id', userId)
-          .eq('business_account_id', businessAccountId)
-          .eq('token_type', 'page')
-          .eq('is_active', true)
-          .single();
-
-        if (updatedCreds) {
-          // Update credentials variable with refreshed data
-          Object.assign(credentials, updatedCreds);
-        }
-
-      } else {
-        console.warn('⚠️  Auto-refresh failed:', refreshResult.error);
-      }
-    }
+    // Page tokens are non-expiring per Meta documentation.
+    // Token health is validated via the daily /debug_token cron (proactive-sync.js).
+    // 190 errors from live Instagram API calls mark the token inactive immediately.
 
     // ===== STEP 2: Fetch instagram_business_id separately =====
     const { data: businessAccount, error: businessError } = await supabase

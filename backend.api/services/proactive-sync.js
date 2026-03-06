@@ -4,6 +4,7 @@
 // Existing HTTP endpoints remain as Bus 2 (reactive fallback).
 
 const cron = require('node-cron');
+const axios = require('axios');
 const { getSupabaseAdmin, logAudit } = require('../config/supabase');
 const { clearCredentialCache } = require('../helpers/agent-helpers');
 const {
@@ -20,10 +21,13 @@ const {
 // ============================================
 
 const DEFAULT_SCHEDULES = {
-  engagement: '*/3 * * * *',   // Every 3 min (agent polls every 5 min)
-  ugc:        '0 */3 * * *',   // Every 3 hours (agent polls every 4h)
-  insights:   '0 2 * * *',     // Daily at 02:00 UTC (agent runs daily)
+  engagement:   '*/3 * * * *',   // Every 3 min (agent polls every 5 min)
+  ugc:          '0 */3 * * *',   // Every 3 hours (agent polls every 4h)
+  insights:     '0 2 * * *',     // Daily at 02:00 UTC (agent runs daily)
+  tokenHealth:  '0 3 * * *',     // Daily at 03:00 UTC (offset from insights to avoid overlap)
 };
+
+const GRAPH_API_VERSION = process.env.GRAPH_API_VERSION || 'v23.0';
 
 // Rate-limiting caps per cycle
 const ENGAGEMENT_MAX_POSTS = 5;
@@ -429,6 +433,116 @@ let scheduledJobs = [];
  *
  * @returns {Function} cleanup — stops all cron jobs
  */
+// ============================================
+// TOKEN HEALTH CHECK
+// ============================================
+
+/**
+ * Validates all active page tokens via Meta's /debug_token endpoint.
+ * Runs daily at 03:00 UTC. Marks invalid tokens inactive and creates
+ * an auth_failure system_alert visible in the user's NotificationDropdown.
+ */
+async function runTokenHealthCheck() {
+  console.log('[TokenHealthCheck] Starting daily token validation...');
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    console.warn('[TokenHealthCheck] Supabase not available, skipping');
+    return;
+  }
+
+  try {
+    const { data: credentials, error } = await supabase
+      .from('instagram_credentials')
+      .select('id, user_id, business_account_id, access_token_encrypted, debug_token_checked_at')
+      .eq('token_type', 'page')
+      .eq('is_active', true);
+
+    if (error) throw error;
+    if (!credentials?.length) {
+      console.log('[TokenHealthCheck] No active page credentials found, nothing to check');
+      return;
+    }
+
+    console.log(`[TokenHealthCheck] Checking ${credentials.length} active token(s)...`);
+    let valid = 0, invalid = 0, skipped = 0;
+
+    for (const cred of credentials) {
+      // Skip if checked within the last 24 hours
+      if (cred.debug_token_checked_at) {
+        const hoursSince = (Date.now() - new Date(cred.debug_token_checked_at).getTime()) / 3_600_000;
+        if (hoursSince < 24) {
+          skipped++;
+          continue;
+        }
+      }
+
+      // Retrieve per-user encryption key
+      const { data: bizAccount } = await supabase
+        .from('instagram_business_accounts')
+        .select('encryption_key_id')
+        .eq('user_id', cred.user_id)
+        .eq('id', cred.business_account_id)
+        .maybeSingle();
+
+      const { data: token, error: decryptErr } = await supabase.rpc('decrypt_instagram_token', {
+        encrypted_token: cred.access_token_encrypted,
+        p_key_id: bizAccount?.encryption_key_id || null
+      });
+
+      if (decryptErr || !token) {
+        console.warn(`[TokenHealthCheck] Could not decrypt cred ${cred.id}, skipping`);
+        skipped++;
+        continue;
+      }
+
+      try {
+        const response = await axios.get(
+          `https://graph.facebook.com/${GRAPH_API_VERSION}/debug_token`,
+          { params: { input_token: token, access_token: token }, timeout: 8000 }
+        );
+        const tokenData = response.data?.data;
+
+        if (!tokenData?.is_valid) {
+          // Mark token inactive
+          await supabase
+            .from('instagram_credentials')
+            .update({ is_active: false, updated_at: new Date().toISOString() })
+            .eq('id', cred.id);
+
+          // Create auth_failure alert — visible in user's NotificationDropdown
+          await supabase.from('system_alerts').insert({
+            alert_type: 'auth_failure',
+            business_account_id: cred.business_account_id,
+            message: 'Instagram access token is no longer valid. Please reconnect your account.',
+            details: { user_id: cred.user_id, credential_id: cred.id, source: 'token_health_check' },
+            resolved: false
+          });
+
+          console.warn(`[TokenHealthCheck] Token invalid for cred ${cred.id} (user ${cred.user_id}), marked inactive`);
+          invalid++;
+        } else {
+          // Stamp the check time so we skip this token for the next 24h
+          await supabase
+            .from('instagram_credentials')
+            .update({ debug_token_checked_at: new Date().toISOString() })
+            .eq('id', cred.id);
+          valid++;
+        }
+      } catch (apiErr) {
+        console.warn(`[TokenHealthCheck] /debug_token API call failed for cred ${cred.id}:`, apiErr.message);
+        skipped++;
+      }
+
+      // 200ms between calls to avoid hammering the Meta API
+      await delay(200);
+    }
+
+    console.log(`[TokenHealthCheck] Complete — valid: ${valid}, invalid: ${invalid}, skipped: ${skipped}`);
+  } catch (err) {
+    console.error('[TokenHealthCheck] Fatal error:', err.message);
+  }
+}
+
 function initScheduledJobs() {
   if (process.env.PROACTIVE_SYNC_ENABLED !== 'true') {
     console.log('[ProactiveSync] Disabled (PROACTIVE_SYNC_ENABLED !== "true")');
@@ -597,7 +711,26 @@ function initScheduledJobs() {
     }
   }, { scheduled: true, timezone: 'UTC' });
 
-  scheduledJobs = [engagementJob, ugcJob, insightsJob, heartbeatJob];
+  // ── Daily token health check via Meta /debug_token ──────────────────────────
+  const tokenHealthSchedule = process.env.TOKEN_HEALTH_CRON || DEFAULT_SCHEDULES.tokenHealth;
+  let tokenHealthRunning = false;
+  const tokenHealthJob = cron.schedule(tokenHealthSchedule, async () => {
+    if (tokenHealthRunning) {
+      console.log('[TokenHealthCheck] Previous run still active, skipping');
+      return;
+    }
+    tokenHealthRunning = true;
+    try {
+      await runTokenHealthCheck();
+    } catch (err) {
+      console.error('[TokenHealthCheck] Unhandled error:', err.message);
+    } finally {
+      tokenHealthRunning = false;
+    }
+  }, { scheduled: true, timezone: 'UTC' });
+  console.log(`[ProactiveSync]   Token health check: ${tokenHealthSchedule}`);
+
+  scheduledJobs = [engagementJob, ugcJob, insightsJob, heartbeatJob, tokenHealthJob];
   console.log(`[ProactiveSync] ${scheduledJobs.length} jobs scheduled`);
 
   return function stopScheduledJobs() {
@@ -616,6 +749,7 @@ module.exports = {
   proactiveEngagementSync,
   proactiveUgcSync,
   proactiveInsightsSync,
+  runTokenHealthCheck,
   // Exposed for unit testing
   getActiveAccounts,
   getRecentMedia,
