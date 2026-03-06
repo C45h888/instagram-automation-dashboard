@@ -370,7 +370,7 @@ async function getAccountInsights(igBusinessAccountId, pageToken, options = {}) 
  * @param {string} params.pageName - Facebook Page name
  * @returns {Promise<{success: boolean, businessAccountId?: string, expiresAt?: string, error?: string}>}
  */
-async function storePageToken({ userId, igBusinessAccountId, pageAccessToken, pageId, pageName, scope, expiresAt }) {
+async function storePageToken({ userId, igBusinessAccountId, pageAccessToken, pageId, pageName, scope }) {
   try {
     console.log('💾 Storing page token in database...');
     console.log('   User ID (UUID):', userId);
@@ -396,6 +396,46 @@ async function storePageToken({ userId, igBusinessAccountId, pageAccessToken, pa
       };
     }
 
+    // ===== STEP 2.5: Provision or retrieve per-user Vault encryption key =====
+    let encryptionKeyId = null;
+    try {
+      // Check if user already has a key from a previous store
+      const { data: existingAccount } = await supabase
+        .from('instagram_business_accounts')
+        .select('encryption_key_id')
+        .eq('user_id', userId)
+        .eq('instagram_business_id', igBusinessAccountId)
+        .maybeSingle();
+
+      if (existingAccount?.encryption_key_id) {
+        encryptionKeyId = existingAccount.encryption_key_id;
+        console.log('🔑 Reusing existing per-user Vault key:', encryptionKeyId);
+      } else {
+        // Create a new Vault secret for this user
+        const crypto = require('crypto');
+        const userKey = crypto.randomBytes(32).toString('hex');
+        const { data: vaultSecret, error: vaultError } = await supabase
+          .schema('vault')
+          .from('secrets')
+          .insert({
+            name: `instagram_token_key_${userId}`,
+            secret: userKey,
+            description: `Per-user Instagram token encryption key for user ${userId}`
+          })
+          .select('id')
+          .single();
+
+        if (vaultError) {
+          console.warn('⚠️  Per-user Vault key creation failed, using shared key:', vaultError.message);
+        } else {
+          encryptionKeyId = vaultSecret.id;
+          console.log('🔑 Created per-user Vault key:', encryptionKeyId);
+        }
+      }
+    } catch (keyErr) {
+      console.warn('⚠️  Key provisioning error, using shared key:', keyErr.message);
+    }
+
     // ===== STEP 3: Create/Update business account record FIRST =====
     console.log('📝 Creating/updating Instagram business account record...');
 
@@ -407,6 +447,7 @@ async function storePageToken({ userId, igBusinessAccountId, pageAccessToken, pa
         name: pageName, // FIXED: Added required 'name' field
         username: pageName, // Use page name as username initially
         is_connected: true,
+        encryption_key_id: encryptionKeyId,
         last_sync_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }, {
@@ -431,7 +472,7 @@ async function storePageToken({ userId, igBusinessAccountId, pageAccessToken, pa
     console.log('🔐 Encrypting page token...');
 
     const { data: encryptedToken, error: encryptError } = await supabase
-      .rpc('encrypt_instagram_token', { token: pageAccessToken });
+      .rpc('encrypt_instagram_token', { token: pageAccessToken, p_key_id: encryptionKeyId });
 
     if (encryptError) {
       console.error('❌ Token encryption failed:', encryptError);
@@ -456,17 +497,10 @@ async function storePageToken({ userId, igBusinessAccountId, pageAccessToken, pa
 
     console.log('📋 Using scope:', finalScope);
 
-    // ✅ v3 OPTIMIZATION: Auto-calculate expiry if not provided
-    // Meta Page tokens typically expire in 60 days (5184000 seconds)
-    let finalExpiresAt;
-    if (expiresAt) {
-      finalExpiresAt = new Date(expiresAt);
-      console.log('📅 Token expiration (provided):', finalExpiresAt.toISOString());
-    } else {
-      const expiresIn = 5184000; // 60 days in seconds
-      finalExpiresAt = new Date(Date.now() + (expiresIn * 1000));
-      console.log('📅 Token expiration (auto-calculated):', finalExpiresAt.toISOString());
-    }
+    // Page access tokens are non-expiring per Meta documentation.
+    // We store NULL for expires_at. Token health is validated via daily /debug_token cron.
+    const finalExpiresAt = null;
+    console.log('📅 Token expiration: NULL (page tokens are non-expiring)');
 
     // ===== STEP 6: Upsert to instagram_credentials table =====
     // Now we have a valid business_account_id (UUID) to use
@@ -480,7 +514,7 @@ async function storePageToken({ userId, igBusinessAccountId, pageAccessToken, pa
         page_id: pageId,  // ✅ v2: Add page_id
         scope: finalScope,  // ✅ v3: Use smart defaults
         issued_at: new Date().toISOString(),
-        expires_at: finalExpiresAt.toISOString(),  // ✅ v3: Use calculated expiry
+        expires_at: finalExpiresAt,  // null — page tokens are non-expiring
         is_active: true,
         last_refreshed_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
@@ -508,7 +542,7 @@ async function storePageToken({ userId, igBusinessAccountId, pageAccessToken, pa
         business_account_id: businessAccount.id,
         page_id: pageId,
         scope: finalScope,
-        expires_at: finalExpiresAt.toISOString(),
+        expires_at: finalExpiresAt,
         credential_id: credentialData?.[0]?.id,
         success: true
       });
@@ -520,7 +554,7 @@ async function storePageToken({ userId, igBusinessAccountId, pageAccessToken, pa
     return {
       success: true,
       businessAccountId: businessAccount.id, // Return the UUID for frontend
-      expiresAt: finalExpiresAt.toISOString()  // ✅ v3: Return calculated expiry
+      expiresAt: null  // page tokens are non-expiring
     };
 
   } catch (error) {
@@ -586,45 +620,36 @@ async function retrievePageToken(userId, businessAccountId) {
 
     console.log('✅ Token record found in database');
     console.log('   Issued at:', data.issued_at);
-    console.log('   Expires at:', data.expires_at);
 
-    // ===== STEP 3: Check if token expired =====
-    const expiresAt = new Date(data.expires_at);
-    const now = new Date();
-
-    if (expiresAt < now) {
-      const expiredAgo = Math.floor((now - expiresAt) / (1000 * 60 * 60 * 24)); // days
-      console.error(`❌ Page token expired ${expiredAgo} day(s) ago`);
-
-      // Mark token inactive in DB so subsequent calls fail fast without re-querying the expired record
-      try {
-        await supabase
-          .from('instagram_credentials')
-          .update({ is_active: false, updated_at: new Date().toISOString() })
-          .eq('user_id', userId)
-          .eq('business_account_id', businessAccountId)
-          .eq('token_type', 'page');
-        console.warn('⚠️  Token marked inactive in database');
-      } catch (deactivateErr) {
-        console.warn('⚠️  Failed to deactivate token record (non-blocking):', deactivateErr.message);
-      }
-
-      const err = new Error(
-        `Page token expired on ${expiresAt.toISOString()}. User must reconnect their Instagram account through OAuth.`
-      );
-      err.code = 'TOKEN_EXPIRED';
-      throw err;
+    // ===== STEP 3: expires_at check — warning only for legacy rows =====
+    // Page tokens are non-expiring per Meta documentation. New rows store expires_at=NULL.
+    // Legacy rows (stored before this fix) may have a 60-day expiry timestamp — we do NOT
+    // deactivate based on it. Health is validated via the daily /debug_token cron.
+    if (data.expires_at && new Date(data.expires_at) < new Date()) {
+      console.warn(`[retrievePageToken] Legacy expires_at in past for user ${userId}. Ignoring — page tokens are non-expiring. Daily cron will validate via /debug_token.`);
     }
 
-    const expiresIn = Math.floor((expiresAt - now) / (1000 * 60 * 60 * 24)); // days
-    console.log(`✅ Token valid - expires in ${expiresIn} day(s)`);
+    // ===== STEP 3.5: Look up per-user encryption key =====
+    let encryptionKeyId = null;
+    try {
+      const { data: bizAccount } = await supabase
+        .from('instagram_business_accounts')
+        .select('encryption_key_id')
+        .eq('user_id', userId)
+        .eq('id', businessAccountId)
+        .maybeSingle();
+      encryptionKeyId = bizAccount?.encryption_key_id || null;
+    } catch (keyLookupErr) {
+      console.warn('⚠️  Could not look up per-user encryption key, using shared key:', keyLookupErr.message);
+    }
 
     // ===== STEP 4: Decrypt token using Supabase function =====
     console.log('🔓 Decrypting page token...');
 
     const { data: decryptedToken, error: decryptError } = await supabase
       .rpc('decrypt_instagram_token', {
-        encrypted_token: data.access_token_encrypted
+        encrypted_token: data.access_token_encrypted,
+        p_key_id: encryptionKeyId
       });
 
     if (decryptError) {
