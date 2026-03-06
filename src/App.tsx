@@ -97,57 +97,6 @@ const Engagement: React.FC = () => {
   );
 };
 
-const Automations: React.FC = () => (
-  <div className="space-y-8 animate-fade-in">
-    <div className="glass-morphism-card p-6 rounded-2xl">
-      <h1 className="text-4xl font-bold text-white mb-2 tracking-tight">🤖 Automation Workflows</h1>
-      <p className="text-gray-300 text-lg">Manage your N8N automation workflows</p>
-    </div>
-    
-    <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-xl p-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <div className="flex items-center justify-between p-4 bg-gray-900/50 rounded-lg">
-          <div>
-            <h4 className="text-white font-medium">Analytics Pipeline</h4>
-            <p className="text-gray-400 text-sm">Daily performance reports</p>
-          </div>
-          <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
-        </div>
-        
-        <div className="flex items-center justify-between p-4 bg-gray-900/50 rounded-lg">
-          <div>
-            <h4 className="text-white font-medium">Engagement Monitor</h4>
-            <p className="text-gray-400 text-sm">Auto-reply to comments</p>
-          </div>
-          <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
-        </div>
-        
-        <div className="flex items-center justify-between p-4 bg-gray-900/50 rounded-lg">
-          <div>
-            <h4 className="text-white font-medium">Sales Attribution</h4>
-            <p className="text-gray-400 text-sm">Track Instagram → Shopify</p>
-          </div>
-          <div className="w-3 h-3 bg-yellow-400 rounded-full"></div>
-        </div>
-        
-        <div className="flex items-center justify-between p-4 bg-gray-900/50 rounded-lg">
-          <div>
-            <h4 className="text-white font-medium">UGC Collection</h4>
-            <p className="text-gray-400 text-sm">Monitor brand mentions</p>
-          </div>
-          <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
-        </div>
-      </div>
-      
-      <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
-        <p className="text-yellow-400 text-sm">
-          ✅ Your N8N webhooks are active and receiving data. Full workflow management UI coming soon.
-        </p>
-      </div>
-    </div>
-  </div>
-);
-
 const CreatePost: React.FC = () => (
   <div className="space-y-8 animate-fade-in">
     <div className="glass-morphism-card p-6 rounded-2xl">
@@ -406,9 +355,6 @@ function App() {
               <Route path="engagement/comments" element={<CommentManagement />} />
               <Route path="engagement/messages" element={<DMInbox />} />
               <Route path="engagement-monitor" element={<EngagementMonitor />} />
-              
-              {/* Automations */}
-              <Route path="automations" element={<Automations />} />
               
               {/* Settings */}
               <Route path="settings" element={<Settings />} />

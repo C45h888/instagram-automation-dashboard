@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import LegalFooter from '../layout/LegalFooter';
+import MoreDropdown from './MoreDropdown';
 import {
   Home, Calendar, MessageCircle, BarChart3, Settings,
   Users, Bot, Target, Search, Bell, Menu, X, LogOut,
@@ -38,7 +39,6 @@ const Layout: React.FC = () => {
     { name: 'Engagement', path: '/engagement', icon: <MessageCircle className="w-5 h-5" />, badge: 3 },
     { name: 'UGC', path: '/ugc', icon: <Star className="w-5 h-5" /> },
     { name: 'Analytics', path: '/analytics', icon: <BarChart3 className="w-5 h-5" /> },
-    { name: 'Automations', path: '/automations', icon: <Bot className="w-5 h-5" /> },
     { name: 'Campaigns', path: '/campaigns', icon: <Target className="w-5 h-5" /> },
     { name: 'Audience', path: '/audience', icon: <Users className="w-5 h-5" /> },
     { name: 'Terminal', path: '/agent-terminal', icon: <Terminal className="w-5 h-5" /> },
@@ -118,6 +118,7 @@ const Layout: React.FC = () => {
                   )}
                 </div>
               ))}
+              <MoreDropdown />
             </nav>
 
             {/* Right Actions */}
