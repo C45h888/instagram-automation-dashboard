@@ -3,6 +3,8 @@ import React, { lazy, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { startTokenRefreshInterval } from './services/tokenRefreshService';
+import { ToastProvider } from './contexts/ToastContext';
+import ToastContainer from './components/ui/ToastContainer';
 
 // ==========================================
 // EAGER IMPORTS (Critical - Always Needed)
@@ -39,6 +41,9 @@ const AdminLogin = lazy(() => import('./pages/AdminLogin'));
 
 // Agent Terminal - loaded when user navigates to terminal view
 const AgentTerminal = lazy(() => import('./pages/AgentTerminal'));
+
+// Audience Insights - loaded when user navigates to audience page
+const Audience = lazy(() => import('./pages/Audience'));
 
 // Legal pages - loaded when accessed (rare, so perfect for lazy loading)
 const PrivacyPolicy = lazy(() => import('./pages/privacypolicy'));
@@ -190,41 +195,6 @@ const Campaigns: React.FC = () => (
   </div>
 );
 
-const Audience: React.FC = () => (
-  <div className="space-y-8 animate-fade-in">
-    <div className="glass-morphism-card p-6 rounded-2xl">
-      <h1 className="text-4xl font-bold text-white mb-2 tracking-tight">👥 Audience Insights</h1>
-      <p className="text-gray-300 text-lg">Understand your followers and their behavior</p>
-    </div>
-    
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-      <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-xl p-6 text-center">
-        <div className="text-3xl font-bold text-white mb-2">24.5K</div>
-        <div className="text-gray-400">Total Followers</div>
-        <div className="text-green-400 text-sm mt-2">+12.5% this month</div>
-      </div>
-      
-      <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-xl p-6 text-center">
-        <div className="text-3xl font-bold text-white mb-2">68%</div>
-        <div className="text-gray-400">Female Audience</div>
-        <div className="text-gray-500 text-sm mt-2">Primary demographic</div>
-      </div>
-      
-      <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-xl p-6 text-center">
-        <div className="text-3xl font-bold text-white mb-2">18-34</div>
-        <div className="text-gray-400">Age Range</div>
-        <div className="text-gray-500 text-sm mt-2">Most active group</div>
-      </div>
-      
-      <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-xl p-6 text-center">
-        <div className="text-3xl font-bold text-white mb-2">NYC</div>
-        <div className="text-gray-400">Top Location</div>
-        <div className="text-gray-500 text-sm mt-2">18% of audience</div>
-      </div>
-    </div>
-  </div>
-);
-
 // ==========================================
 // TOKEN REFRESH MANAGER
 // ==========================================
@@ -300,96 +270,103 @@ function App() {
   return (
     <TokenRefreshManager>
       <QueryClientProvider client={queryClient}>
-        <Router>
-        {/* 
-          React.Suspense wraps ALL routes to handle lazy loading
-          fallback={<PageLoader />} shows loading spinner while chunks download
-        */}
-        <React.Suspense fallback={<PageLoader />}>
-          <Routes>
-            {/* ==========================================
-                PUBLIC LEGAL PAGES - NO AUTH REQUIRED
-                These are lazy loaded since they're rarely accessed
-                ========================================== */}
-            <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-            <Route path="/terms-of-service" element={<TermsOfService />} />
-            <Route path="/data-deletion" element={<DataDeletion />} />
-            
-            {/* ==========================================
-                PUBLIC AUTHENTICATION ROUTES
-                Login is eager, AdminLogin and FacebookCallback are lazy/eager
-                ========================================== */}
-            <Route path="/login" element={<Login />} />
-            <Route path="/auth/callback" element={<FacebookCallback />} />
-            <Route path="/admin/login" element={<AdminLogin />} />
-            
-            {/* ==========================================
-                PROTECTED ROUTES - REQUIRE AUTHENTICATION
-                All pages inside here are lazy loaded on-demand
-                ========================================== */}
-            <Route 
-              path="/" 
-              element={
-                <RequireAuth>
-                  <Layout />
-                </RequireAuth>
-              }
-            >
-              {/* Main Dashboard */}
-              <Route index element={<Dashboard />} />
-              <Route path="dashboard" element={<Navigate to="/" replace />} />
-              
-              {/* Privacy Dashboard (Protected) */}
-              <Route path="dashboard/privacy-controls" element={<PrivacyDashboard />} />
-              
-              {/* Analytics */}
-              <Route path="analytics" element={<Analytics />} />
-              
-              {/* Content Management */}
-              <Route path="content" element={<ContentManagement />} />
-              <Route path="content/create" element={<CreatePost />} />
-              <Route path="content/analytics" element={<ContentAnalytics />} />
+        <ToastProvider>
+          <Router>
+          {/*
+            React.Suspense wraps ALL routes to handle lazy loading
+            fallback={<PageLoader />} shows loading spinner while chunks download
+          */}
+          <React.Suspense fallback={<PageLoader />}>
+            <Routes>
+              {/* ==========================================
+                  PUBLIC LEGAL PAGES - NO AUTH REQUIRED
+                  These are lazy loaded since they're rarely accessed
+                  ========================================== */}
+              <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+              <Route path="/terms-of-service" element={<TermsOfService />} />
+              <Route path="/data-deletion" element={<DataDeletion />} />
 
-              {/* Engagement Hub */}
-              <Route path="engagement" element={<Engagement />} />
-              <Route path="engagement/comments" element={<CommentManagement />} />
-              <Route path="engagement/messages" element={<DMInbox />} />
-              <Route path="engagement-monitor" element={<EngagementMonitor />} />
-              
-              {/* Settings */}
-              <Route path="settings" element={<Settings />} />
-              
-              {/* Campaign Management */}
-              <Route path="campaigns" element={<Campaigns />} />
-              
-              {/* Audience */}
-              <Route path="audience" element={<Audience />} />
+              {/* ==========================================
+                  PUBLIC AUTHENTICATION ROUTES
+                  Login is eager, AdminLogin and FacebookCallback are lazy/eager
+                  ========================================== */}
+              <Route path="/login" element={<Login />} />
+              <Route path="/auth/callback" element={<FacebookCallback />} />
+              <Route path="/admin/login" element={<AdminLogin />} />
 
-              {/* UGC Management */}
-              <Route path="ugc" element={
-                <ErrorBoundary>
-                  <UGCManagement />
-                </ErrorBoundary>
-              } />
+              {/* ==========================================
+                  PROTECTED ROUTES - REQUIRE AUTHENTICATION
+                  All pages inside here are lazy loaded on-demand
+                  ========================================== */}
+              <Route
+                path="/"
+                element={
+                  <RequireAuth>
+                    <Layout />
+                  </RequireAuth>
+                }
+              >
+                {/* Main Dashboard */}
+                <Route index element={<Dashboard />} />
+                <Route path="dashboard" element={<Navigate to="/" replace />} />
 
-              {/* Agent Terminal */}
-              <Route path="agent-terminal" element={
-                <ErrorBoundary>
-                  <AgentTerminal />
-                </ErrorBoundary>
-              } />
-            </Route>
-            
-            {/* ==========================================
-                MISC ROUTES
-                ========================================== */}
-            <Route path="/test-connection" element={<TestConnection />} />
-            
-            {/* Catch all - redirect to login if not authenticated */}
-            <Route path="*" element={<Navigate to="/login" replace />} />
-          </Routes>
-        </React.Suspense>
-        </Router>
+                {/* Privacy Dashboard (Protected) */}
+                <Route path="dashboard/privacy-controls" element={<PrivacyDashboard />} />
+
+                {/* Analytics */}
+                <Route path="analytics" element={<Analytics />} />
+
+                {/* Content Management */}
+                <Route path="content" element={<ContentManagement />} />
+                <Route path="content/create" element={<CreatePost />} />
+                <Route path="content/analytics" element={<ContentAnalytics />} />
+
+                {/* Engagement Hub */}
+                <Route path="engagement" element={<Engagement />} />
+                <Route path="engagement/comments" element={<CommentManagement />} />
+                <Route path="engagement/messages" element={<DMInbox />} />
+                <Route path="engagement-monitor" element={<EngagementMonitor />} />
+
+                {/* Settings */}
+                <Route path="settings" element={<Settings />} />
+
+                {/* Campaign Management */}
+                <Route path="campaigns" element={<Campaigns />} />
+
+                {/* Audience */}
+                <Route path="audience" element={
+                  <ErrorBoundary>
+                    <Audience />
+                  </ErrorBoundary>
+                } />
+
+                {/* UGC Management */}
+                <Route path="ugc" element={
+                  <ErrorBoundary>
+                    <UGCManagement />
+                  </ErrorBoundary>
+                } />
+
+                {/* Agent Terminal */}
+                <Route path="agent-terminal" element={
+                  <ErrorBoundary>
+                    <AgentTerminal />
+                  </ErrorBoundary>
+                } />
+              </Route>
+
+              {/* ==========================================
+                  MISC ROUTES
+                  ========================================== */}
+              <Route path="/test-connection" element={<TestConnection />} />
+
+              {/* Catch all - redirect to login if not authenticated */}
+              <Route path="*" element={<Navigate to="/login" replace />} />
+            </Routes>
+          </React.Suspense>
+          </Router>
+          <ToastContainer />
+        </ToastProvider>
       </QueryClientProvider>
     </TokenRefreshManager>
   );

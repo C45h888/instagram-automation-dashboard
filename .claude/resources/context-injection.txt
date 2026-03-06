@@ -1,112 +1,135 @@
-services:
-  # ================================
-  # Ollama AI Model Server
-  # ================================
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ollama
-    restart: unless-stopped
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama-data:/root/.ollama
-    networks:
-      - agent-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 120s  # Increased for model pull time
-    deploy:
-      resources:
-        limits:
-          cpus: '4.0'
-          memory: 8G
-        reservations:
-          cpus: '2.0'
-          memory: 6G
+DATA DUMP: Missing Components for Audience Demographics
+WHAT DOES NOT EXIST (Must Be Implemented)
+1. BACKEND - Missing API Routes
+File to modify: backend.api/routes/instagram-api.js
 
-  # ================================
-  # Redis Cache (for agent)
-  # ================================
-  redis:
-    image: redis:7-alpine
-    container_name: agent-redis
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    networks:
-      - agent-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 5s
-    deploy:
-      resources:
-        limits:
-          cpus: '0.25'
-          memory: 128M
-        reservations:
-          cpus: '0.1'
-          memory: 64M
+Route	Method	Purpose	Not Implemented
+/audience/:accountId	GET	Fetch follower demographics	❌ MISSING
+/audience/insights/:accountId	GET	Fetch lifetime audience insights	❌ MISSING
+2. BACKEND - Missing Service Functions
+File to modify: backend.api/services/instagram-tokens.js
 
-  # ================================
-  # LangChain Agent (Instagram Automation)
-  # ================================
-  langchain-agent:
-    container_name: langchain-agent
-    build:
-      context: .
-      dockerfile: dockerfile
-    restart: unless-stopped
-    ports:
-      - "3002:3002"
-    env_file:
-      - .env
-    environment:
-      - OLLAMA_HOST=http://ollama:11434
-      - OLLAMA_MODEL=hf.co/MaziyarPanahi/Nemotron-Orchestrator-8B-GGUF:Q5_K_M
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - MAX_CONCURRENT_LLM=4
-    depends_on:
-      ollama:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - agent-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3002/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    deploy:
-      resources:
-        limits:
-          cpus: '2.0'
-          memory: 2G
-        reservations:
-          cpus: '1.0'
-          memory: 1G
+Function	Purpose	Not Implemented
+getFollowerDemographics(igBusinessAccountId, pageToken)	Fetch follower_demographics from Meta Graph API	❌ MISSING
+getOnlineFollowers(igBusinessAccountId, pageToken)	Fetch online_followers hourly data	❌ MISSING
+Required Meta Graph API Call:
 
-# ================================
-# Networks
-# ================================
-networks:
-  agent-network:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.21.0.0/16
+GET https://graph.facebook.com/v23.0/{ig-business-account-id}/insights
+Parameters:
+  - metric: follower_demographics
+  - period: lifetime
+  - access_token: {page_token}
+3. DATABASE - Missing Tables/Fields
+File to modify: Database schema (requires migration)
 
-# ================================
-# Volumes
-# ================================
-volumes:
-  ollama-data:
-    driver: local
+Table	Fields Needed	Not Implemented
+New table: audience_demographics	id, business_account_id, gender_distribution (JSONB), age_distribution (JSONB), location_distribution (JSONB), fetched_at	❌ MISSING
+OR add to: instagram_business_accounts	audience_demographics (JSONB)	❌ MISSING
+New table: follower_locations	id, business_account_id, country, city, percentage, fetched_at	❌ MISSING
+4. FRONTEND - Missing Hooks
+File to create: src/hooks/useAudienceDemographics.ts
+
+Hook	Purpose	Not Implemented
+useAudienceDemographics()	Fetch & cache audience demographics from new API	❌ MISSING
+useAudienceInsights()	Combined hook for all audience data	❌ MISSING
+Required Types (create in src/types/):
+
+// src/types/audience.ts - NEW FILE NEEDED
+interface AudienceDemographics {
+  gender: { male: number; female: number; unknown: number };
+  ageGroups: { [key: string]: number };  // "13-17": 100, "18-24": 500, etc.
+  topCountries: { [key: string]: number };
+  topCities: { [key: string]: number };
+  fetchedAt: string;
+}
+
+interface UseAudienceResult {
+  demographics: AudienceDemographics | null;
+  isLoading: boolean;
+  error: string | null;
+  refetch: () => void;
+}
+5. FRONTEND - Page Component Changes Needed
+File to modify: src/App.tsx (lines 193-226)
+
+Current	Needed
+Inline mock <Audience> component	Import and use new useAudienceDemographics hook
+Hardcoded values	Real data from hook
+6. FRONTEND - Types File Addition
+File to create: src/types/audience.ts
+
+// This entire file needs to be created
+export interface GenderDistribution {
+  male: number;
+  female: number;
+  unknown: number;
+}
+
+export interface AgeDistribution {
+  '13-17'?: number;
+  '18-24': number;
+  '25-34': number;
+  '35-44': number;
+  '45-54': number;
+  '55-64'?: number;
+  '65+'?: number;
+}
+
+export interface LocationDistribution {
+  country: string;
+  city: string;
+  percentage: number;
+}
+
+export interface AudienceDemographics {
+  gender: GenderDistribution;
+  age: AgeDistribution;
+  locations: LocationDistribution[];
+  onlineFollowers?: { [hour: string]: number };
+  fetchedAt: string;
+}
+
+export interface UseAudienceDemographicsResult {
+  demographics: AudienceDemographics | null;
+  isLoading: boolean;
+  error: string | null;
+  refetch: () => Promise<void>;
+}
+7. BACKEND - Proactive Sync (Optional Enhancement)
+File to modify: backend.api/services/proactive-sync.js
+
+Cron Job	Purpose	Not Implemented
+proactiveAudienceSync()	Daily fetch of audience demographics	❌ MISSING
+SUMMARY: Files to Create/Modify
+Action	File Path
+CREATE	src/types/audience.ts
+CREATE	src/hooks/useAudienceDemographics.ts
+MODIFY	src/App.tsx (Audience component)
+MODIFY	backend.api/services/instagram-tokens.js
+MODIFY	backend.api/routes/instagram-api.js
+CREATE	Database migration for new table(s)
+METRIC: follower_demographics
+Meta Graph API Response Structure:
+
+{
+  "name": "follower_demographics",
+  "period": "lifetime",
+  "values": [{
+    "value": {
+      "gender": { "male": 30, "female": 65, "unknown": 5 },
+      "age_country": {
+        "13-17": { "US": 100, "GB": 50 },
+        "18-24": { "US": 500, "GB": 200 },
+        "25-34": { "US": 800, "GB": 300 },
+        "35-44": { "US": 400, "GB": 150 },
+        "45-54": { "US": 200, "GB": 80 },
+        "55-64": { "US": 100, "GB": 40 },
+        "65+": { "US": 50, "GB": 20 }
+      }
+    }
+  }]
+}
+Required Permission: instagram_manage_insights (must be requested during OAuth)
+
+
+

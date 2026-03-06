@@ -1,4 +1,7 @@
-import { useState, useCallback } from 'react';
+// Thin bridge over ToastContext — keeps all 13 existing callers working unchanged.
+// Previously used local useState (toasts were never rendered). Now routes through
+// the global ToastContext so toasts are actually visible.
+import { useToastContext } from '../contexts/ToastContext';
 
 interface ToastOptions {
   title?: string;
@@ -9,43 +12,20 @@ interface ToastOptions {
   };
 }
 
-interface Toast {
-  id: string;
-  message: string;
-  type: 'success' | 'error' | 'info' | 'warning';
-  options?: ToastOptions;
-}
-
 export const useToast = () => {
-  const [toasts, setToasts] = useState<Toast[]>([]);
+  const { addToast } = useToastContext();
 
-  const addToast = useCallback((message: string, type: Toast['type'], options?: ToastOptions) => {
-    const id = Math.random().toString(36).substr(2, 9);
-    const newToast = { id, message, type, options };
-    
-    setToasts(prev => [...prev, newToast]);
-    
-    // Auto remove after duration
-    setTimeout(() => {
-      setToasts(prev => prev.filter(toast => toast.id !== id));
-    }, options?.duration || 3000);
-  }, []);
+  return {
+    success: (message: string, options?: ToastOptions) =>
+      addToast({ type: 'success', message, title: options?.title, duration: options?.duration ?? 3000, dismissible: true, action: options?.action }),
 
-  const success = useCallback((message: string, options?: ToastOptions) => {
-    addToast(message, 'success', options);
-  }, [addToast]);
+    error: (message: string, options?: ToastOptions) =>
+      addToast({ type: 'error', message, title: options?.title, duration: options?.duration ?? 3000, dismissible: true, action: options?.action }),
 
-  const error = useCallback((message: string, options?: ToastOptions) => {
-    addToast(message, 'error', options);
-  }, [addToast]);
+    info: (message: string, options?: ToastOptions) =>
+      addToast({ type: 'info', message, title: options?.title, duration: options?.duration ?? 3000, dismissible: true, action: options?.action }),
 
-  const info = useCallback((message: string, options?: ToastOptions) => {
-    addToast(message, 'info', options);
-  }, [addToast]);
-
-  const warning = useCallback((message: string, options?: ToastOptions) => {
-    addToast(message, 'warning', options);
-  }, [addToast]);
-
-  return { success, error, info, warning, toasts };
+    warning: (message: string, options?: ToastOptions) =>
+      addToast({ type: 'warning', message, title: options?.title, duration: options?.duration ?? 3000, dismissible: true, action: options?.action }),
+  };
 };

@@ -4,9 +4,10 @@ import React, { useState } from 'react';
 import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import LegalFooter from '../layout/LegalFooter';
 import MoreDropdown from './MoreDropdown';
+import NotificationDropdown from './NotificationDropdown';
 import {
   Home, Calendar, MessageCircle, BarChart3, Settings,
-  Users, Bot, Target, Search, Bell, Menu, X, LogOut,
+  Users, Bot, Target, Search, Menu, X, LogOut,
   ChevronDown, Plus, Star, Terminal
 } from 'lucide-react';
 
@@ -152,10 +153,7 @@ const Layout: React.FC = () => {
                 <Terminal className="w-5 h-5" />
               </button>
 
-              <button className="relative p-2 text-gray-400 hover:text-white transition-colors rounded-lg hover:bg-white/5">
-                <Bell className="w-5 h-5" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-              </button>
+              <NotificationDropdown />
 
               <div className="relative">
                 <button
