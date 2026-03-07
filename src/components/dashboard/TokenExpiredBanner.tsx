@@ -65,7 +65,7 @@ export const TokenExpiredBanner: React.FC<TokenExpiredBannerProps> = ({
       case 460:
         return 'Your Instagram access token is invalid because you changed your Instagram or Facebook password.';
       case 463:
-        return 'Your Instagram access token has expired. Tokens are valid for 60 days and must be renewed.';
+        return 'Your Instagram access token has been revoked or deauthorized. Please reconnect your account to restore access.';
       case 467:
         return 'Your Instagram access token has been revoked. This can happen if you logged out, deauthorized the app, or changed your password.';
       case 490:

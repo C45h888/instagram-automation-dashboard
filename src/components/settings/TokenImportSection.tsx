@@ -4,6 +4,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { useInstagramAccount } from '../../hooks/useInstagramAccount';
 import { useToast } from '../../hooks/useToast';
 import { supabase } from '../../lib/supabase';
+import { INSTAGRAM_OAUTH_SCOPES } from '../../config/instagramScopes';
 
 const TokenImportSection = forwardRef<HTMLDivElement>((_, ref) => {
   const [showManual, setShowManual] = useState(false);
@@ -31,7 +32,7 @@ const TokenImportSection = forwardRef<HTMLDivElement>((_, ref) => {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'facebook',
         options: {
-          scopes: 'instagram_basic,instagram_manage_comments,instagram_content_publish,instagram_manage_messages,pages_read_user_content,pages_manage_metadata,business_management',
+          scopes: INSTAGRAM_OAUTH_SCOPES,
           redirectTo: `${window.location.origin}/auth/callback`,
         }
       });

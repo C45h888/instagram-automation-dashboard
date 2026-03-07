@@ -4,6 +4,7 @@ import { Bell, CheckCircle, XCircle, AlertTriangle, Info } from 'lucide-react';
 import { useAgentHealth } from '../../hooks/useAgentHealth';
 import { useInstagramAccount } from '../../hooks/useInstagramAccount';
 import { useToastContext } from '../../contexts/ToastContext';
+import { useAuthStore } from '../../stores/authStore';
 import type { SystemAlert } from '@/types';
 import type { Toast } from '../../contexts/ToastContext';
 
@@ -27,11 +28,12 @@ function relativeTime(dateStr: string): string {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ALERT_COLORS: Record<string, { dot: string; text: string }> = {
-  auth_failure:      { dot: 'bg-red-400',    text: 'text-red-400' },
-  rate_limit:        { dot: 'bg-yellow-400', text: 'text-yellow-400' },
-  content_violation: { dot: 'bg-orange-400', text: 'text-orange-400' },
-  agent_down:        { dot: 'bg-red-500',    text: 'text-red-400' },
-  sync_failure:      { dot: 'bg-blue-400',   text: 'text-blue-400' },
+  auth_failure:             { dot: 'bg-red-400',    text: 'text-red-400' },
+  rate_limit:               { dot: 'bg-yellow-400', text: 'text-yellow-400' },
+  content_violation:        { dot: 'bg-orange-400', text: 'text-orange-400' },
+  agent_down:               { dot: 'bg-red-500',    text: 'text-red-400' },
+  sync_failure:             { dot: 'bg-blue-400',   text: 'text-blue-400' },
+  account_transfer_request: { dot: 'bg-orange-400', text: 'text-orange-400' },
 };
 
 function alertColor(type: string) {
@@ -58,9 +60,10 @@ function ToastIcon({ type }: { type: Toast['type'] }) {
 interface AlertRowProps {
   alert: SystemAlert;
   onResolve: (id: string) => void;
+  onRelease?: (alert: SystemAlert) => void;
 }
 
-const SystemAlertRow: React.FC<AlertRowProps> = ({ alert, onResolve }) => {
+const SystemAlertRow: React.FC<AlertRowProps> = ({ alert, onResolve, onRelease }) => {
   const { dot, text } = alertColor(alert.alert_type ?? '');
   return (
     <div className="flex items-start gap-2.5 px-3 py-2 hover:bg-white/5 transition-colors group">
@@ -70,6 +73,14 @@ const SystemAlertRow: React.FC<AlertRowProps> = ({ alert, onResolve }) => {
           {alert.alert_type?.replace(/_/g, ' ')}
         </p>
         <p className="text-xs text-gray-400 truncate">{alert.message}</p>
+        {alert.alert_type === 'account_transfer_request' && onRelease && (
+          <button
+            onClick={() => onRelease(alert)}
+            className="text-xs text-orange-400 hover:text-orange-300 underline mt-1 block"
+          >
+            Release Account
+          </button>
+        )}
       </div>
       <div className="flex flex-col items-end gap-1 flex-shrink-0">
         <span className="text-[10px] text-gray-600">
@@ -97,7 +108,27 @@ const NotificationDropdown: React.FC = () => {
 
   const { businessAccountId } = useInstagramAccount();
   const { alerts, isLoading, resolveAlert } = useAgentHealth(businessAccountId);
-  const { history, clearHistory } = useToastContext();
+  const { history, clearHistory, addToast } = useToastContext();
+  const { user } = useAuthStore();
+
+  const handleReleaseAccount = async (alert: SystemAlert) => {
+    try {
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
+      const res = await fetch(`${API_BASE_URL}/api/instagram/release-account`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user?.id,
+          instagramBusinessId: (alert.details as Record<string, string>)?.instagram_business_id
+        })
+      });
+      if (!res.ok) throw new Error('Request failed');
+      resolveAlert(alert.id);
+      addToast({ type: 'success', title: 'Account Released', message: 'Account released. The other user can now reconnect.' });
+    } catch {
+      addToast({ type: 'error', title: 'Error', message: 'Failed to release account. Please try again.' });
+    }
+  };
 
   // Close on outside click
   useEffect(() => {
@@ -180,6 +211,7 @@ const NotificationDropdown: React.FC = () => {
                   key={alert.id}
                   alert={alert}
                   onResolve={resolveAlert}
+                  onRelease={handleReleaseAccount}
                 />
               ))
             )}

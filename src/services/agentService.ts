@@ -355,28 +355,43 @@ export class AgentService {
     }
   }
 
-  // ── Queue Monitor (Backend API - Phase 4) ───────────────────────────────────
+  // ── Queue Monitor (Supabase direct reads + backend retry) ───────────────────
+  //
+  // Status and DLQ reads query post_queue directly via the Supabase client.
+  // RLS policy (authenticated_select_own_post_queue) scopes rows to the
+  // authenticated user's business accounts automatically.
+  //
+  // Retry stays on the backend because it requires service_role to UPDATE.
+  // The session access_token is passed as Authorization: Bearer so the backend
+  // can verify the user's identity and ownership before resetting the row.
 
-  /** API base URL for backend Express routes */
+  /** API base URL for backend Express routes (retry only) */
   private static get apiBase(): string {
     return import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in'
   }
 
-  /** Fetch queue status summary from backend API */
+  /** Fetch queue status summary directly from Supabase post_queue table */
   static async getQueueStatus(): Promise<ServiceResponse<QueueStatusSummary>> {
     try {
-      const response = await fetch(`${this.apiBase}/api/instagram/post-queue/status`)
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({ error: 'Failed to fetch queue status' }))
-        return { success: false, data: null, error: err.error ?? `HTTP ${response.status}` }
+      const { data, error } = await supabase
+        .from('post_queue')
+        .select('status, action_type')
+
+      if (error) throw error
+
+      // Same JS aggregation the backend used: "{action_type}::{status}" → count
+      const byKey: Record<string, number> = {}
+      for (const row of (data ?? [])) {
+        const key = `${row.action_type}::${row.status}`
+        byKey[key] = (byKey[key] ?? 0) + 1
       }
-      const result = await response.json()
+
       return {
         success: true,
         data: {
-          byKey: result.summary ?? {},
-          total: result.total ?? 0,
-          timestamp: result.timestamp ?? new Date().toISOString(),
+          byKey,
+          total: data?.length ?? 0,
+          timestamp: new Date().toISOString(),
         },
       }
     } catch (err: unknown) {
@@ -386,21 +401,22 @@ export class AgentService {
     }
   }
 
-  /** Fetch DLQ items from backend API */
+  /** Fetch DLQ items directly from Supabase post_queue table */
   static async getQueueDLQ(limit = 50): Promise<ServiceListResponse<QueueDLQItem>> {
     try {
-      const response = await fetch(
-        `${this.apiBase}/api/instagram/post-queue/dlq?limit=${Math.min(limit, 200)}`
-      )
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({ error: 'Failed to fetch DLQ' }))
-        return { success: false, data: [], error: err.error ?? `HTTP ${response.status}` }
-      }
-      const result = await response.json()
+      const { data, error } = await supabase
+        .from('post_queue')
+        .select('id, business_account_id, action_type, payload, retry_count, error, error_category, created_at, updated_at')
+        .eq('status', 'dlq')
+        .order('updated_at', { ascending: false })
+        .limit(Math.min(limit, 200))
+
+      if (error) throw error
+
       return {
         success: true,
-        data: result.dlq ?? [],
-        count: result.count ?? 0,
+        data: (data ?? []) as QueueDLQItem[],
+        count: data?.length ?? 0,
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -409,15 +425,23 @@ export class AgentService {
     }
   }
 
-  /** Retry a failed/DLQ queue item via backend API */
+  /** Retry a failed/DLQ queue item via backend API (requires session JWT) */
   static async retryQueueItem(queueId: string): Promise<ServiceResponse<QueueRetryResult>> {
     if (!isValidUUID(queueId)) {
       return { success: false, data: null, error: 'Invalid queueId format' }
     }
     try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) {
+        return { success: false, data: null, error: 'Not authenticated' }
+      }
+
       const response = await fetch(`${this.apiBase}/api/instagram/post-queue/retry`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({ queue_id: queueId }),
       })
       if (!response.ok) {

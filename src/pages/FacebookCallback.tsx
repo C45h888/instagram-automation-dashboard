@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../stores/authStore';
+import { PagePickerModal, PageOption } from '../components/auth/PagePickerModal';
 
 /**
  * PHASE 3.7: Native Supabase OAuth Callback Handler
@@ -20,24 +21,62 @@ export default function FacebookCallback() {
   const [status, setStatus] = useState<'processing' | 'exchanging' | 'success' | 'error'>('processing');
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState('Completing authentication...');
+  const [pendingPages, setPendingPages] = useState<PageOption[] | null>(null);
+  const [pendingUserId, setPendingUserId] = useState<string | null>(null);
 
-useEffect(() => {
-  const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
-    if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN' || event === 'USER_UPDATED') {
-      if (session?.provider_token) {
-        // Update wherever you store the FB token (authStore, localStorage, etc.)
-        console.log('🔄 Provider token refreshed, updating...');
-        // Example: if you have a setter in authStore
-        // setFacebookToken(session.provider_token);
-        
-        // Or just log for now to test
-        localStorage.setItem('fb_provider_token_latest', session.provider_token);
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
+
+
+  const handlePageSelect = async (selectedPage: PageOption) => {
+    try {
+      setPendingPages(null);
+      setStatus('exchanging');
+      setStatusMessage('Connecting your Instagram Business account...');
+
+      const selectionResponse = await fetch(`${API_BASE_URL}/api/instagram/exchange-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: pendingUserId, selectedPage })
+      });
+
+      if (!selectionResponse.ok) {
+        const errorData = await selectionResponse.json().catch(() => ({}));
+        throw new Error(errorData.error || `Instagram connection failed: ${selectionResponse.status}`);
       }
-    }
-  });
 
-  return () => listener.subscription.unsubscribe();
-}, []);
+      const selectionResult = await selectionResponse.json();
+      if (!selectionResult.success) {
+        throw new Error(selectionResult.error || 'Failed to connect Instagram account');
+      }
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Session expired during page selection');
+
+      setBusinessAccount({
+        businessAccountId: selectionResult.data?.businessAccountId,
+        instagramBusinessId: selectionResult.data?.instagramBusinessId,
+        pageId: selectionResult.data?.pageId,
+        pageName: selectionResult.data?.pageName
+      });
+
+      login({
+        id: session.user.id,
+        email: session.user.email || '',
+        username: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
+        facebook_id: session.user.user_metadata?.provider_id || null,
+        avatarUrl: session.user.user_metadata?.avatar_url || '',
+        permissions: ['dashboard', 'content', 'engagement', 'analytics', 'settings']
+      }, session.access_token);
+
+      setStatus('success');
+      setStatusMessage('Success! Redirecting to dashboard...');
+      setTimeout(() => navigate('/dashboard', { replace: true }), 1500);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred';
+      setError(errorMessage);
+      setStatus('error');
+    }
+  };
 
   useEffect(() => {
     const handleOAuthCallback = async () => {
@@ -85,8 +124,6 @@ useEffect(() => {
         setStatus('exchanging');
         setStatusMessage('Connecting your Instagram Business account...');
 
-        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
-
         console.log('🔄 Calling Instagram token exchange...');
         const exchangeResponse = await fetch(`${API_BASE_URL}/api/instagram/exchange-token`, {
           method: 'POST',
@@ -109,6 +146,12 @@ useEffect(() => {
 
         if (!exchangeResult.success) {
           throw new Error(exchangeResult.error || 'Failed to connect Instagram account');
+        }
+
+        if (exchangeResult.requiresSelection) {
+          setPendingUserId(userId);
+          setPendingPages(exchangeResult.pages);
+          return; // Pause — wait for user to pick a page
         }
 
         console.log('✅ Instagram token exchange successful');
@@ -271,8 +314,13 @@ useEffect(() => {
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 flex items-center justify-center p-4">
       <div className="bg-gray-800/50 backdrop-blur-xl p-8 rounded-2xl shadow-2xl w-full max-w-md border border-gray-700">
 
+        {/* Page Picker — shown when multiple IG-linked pages found */}
+        {pendingPages && (
+          <PagePickerModal pages={pendingPages} onSelect={handlePageSelect} />
+        )}
+
         {/* Processing State */}
-        {(status === 'processing' || status === 'exchanging') && (
+        {!pendingPages && (status === 'processing' || status === 'exchanging') && (
           <div className="text-center">
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-yellow-500 mb-6"></div>
             <h2 className="text-2xl font-bold text-white mb-2">
@@ -318,6 +366,15 @@ useEffect(() => {
             >
               Back to Login
             </button>
+            <p className="text-gray-500 text-sm mt-4">
+              Or{' '}
+              <button
+                onClick={() => navigate('/settings')}
+                className="text-yellow-400 hover:text-yellow-300 underline"
+              >
+                import your token manually in Settings
+              </button>
+            </p>
           </div>
         )}
       </div>
