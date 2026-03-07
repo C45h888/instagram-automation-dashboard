@@ -1,6 +1,7 @@
 // backend.api/services/instagram-tokens.js
 const axios = require('axios');
 const { getSupabaseAdmin } = require('../config/supabase');
+const { clearCredentialCache } = require('../helpers/agent-helpers');
 
 // ==========================================
 // CONFIGURATION
@@ -550,6 +551,9 @@ async function storePageToken({ userId, igBusinessAccountId, pageAccessToken, pa
       console.warn('⚠️  Audit logging failed (non-blocking):', auditError.message);
       // Don't fail the operation if audit fails - follows Jan 19 pattern
     }
+
+    // === BUST CACHE: Ensure fresh token on next read ===
+    clearCredentialCache(businessAccount.id);
 
     return {
       success: true,

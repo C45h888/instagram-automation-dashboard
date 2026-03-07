@@ -22,21 +22,21 @@
 
 const express = require('express');
 const router = express.Router();
-const { validateAgentApiKey } = require('../middleware/agent-auth');
+const { validateAgentOrUserAuth } = require('../middleware/agent-auth');
 
 // ── Authentication ─────────────────────────────────────────────────────────────
-// validateAgentApiKey checks the X-API-Key header against AGENT_API_KEY env var.
+// validateAgentOrUserAuth accepts X-API-Key (agent) OR Authorization: Bearer JWT (frontend).
+// JWT path verifies the requesting user owns the business_account_id in the request.
 // Applied once here so every sub-router inherits it — no per-route middleware needed.
-router.use(validateAgentApiKey);
+router.use(validateAgentOrUserAuth);
 
 // ── Domain sub-routers ─────────────────────────────────────────────────────────
 // Imported from routes/agents/ — each file owns one functional domain.
 // Express matches routes in registration order; conflicts resolve to first match.
 //
 // NOTE: oversight.js is intentionally NOT here. The oversight/chat endpoint is a
-// frontend → backend → agent flow. A browser cannot safely supply X-API-Key, so
-// it cannot go through validateAgentApiKey. It is mounted directly in server.js
-// at /api/instagram BEFORE this router, without agent key auth.
+// frontend → backend → agent flow. It is mounted directly in server.js at
+// /api/instagram BEFORE this router, without agent key auth.
 router.use(require('./agents/ugc'));
 router.use(require('./agents/engagement'));
 router.use(require('./agents/publishing'));

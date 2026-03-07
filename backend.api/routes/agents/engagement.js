@@ -134,20 +134,17 @@ router.post('/reply-comment', async (req, res) => {
     const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
 
     // --- Queue: mark failed or dlq ---
-    if (fallbackEnabled) {
-      const qId = await _getQueueId(business_account_id, buildIdempotencyKey(`reply_comment:${comment_id}`));
-      if (qId) {
-        const nextRetryAt = retryable
-          ? new Date(Date.now() + Math.min(Math.pow(2, 1) * 60000, 3600000)).toISOString()
-          : null;
-        await updateQueueRow(getSupabaseAdmin(), qId, {
-          status: retryable ? 'failed' : 'dlq',
-          retry_count: 1,
-          error: errorMessage,
-          error_category,
-          next_retry_at: nextRetryAt
-        });
-      }
+    if (fallbackEnabled && queueId) {
+      const nextRetryAt = retryable
+        ? new Date(Date.now() + Math.min(Math.pow(2, 1) * 60000, 3600000)).toISOString()
+        : null;
+      await updateQueueRow(getSupabaseAdmin(), queueId, {
+        status: retryable ? 'failed' : 'dlq',
+        retry_count: 1,
+        error: errorMessage,
+        error_category,
+        next_retry_at: nextRetryAt
+      });
     }
 
     await logApiRequest({
@@ -292,22 +289,17 @@ router.post('/reply-dm', async (req, res) => {
     const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
 
     // --- Queue: mark failed or dlq ---
-    if (fallbackEnabled && conversation_id && message_text) {
-      const msgHash = buildIdempotencyKey(message_text).slice(0, 8);
-      const seed = buildIdempotencyKey(`reply_dm:${conversation_id}:${msgHash}`);
-      const qId = await _getQueueId(business_account_id, seed);
-      if (qId) {
-        const nextRetryAt = retryable
-          ? new Date(Date.now() + Math.min(Math.pow(2, 1) * 60000, 3600000)).toISOString()
-          : null;
-        await updateQueueRow(getSupabaseAdmin(), qId, {
-          status: retryable ? 'failed' : 'dlq',
-          retry_count: 1,
-          error: errorMessage,
-          error_category,
-          next_retry_at: nextRetryAt
-        });
-      }
+    if (fallbackEnabled && queueId) {
+      const nextRetryAt = retryable
+        ? new Date(Date.now() + Math.min(Math.pow(2, 1) * 60000, 3600000)).toISOString()
+        : null;
+      await updateQueueRow(getSupabaseAdmin(), queueId, {
+        status: retryable ? 'failed' : 'dlq',
+        retry_count: 1,
+        error: errorMessage,
+        error_category,
+        next_retry_at: nextRetryAt
+      });
     }
 
     await logApiRequest({
@@ -568,22 +560,17 @@ router.post('/send-dm', async (req, res) => {
     const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
 
     // --- Queue: mark failed or dlq ---
-    if (fallbackEnabled && recipient_id && message_text) {
-      const msgHash = buildIdempotencyKey(message_text).slice(0, 8);
-      const seed = buildIdempotencyKey(`send_dm:${recipient_id}:${msgHash}`);
-      const qId = await _getQueueId(business_account_id, seed);
-      if (qId) {
-        const nextRetryAt = retryable
-          ? new Date(Date.now() + Math.min(Math.pow(2, 1) * 60000, 3600000)).toISOString()
-          : null;
-        await updateQueueRow(getSupabaseAdmin(), qId, {
-          status: retryable ? 'failed' : 'dlq',
-          retry_count: 1,
-          error: errorMessage,
-          error_category,
-          next_retry_at: nextRetryAt
-        });
-      }
+    if (fallbackEnabled && queueId) {
+      const nextRetryAt = retryable
+        ? new Date(Date.now() + Math.min(Math.pow(2, 1) * 60000, 3600000)).toISOString()
+        : null;
+      await updateQueueRow(getSupabaseAdmin(), queueId, {
+        status: retryable ? 'failed' : 'dlq',
+        retry_count: 1,
+        error: errorMessage,
+        error_category,
+        next_retry_at: nextRetryAt
+      });
     }
 
     await logApiRequest({
@@ -608,25 +595,4 @@ router.post('/send-dm', async (req, res) => {
 
 // ============================================
 // INTERNAL: resolve active queue row id from idempotency key
-// ============================================
-// Used in catch blocks where queueId may not have been captured in scope
-// due to early credential resolution failure. No-ops if queue is disabled.
-
-async function _getQueueId(businessAccountId, idempotencyKey) {
-  try {
-    const supabase = getSupabaseAdmin();
-    if (!supabase) return null;
-    const { data } = await supabase
-      .from('post_queue')
-      .select('id')
-      .eq('idempotency_key', idempotencyKey)
-      .eq('business_account_id', businessAccountId)
-      .not('status', 'in', '("sent","dlq")')
-      .maybeSingle();
-    return data?.id || null;
-  } catch {
-    return null;
-  }
-}
-
 module.exports = router;

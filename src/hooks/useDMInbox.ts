@@ -13,6 +13,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useInstagramAccount } from './useInstagramAccount';
+import { supabase } from '../lib/supabase';
+
+async function getAgentAuthHeaders(): Promise<Record<string, string>> {
+  const { data: { session } } = await supabase.auth.getSession();
+  return {
+    'Content-Type': 'application/json',
+    ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {}),
+  };
+}
 import type { ConversationData } from '../types/permissions';
 import type { Database } from '../lib/database.types';
 
@@ -61,15 +70,11 @@ export const useDMInbox = (): UseDMInboxResult => {
       // ✅ UPDATED: Use VITE_API_BASE_URL from environment
       const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
 
-      // ✅ UPDATED: Build URL with full base URL and required query parameters
+      // Route to agent /conversations — uses businessAccountId (UUID), not instagramBusinessId (IG numeric ID)
+      const headers = await getAgentAuthHeaders();
       const response = await fetch(
-        `${apiBaseUrl}/api/instagram/conversations/${instagramBusinessId}?userId=${user.id}&businessAccountId=${businessAccountId}`,
-        {
-          headers: {
-            // ✅ REMOVED: Authorization header (backend retrieves token internally)
-            'Content-Type': 'application/json'
-          }
-        }
+        `${apiBaseUrl}/api/instagram/conversations?business_account_id=${businessAccountId}`,
+        { headers }
       );
 
       if (!response.ok) {
@@ -109,16 +114,12 @@ export const useDMInbox = (): UseDMInboxResult => {
     }
 
     try {
-      // ✅ UPDATED: Use VITE_API_BASE_URL and add required query parameters
+      // Route to agent /conversation-messages — uses business_account_id + conversation_id query params
       const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
+      const headers = await getAgentAuthHeaders();
       const response = await fetch(
-        `${apiBaseUrl}/api/instagram/conversations/${conversationId}/messages?userId=${user.id}&businessAccountId=${businessAccountId}`,
-        {
-          headers: {
-            // ✅ REMOVED: Authorization header (backend retrieves token internally)
-            'Content-Type': 'application/json'
-          }
-        }
+        `${apiBaseUrl}/api/instagram/conversation-messages?business_account_id=${businessAccountId}&conversation_id=${conversationId}`,
+        { headers }
       );
 
       if (response.ok) {
@@ -164,17 +165,19 @@ export const useDMInbox = (): UseDMInboxResult => {
     }
 
     try {
-      // ✅ UPDATED: Use VITE_API_BASE_URL and add required query parameters
+      // Route to agent /reply-dm — body fields: business_account_id, conversation_id, message_text
       const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
+      const headers = await getAgentAuthHeaders();
       const response = await fetch(
-        `${apiBaseUrl}/api/instagram/conversations/${selectedConversationId}/send?userId=${user.id}&businessAccountId=${businessAccountId}`,
+        `${apiBaseUrl}/api/instagram/reply-dm`,
         {
           method: 'POST',
-          headers: {
-            // ✅ REMOVED: Authorization header (backend retrieves token internally)
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ message: messageText })
+          headers,
+          body: JSON.stringify({
+            business_account_id: businessAccountId,
+            conversation_id: selectedConversationId,
+            message_text: messageText,
+          })
         }
       );
 

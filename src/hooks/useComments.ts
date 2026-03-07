@@ -13,6 +13,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useInstagramAccount } from './useInstagramAccount';
+import { supabase } from '../lib/supabase';
+
+async function getAgentAuthHeaders(): Promise<Record<string, string>> {
+  const { data: { session } } = await supabase.auth.getSession();
+  return {
+    'Content-Type': 'application/json',
+    ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {}),
+  };
+}
 import type { CommentData } from '../types/permissions';
 import type { CommentFilterState } from '../components/permissions/CommentManagement';
 
@@ -63,17 +72,13 @@ export const useComments = (mediaId?: string): UseCommentsResult => {
       // ✅ UPDATED: Use VITE_API_BASE_URL from environment
       const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
 
-      // ✅ UPDATED: Build endpoint with full URL and required query parameters
-      const endpoint = mediaId
-        ? `${apiBaseUrl}/api/instagram/comments/${mediaId}?userId=${user.id}&businessAccountId=${businessAccountId}`
-        : `${apiBaseUrl}/api/instagram/comments/${instagramBusinessId}?userId=${user.id}&businessAccountId=${businessAccountId}`;
-
-      const response = await fetch(endpoint, {
-        headers: {
-          // ✅ REMOVED: Authorization header (backend retrieves token internally)
-          'Content-Type': 'application/json'
-        }
-      });
+      // Route to agent /post-comments — uses business_account_id (UUID) not userId query params
+      const targetMediaId = mediaId || instagramBusinessId;
+      const headers = await getAgentAuthHeaders();
+      const response = await fetch(
+        `${apiBaseUrl}/api/instagram/post-comments?business_account_id=${businessAccountId}&media_id=${targetMediaId}`,
+        { headers }
+      );
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -114,17 +119,19 @@ export const useComments = (mediaId?: string): UseCommentsResult => {
     }
 
     try {
-      // ✅ UPDATED: Use VITE_API_BASE_URL and add required query parameters
+      // Route to agent /reply-comment — body fields: business_account_id, comment_id, reply_text
       const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
+      const headers = await getAgentAuthHeaders();
       const response = await fetch(
-        `${apiBaseUrl}/api/instagram/comments/${commentId}/reply?userId=${user.id}&businessAccountId=${businessAccountId}`,
+        `${apiBaseUrl}/api/instagram/reply-comment`,
         {
           method: 'POST',
-          headers: {
-            // ✅ REMOVED: Authorization header (backend retrieves token internally)
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ message: replyText })
+          headers,
+          body: JSON.stringify({
+            business_account_id: businessAccountId,
+            comment_id: commentId,
+            reply_text: replyText,
+          })
         }
       );
 
@@ -142,7 +149,7 @@ export const useComments = (mediaId?: string): UseCommentsResult => {
       // Refetch comments to show the new reply
       await fetchComments();
 
-      console.log('✅ Reply sent successfully:', result.data?.replyId);
+      console.log('✅ Reply sent successfully:', result.id);
     } catch (err: any) {
       throw new Error(err.message || 'Failed to send reply');
     }
