@@ -4,28 +4,34 @@
 //
 // Purpose: Notify users that their token is invalid and they must reconnect
 // Trigger: Shown when useTokenValidation hook returns isExpired: true
-// Action: Redirect to OAuth flow to get a new token
+// Action: Try refresh first, fall back to OAuth reconnect
 //
-// Design: Red alert box with AlertTriangle icon, clear messaging, and reconnect button
-// ✅ Follows project Tailwind patterns (glass-morphism, rounded-2xl, etc.)
-// ✅ Uses Lucide React icons
+// Design: Red alert box with AlertTriangle icon, clear messaging, and action buttons
 // =====================================
 
-import React from 'react';
-import { AlertTriangle, RefreshCw } from 'lucide-react';
+import React, { useState } from 'react';
+import { AlertTriangle, RefreshCw, RotateCcw } from 'lucide-react';
 
 interface TokenExpiredBannerProps {
   /**
    * Callback when user clicks "Reconnect Instagram Account" button
-   * Should redirect to OAuth flow (e.g., window.location.href = '/api/auth/instagram')
+   * Should redirect to OAuth flow
    */
   onReconnect: () => void;
 
   /**
+   * Optional: Attempt to refresh the token before requiring full OAuth reconnect
+   * Returns { success, requiresReconnect? } — if requiresReconnect, refresh button hides
+   */
+  onRefresh?: () => Promise<{ success: boolean; requiresReconnect?: boolean }>;
+
+  /**
+   * Optional: True while token refresh is in progress
+   */
+  isRefreshing?: boolean;
+
+  /**
    * Optional: Additional details about why token expired
-   * - error_code: Meta API error code (e.g., 190)
-   * - error_subcode: More specific error (460=password changed, 463=expired, 467=revoked)
-   * - reason: Human-readable reason
    */
   expirationDetails?: {
     error_code?: number;
@@ -34,28 +40,14 @@ interface TokenExpiredBannerProps {
   } | null;
 }
 
-/**
- * Banner component to display when Instagram access token is expired
- *
- * Usage:
- * ```tsx
- * const { isExpired, expirationDetails } = useTokenValidation();
- *
- * if (isExpired) {
- *   return (
- *     <TokenExpiredBanner
- *       onReconnect={() => window.location.href = '/api/auth/instagram'}
- *       expirationDetails={expirationDetails}
- *     />
- *   );
- * }
- * ```
- */
 export const TokenExpiredBanner: React.FC<TokenExpiredBannerProps> = ({
   onReconnect,
+  onRefresh,
+  isRefreshing = false,
   expirationDetails
 }) => {
-  // ===== DETERMINE SPECIFIC REASON FOR EXPIRATION =====
+  const [refreshFailed, setRefreshFailed] = useState(false);
+
   const getExpirationMessage = () => {
     if (!expirationDetails?.error_subcode) {
       return 'Your Instagram access token has expired or is no longer valid.';
@@ -75,6 +67,21 @@ export const TokenExpiredBanner: React.FC<TokenExpiredBannerProps> = ({
     }
   };
 
+  const handleRefresh = async () => {
+    if (!onRefresh) return;
+
+    const result = await onRefresh();
+
+    if (result.success) {
+      // Banner will auto-dismiss when parent isExpired becomes false
+      return;
+    }
+
+    if (result.requiresReconnect) {
+      setRefreshFailed(true);
+    }
+  };
+
   return (
     <div className="glass-morphism-card p-6 rounded-2xl mb-6 border-2 border-red-500/50 bg-red-900/20">
       <div className="flex items-start gap-4">
@@ -87,31 +94,54 @@ export const TokenExpiredBanner: React.FC<TokenExpiredBannerProps> = ({
 
         {/* Content */}
         <div className="flex-1">
-          {/* Title */}
           <h3 className="text-xl font-bold text-red-400 mb-2">
             Instagram Connection Expired
           </h3>
 
-          {/* Message */}
           <p className="text-gray-300 mb-1 leading-relaxed">
             {getExpirationMessage()}
           </p>
 
-          <p className="text-gray-400 text-sm mb-4 leading-relaxed">
-            Please reconnect your Instagram account to continue using the dashboard.
-            You'll be redirected to Instagram to authorize the app again. This only takes a few seconds.
-          </p>
+          {refreshFailed ? (
+            <p className="text-amber-400 text-sm mb-4 leading-relaxed">
+              Token cannot be refreshed — please reconnect your account.
+            </p>
+          ) : (
+            <p className="text-gray-400 text-sm mb-4 leading-relaxed">
+              {onRefresh && !refreshFailed
+                ? 'Try refreshing the token first. If that doesn\'t work, you\'ll need to reconnect.'
+                : 'Please reconnect your Instagram account to continue using the dashboard.'}
+            </p>
+          )}
 
-          {/* Action Button */}
-          <button
-            onClick={onReconnect}
-            className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg
-                     font-semibold transition-all duration-200 flex items-center gap-2
-                     shadow-lg hover:shadow-red-500/30 hover:scale-105 active:scale-95"
-          >
-            <RefreshCw className="w-5 h-5" />
-            Reconnect Instagram Account
-          </button>
+          {/* Action Buttons */}
+          <div className="flex flex-wrap gap-3">
+            {/* Try Refresh button — shown when onRefresh provided and refresh hasn't failed */}
+            {onRefresh && !refreshFailed && (
+              <button
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                className="bg-amber-600 hover:bg-amber-700 disabled:bg-amber-800 disabled:cursor-not-allowed
+                         text-white px-6 py-3 rounded-lg font-semibold transition-all duration-200
+                         flex items-center gap-2 shadow-lg hover:shadow-amber-500/30
+                         hover:scale-105 active:scale-95 disabled:hover:scale-100"
+              >
+                <RotateCcw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+                {isRefreshing ? 'Refreshing...' : 'Try Refresh'}
+              </button>
+            )}
+
+            {/* Reconnect button — always visible as fallback */}
+            <button
+              onClick={onReconnect}
+              className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg
+                       font-semibold transition-all duration-200 flex items-center gap-2
+                       shadow-lg hover:shadow-red-500/30 hover:scale-105 active:scale-95"
+            >
+              <RefreshCw className="w-5 h-5" />
+              Reconnect Instagram Account
+            </button>
+          </div>
 
           {/* Debug Info (only shown in development) */}
           {import.meta.env.DEV && expirationDetails && (

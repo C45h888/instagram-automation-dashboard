@@ -30,6 +30,7 @@ import PermissionBadge from '../components/permissions/shared/PermissionBadge'; 
 import { useToast } from '../hooks/useToast';
 import { useAuthStore } from '../stores/authStore';
 import { useInstagramAccount } from '../hooks/useInstagramAccount';
+import { supabase } from '../lib/supabase';
 import type { VisitorPost, PermissionRequestForm } from '../types/ugc';
 
 const MAX_RETRIES = 3;
@@ -104,7 +105,7 @@ const UGCManagement: React.FC = () => {
     }
   };
 
-  // Repost confirmation handler - executes the repost
+  // Repost confirmation handler - calls agent /repost-ugc with Bearer JWT auth
   const handleRepostConfirm = async () => {
     if (!repostPost || !user?.id || !businessAccountId) {
       toast.error('Missing required information for repost', {
@@ -118,15 +119,42 @@ const UGCManagement: React.FC = () => {
 
     try {
       const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
-      const response = await fetch(`${apiBaseUrl}/api/instagram/ugc/repost`, {
+
+      // Step 1: Look up granted permission for this UGC content
+      const { data: grantedPermission, error: permError } = await supabase
+        .from('ugc_permissions')
+        .select('id, status')
+        .eq('ugc_content_id', repostPost.id)
+        .eq('business_account_id', businessAccountId)
+        .eq('status', 'granted')
+        .maybeSingle();
+
+      if (permError) {
+        throw new Error('Failed to check permission status');
+      }
+
+      if (!grantedPermission) {
+        toast.error('Permission not yet granted for this content. Request permission first.', {
+          title: 'Permission Required',
+          duration: 5000
+        });
+        return;
+      }
+
+      // Step 2: Get Bearer JWT for agent auth
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {}),
+      };
+
+      // Step 3: Call agent /repost-ugc route
+      const response = await fetch(`${apiBaseUrl}/api/instagram/repost-ugc`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers,
         body: JSON.stringify({
-          userId: user.id,
-          businessAccountId,
-          ugcContentId: repostPost.id
+          business_account_id: businessAccountId,
+          permission_id: grantedPermission.id
         })
       });
 

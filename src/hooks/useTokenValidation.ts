@@ -63,6 +63,21 @@ interface TokenValidationResult {
    * Manually trigger token validation
    */
   revalidate: () => Promise<void>;
+
+  /**
+   * True while token refresh is in progress
+   */
+  isRefreshing: boolean;
+
+  /**
+   * Attempt to refresh the token before requiring full OAuth reconnect
+   * Returns { success, requiresReconnect?, error? }
+   */
+  refreshToken: () => Promise<{
+    success: boolean;
+    requiresReconnect?: boolean;
+    error?: string;
+  }>;
 }
 
 /**
@@ -97,6 +112,8 @@ export const useTokenValidation = (): TokenValidationResult => {
     error_subcode?: number;
     reason?: string;
   } | null>(null);
+
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // ✅ Prevent infinite loops - track if validation has been attempted
   const hasValidatedRef = useRef(false);
@@ -202,6 +219,50 @@ export const useTokenValidation = (): TokenValidationResult => {
   }, [user?.id, businessAccountId, isLoading]);
 
   /**
+   * Attempt to refresh the token via /refresh-token endpoint.
+   * If the token is fully expired, returns requiresReconnect: true.
+   */
+  const refreshToken = useCallback(async (): Promise<{
+    success: boolean;
+    requiresReconnect?: boolean;
+    error?: string;
+  }> => {
+    if (!user?.id || !businessAccountId) {
+      return { success: false, error: 'No account connected' };
+    }
+
+    setIsRefreshing(true);
+
+    try {
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
+      const response = await fetch(`${apiBaseUrl}/api/instagram/refresh-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, businessAccountId })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        // Token refreshed — revalidate to clear expired state
+        hasValidatedRef.current = false;
+        await validateToken();
+        return { success: true };
+      }
+
+      if (result.code === 'TOKEN_EXPIRED_REQUIRE_LOGIN') {
+        return { success: false, requiresReconnect: true, error: result.error };
+      }
+
+      return { success: false, error: result.error || 'Refresh failed' };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [user?.id, businessAccountId, validateToken]);
+
+  /**
    * Manually trigger revalidation (e.g., after user reconnects)
    */
   const revalidate = useCallback(async () => {
@@ -223,7 +284,9 @@ export const useTokenValidation = (): TokenValidationResult => {
     isError,
     error,
     expirationDetails,
-    revalidate
+    revalidate,
+    isRefreshing,
+    refreshToken
   };
 };
 

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Bell, CheckCircle, XCircle, AlertTriangle, Info } from 'lucide-react';
 import { useAgentHealth } from '../../hooks/useAgentHealth';
 import { useInstagramAccount } from '../../hooks/useInstagramAccount';
@@ -61,9 +61,10 @@ interface AlertRowProps {
   alert: SystemAlert;
   onResolve: (id: string) => void;
   onRelease?: (alert: SystemAlert) => void;
+  onReconnect?: () => void;
 }
 
-const SystemAlertRow: React.FC<AlertRowProps> = ({ alert, onResolve, onRelease }) => {
+const SystemAlertRow: React.FC<AlertRowProps> = ({ alert, onResolve, onRelease, onReconnect }) => {
   const { dot, text } = alertColor(alert.alert_type ?? '');
   return (
     <div className="flex items-start gap-2.5 px-3 py-2 hover:bg-white/5 transition-colors group">
@@ -73,6 +74,14 @@ const SystemAlertRow: React.FC<AlertRowProps> = ({ alert, onResolve, onRelease }
           {alert.alert_type?.replace(/_/g, ' ')}
         </p>
         <p className="text-xs text-gray-400 truncate">{alert.message}</p>
+        {alert.alert_type === 'auth_failure' && onReconnect && (
+          <button
+            onClick={onReconnect}
+            className="text-xs text-red-400 hover:text-red-300 underline mt-1 block"
+          >
+            Go to Dashboard to reconnect
+          </button>
+        )}
         {alert.alert_type === 'account_transfer_request' && onRelease && (
           <button
             onClick={() => onRelease(alert)}
@@ -105,11 +114,17 @@ const NotificationDropdown: React.FC = () => {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const location = useLocation();
+  const navigate = useNavigate();
 
   const { businessAccountId } = useInstagramAccount();
   const { alerts, isLoading, resolveAlert } = useAgentHealth(businessAccountId);
   const { history, clearHistory, addToast } = useToastContext();
   const { user } = useAuthStore();
+
+  const handleReconnect = () => {
+    navigate('/');
+    setOpen(false);
+  };
 
   const handleReleaseAccount = async (alert: SystemAlert) => {
     try {
@@ -212,6 +227,7 @@ const NotificationDropdown: React.FC = () => {
                   alert={alert}
                   onResolve={resolveAlert}
                   onRelease={handleReleaseAccount}
+                  onReconnect={handleReconnect}
                 />
               ))
             )}

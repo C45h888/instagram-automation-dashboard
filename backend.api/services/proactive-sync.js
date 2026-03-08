@@ -544,9 +544,37 @@ async function runTokenHealthCheck() {
 }
 
 function initScheduledJobs() {
+  // ── Token health check (always active, regardless of PROACTIVE_SYNC_ENABLED) ──
+  const tokenHealthSchedule = process.env.TOKEN_HEALTH_CRON || DEFAULT_SCHEDULES.tokenHealth;
+  if (!cron.validate(tokenHealthSchedule)) {
+    console.error(`[TokenHealth] Invalid cron expression: "${tokenHealthSchedule}"`);
+  }
+  let tokenHealthRunning = false;
+  const tokenHealthJob = cron.validate(tokenHealthSchedule)
+    ? cron.schedule(tokenHealthSchedule, async () => {
+        if (tokenHealthRunning) {
+          console.log('[TokenHealthCheck] Previous run still active, skipping');
+          return;
+        }
+        tokenHealthRunning = true;
+        try {
+          await runTokenHealthCheck();
+        } catch (err) {
+          console.error('[TokenHealthCheck] Unhandled error:', err.message);
+        } finally {
+          tokenHealthRunning = false;
+        }
+      }, { scheduled: true, timezone: 'UTC' })
+    : null;
+  if (tokenHealthJob) {
+    console.log(`[TokenHealth] Token health check scheduled: ${tokenHealthSchedule}`);
+  }
+
   if (process.env.PROACTIVE_SYNC_ENABLED !== 'true') {
-    console.log('[ProactiveSync] Disabled (PROACTIVE_SYNC_ENABLED !== "true")');
-    return () => {};
+    console.log('[ProactiveSync] Disabled — only token health check is active');
+    return function stopScheduledJobs() {
+      if (tokenHealthJob) tokenHealthJob.stop();
+    };
   }
 
   const schedules = {
@@ -559,7 +587,9 @@ function initScheduledJobs() {
   for (const [name, expr] of Object.entries(schedules)) {
     if (!cron.validate(expr)) {
       console.error(`[ProactiveSync] Invalid cron expression for ${name}: "${expr}"`);
-      return () => {};
+      return function stopScheduledJobs() {
+        if (tokenHealthJob) tokenHealthJob.stop();
+      };
     }
   }
 
@@ -711,26 +741,7 @@ function initScheduledJobs() {
     }
   }, { scheduled: true, timezone: 'UTC' });
 
-  // ── Daily token health check via Meta /debug_token ──────────────────────────
-  const tokenHealthSchedule = process.env.TOKEN_HEALTH_CRON || DEFAULT_SCHEDULES.tokenHealth;
-  let tokenHealthRunning = false;
-  const tokenHealthJob = cron.schedule(tokenHealthSchedule, async () => {
-    if (tokenHealthRunning) {
-      console.log('[TokenHealthCheck] Previous run still active, skipping');
-      return;
-    }
-    tokenHealthRunning = true;
-    try {
-      await runTokenHealthCheck();
-    } catch (err) {
-      console.error('[TokenHealthCheck] Unhandled error:', err.message);
-    } finally {
-      tokenHealthRunning = false;
-    }
-  }, { scheduled: true, timezone: 'UTC' });
-  console.log(`[ProactiveSync]   Token health check: ${tokenHealthSchedule}`);
-
-  scheduledJobs = [engagementJob, ugcJob, insightsJob, heartbeatJob, tokenHealthJob];
+  scheduledJobs = [engagementJob, ugcJob, insightsJob, heartbeatJob, ...(tokenHealthJob ? [tokenHealthJob] : [])];
   console.log(`[ProactiveSync] ${scheduledJobs.length} jobs scheduled`);
 
   return function stopScheduledJobs() {

@@ -112,7 +112,7 @@ const Dashboard: React.FC = () => {
   const toast = useToast();
 
   // ✅ NEW: Token validation - Lazy validation on dashboard load
-  const { isExpired, expirationDetails } = useTokenValidation();
+  const { isExpired, expirationDetails, refreshToken, isRefreshing } = useTokenValidation();
 
   // ✅ PHASE 5: LinkAccountModal integration - Use isLoading for dynamic retry state
   const { error: accountError, refetch: refetchAccount, isLoading: isAccountLoading } = useInstagramAccount();
@@ -158,6 +158,8 @@ const Dashboard: React.FC = () => {
       {isExpired && (
         <TokenExpiredBanner
           onReconnect={handleReconnect}
+          onRefresh={refreshToken}
+          isRefreshing={isRefreshing}
           expirationDetails={expirationDetails}
         />
       )}
