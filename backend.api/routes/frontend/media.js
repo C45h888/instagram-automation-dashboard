@@ -4,6 +4,7 @@ const express = require('express');
 const router = express.Router();
 const axios = require('axios');
 const { retrievePageToken, logAudit: logAuditService } = require('../../services/instagram-tokens');
+const { resolveAccountCredentials } = require('../../helpers/agent-helpers');
 const { getSupabaseAdmin } = require('../../config/supabase');
 
 const logAudit = logAuditService;
@@ -378,9 +379,9 @@ router.post('/create-post', async (req, res) => {
     // ===== BRANCH 2: PUBLISH TO INSTAGRAM =====
     console.log('🚀 Publishing post to Instagram (2-step flow)...');
 
-    let pageToken;
+    let pageToken, igUserId;
     try {
-      pageToken = await retrievePageToken(userId, businessAccountId);
+      ({ pageToken, igUserId } = await resolveAccountCredentials(businessAccountId));
     } catch (tokenError) {
       console.error('❌ Token retrieval failed:', tokenError.message);
 
@@ -396,8 +397,6 @@ router.post('/create-post', async (req, res) => {
         code: 'TOKEN_RETRIEVAL_FAILED'
       });
     }
-
-    const igUserId = businessAccountId;
 
     // STEP 1: Create Media Container
     console.log('   Step 1: Creating media container...');

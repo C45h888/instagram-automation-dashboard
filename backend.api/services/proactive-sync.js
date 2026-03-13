@@ -4,9 +4,12 @@
 // Existing HTTP endpoints remain as Bus 2 (reactive fallback).
 
 const cron = require('node-cron');
-const axios = require('axios');
 const { getSupabaseAdmin, logAudit } = require('../config/supabase');
 const { clearCredentialCache } = require('../helpers/agent-helpers');
+const {
+  retrievePageToken,
+  detectTokenType,
+} = require('../services/instagram-tokens');
 const {
   fetchAndStoreComments,
   fetchAndStoreConversations,
@@ -26,8 +29,6 @@ const DEFAULT_SCHEDULES = {
   insights:     '0 2 * * *',     // Daily at 02:00 UTC (agent runs daily)
   tokenHealth:  '0 3 * * *',     // Daily at 03:00 UTC (offset from insights to avoid overlap)
 };
-
-const GRAPH_API_VERSION = process.env.GRAPH_API_VERSION || 'v23.0';
 
 // Rate-limiting caps per cycle
 const ENGAGEMENT_MAX_POSTS = 5;
@@ -467,7 +468,7 @@ async function runTokenHealthCheck() {
   try {
     const { data: credentials, error } = await supabase
       .from('instagram_credentials')
-      .select('id, user_id, business_account_id, access_token_encrypted, debug_token_checked_at')
+      .select('id, user_id, business_account_id, debug_token_checked_at')
       .eq('token_type', 'page')
       .eq('is_active', true);
 
@@ -490,33 +491,21 @@ async function runTokenHealthCheck() {
         }
       }
 
-      // Retrieve per-user encryption key
-      const { data: bizAccount } = await supabase
-        .from('instagram_business_accounts')
-        .select('encryption_key_id')
-        .eq('user_id', cred.user_id)
-        .eq('id', cred.business_account_id)
-        .maybeSingle();
-
-      const { data: token, error: decryptErr } = await supabase.rpc('decrypt_instagram_token', {
-        encrypted_token: cred.access_token_encrypted,
-        p_key_id: bizAccount?.encryption_key_id || null
-      });
-
-      if (decryptErr || !token) {
-        console.warn(`[TokenHealthCheck] Could not decrypt cred ${cred.id}, skipping`);
+      // Use service layer to retrieve decrypted token (handles key lookup + decryption)
+      let token;
+      try {
+        token = await retrievePageToken(cred.user_id, cred.business_account_id);
+      } catch (retrieveErr) {
+        console.warn(`[TokenHealthCheck] Could not retrieve token for cred ${cred.id}:`, retrieveErr.message);
         skipped++;
         continue;
       }
 
+      // Use service layer detectTokenType to call /debug_token
       try {
-        const response = await axios.get(
-          `https://graph.facebook.com/${GRAPH_API_VERSION}/debug_token`,
-          { params: { input_token: token, access_token: token }, timeout: 8000 }
-        );
-        const tokenData = response.data?.data;
+        const tokenInfo = await detectTokenType(token);
 
-        if (!tokenData?.is_valid) {
+        if (!tokenInfo || !tokenInfo.isValid) {
           // Mark token inactive
           await supabase
             .from('instagram_credentials')
@@ -543,7 +532,7 @@ async function runTokenHealthCheck() {
           valid++;
         }
       } catch (apiErr) {
-        console.warn(`[TokenHealthCheck] /debug_token API call failed for cred ${cred.id}:`, apiErr.message);
+        console.warn(`[TokenHealthCheck] /debug_token call failed for cred ${cred.id}:`, apiErr.message);
         skipped++;
       }
 

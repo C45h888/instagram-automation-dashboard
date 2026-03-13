@@ -23,6 +23,8 @@ import { useInstagramProfile } from '../hooks/useInstagramProfile';
 // ✅ NEW: Token validation imports
 import { useTokenValidation } from '../hooks/useTokenValidation';
 import TokenExpiredBanner from '../components/dashboard/TokenExpiredBanner';
+import { useTokenStatus } from '../hooks/useTokenStatus';
+import TokenWarningBanner from '../components/dashboard/TokenWarningBanner';
 // ✅ PHASE 5: LinkAccountModal integration
 import { LinkAccountModal } from '../components/modals';
 import { useInstagramAccount } from '../hooks/useInstagramAccount';
@@ -114,6 +116,9 @@ const Dashboard: React.FC = () => {
   // ✅ NEW: Token validation - Lazy validation on dashboard load
   const { isExpired, expirationDetails, refreshToken, isRefreshing } = useTokenValidation();
 
+  // ✅ NEW: Token status - proactive expiry warnings (warning/critical)
+  const { uat: uatStatus } = useTokenStatus();
+
   // ✅ PHASE 5: LinkAccountModal integration - Use isLoading for dynamic retry state
   const { error: accountError, refetch: refetchAccount, isLoading: isAccountLoading } = useInstagramAccount();
   const [showLinkModal, setShowLinkModal] = useState(false);
@@ -161,6 +166,15 @@ const Dashboard: React.FC = () => {
           onRefresh={refreshToken}
           isRefreshing={isRefreshing}
           expirationDetails={expirationDetails}
+        />
+      )}
+
+      {/* ✅ NEW: Token Warning Banner - Shows proactive warning when UAT is expiring soon */}
+      {!isExpired && (uatStatus?.status === 'warning' || uatStatus?.status === 'critical') && (
+        <TokenWarningBanner
+          uat={uatStatus}
+          onRefresh={refreshToken}
+          isRefreshing={isRefreshing}
         />
       )}
 
