@@ -411,6 +411,10 @@ async function logApiRequest(userIdOrObj, endpoint, method, responseTime, status
       return;
     }
 
+    const _now = new Date();
+    const _hourBucket = new Date(_now);
+    _hourBucket.setMinutes(0, 0, 0);
+
     const { error } = await admin.from('api_usage').insert({
       user_id: userId_v || null,
       business_account_id: businessAccountId_v || null,
@@ -419,8 +423,9 @@ async function logApiRequest(userIdOrObj, endpoint, method, responseTime, status
       response_time_ms: responseTime_v,
       status_code: statusCode_v,
       success: success_v,
+      hour_bucket: _hourBucket.toISOString(),
       request_count: 1,
-      created_at: new Date().toISOString()
+      created_at: _now.toISOString()
     });
 
     if (error) {

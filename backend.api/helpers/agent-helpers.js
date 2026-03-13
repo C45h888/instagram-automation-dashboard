@@ -200,7 +200,22 @@ async function resolveAccountCredentials(businessAccountId) {
       throw new Error('Failed to retrieve access token');
     }
 
-    const result = { igUserId, pageToken, userId };
+    // Fetch page_id from credential row — stored by storePageToken, needed for pages_* scoped ops
+    let pageId = null;
+    try {
+      const { data: cred } = await supabase
+        .from('instagram_credentials')
+        .select('page_id')
+        .eq('business_account_id', businessAccountId)
+        .eq('token_type', 'page')
+        .eq('is_active', true)
+        .maybeSingle();
+      pageId = cred?.page_id || null;
+    } catch (pageIdErr) {
+      console.warn('⚠️ page_id lookup failed (non-blocking):', pageIdErr.message);
+    }
+
+    const result = { igUserId, pageToken, userId, pageId };
     _credentialCache.set(businessAccountId, { value: result, ts: Date.now() });
     return result;
   } catch (error) {

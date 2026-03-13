@@ -1,4 +1,6 @@
 // backend.api/services/instagram-tokens.js
+// Token management service — modularised for PAT-first architecture.
+// Layout: Configuration → Shared (detection/scope) → PAT ops → UAT ops → Insights → Exports
 const axios = require('axios');
 const { getSupabaseAdmin } = require('../config/supabase');
 const { clearCredentialCache } = require('../helpers/agent-helpers');
@@ -10,7 +12,6 @@ const { clearCredentialCache } = require('../helpers/agent-helpers');
 const GRAPH_API_VERSION = 'v23.0';
 const GRAPH_API_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
 
-// ✅ REFACTORED: Separate safe metrics from optional metrics
 // Safe metrics - work for all Instagram Business/Creator accounts
 const SAFE_METRICS = [
   'impressions',
@@ -25,8 +26,123 @@ const DEFAULT_METRICS = [
   'website_clicks'
 ];
 
+// Comprehensive PAT scope set — used as fallback when /debug_token is unavailable.
+// Matches the full permission set granted via Facebook Login for Business.
+const PAT_SCOPE_DEFAULTS = [
+  'instagram_basic',
+  'instagram_manage_comments',
+  'instagram_manage_insights',
+  'instagram_content_publish',
+  'instagram_manage_messages',
+  'pages_show_list',
+  'pages_read_engagement',
+  'pages_manage_metadata',
+  'pages_read_user_content',
+  'pages_manage_posts',
+  'pages_manage_engagement'
+];
+
 // ==========================================
-// TOKEN EXCHANGE FUNCTIONS
+// SHARED: TOKEN DETECTION & SCOPE
+// ==========================================
+
+/**
+ * Detect token type and metadata via Meta's /debug_token endpoint.
+ * Used by exchange, import, and validation flows to differentiate UAT from PAT.
+ *
+ * @param {string} token - Any Meta access token (UAT or PAT)
+ * @returns {Promise<{isValid: boolean, type: string, scopes: string[], expiresAt: number, issuedAt: number, userId: string, appId: string}|null>}
+ */
+async function detectTokenType(token) {
+  try {
+    const response = await axios.get(`${GRAPH_API_BASE}/debug_token`, {
+      params: { input_token: token, access_token: token },
+      timeout: 5000
+    });
+    const data = response.data.data;
+    return {
+      isValid: data.is_valid,
+      type: data.type,               // 'USER' or 'PAGE'
+      appId: data.app_id,
+      scopes: data.scopes || [],
+      expiresAt: data.expires_at,     // 0 = never expires
+      issuedAt: data.issued_at,
+      userId: data.user_id,
+      dataAccessExpiresAt: data.data_access_expires_at || null  // unix timestamp, separate from token expiry
+    };
+  } catch (err) {
+    console.warn('⚠️ Token type detection failed:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Fetches dynamic scope from Meta /debug_token API with 7-day caching.
+ * Moved from routes/frontend/tokens.js to service layer for shared use.
+ *
+ * @param {string} token - Access token to inspect
+ * @param {object} supabase - Supabase client
+ * @param {string} credentialId - Credential record ID for caching (optional)
+ * @returns {Promise<string[]>} Array of scope strings
+ */
+async function fetchDynamicScope(token, supabase, credentialId = null) {
+  // Check cache first
+  if (credentialId) {
+    const { data: cached } = await supabase
+      .from('instagram_credentials')
+      .select('scope_cache, scope_cache_updated_at')
+      .eq('id', credentialId)
+      .single();
+
+    // Use cache if less than 7 days old
+    if (cached?.scope_cache && cached?.scope_cache_updated_at) {
+      const cacheAge = Date.now() - new Date(cached.scope_cache_updated_at).getTime();
+      const sevenDays = 7 * 24 * 60 * 60 * 1000;
+
+      if (cacheAge < sevenDays) {
+        console.log('✅ Using cached scope (age: ' + Math.floor(cacheAge / 1000 / 60 / 60) + 'h)');
+        return cached.scope_cache;
+      }
+    }
+  }
+
+  // Fetch from Meta API
+  try {
+    const debugResponse = await axios.get(
+      `${GRAPH_API_BASE}/debug_token`,
+      {
+        params: {
+          input_token: token,
+          access_token: token // Self-debug
+        },
+        timeout: 5000
+      }
+    );
+
+    const detectedScope = debugResponse.data.data?.scopes || [];
+    console.log('✅ Detected scopes from Meta API:', detectedScope.join(', '));
+
+    // Update cache
+    if (credentialId && detectedScope.length > 0) {
+      await supabase
+        .from('instagram_credentials')
+        .update({
+          scope_cache: detectedScope,
+          scope_cache_updated_at: new Date().toISOString()
+        })
+        .eq('id', credentialId);
+    }
+
+    return detectedScope;
+
+  } catch (debugError) {
+    console.warn('⚠️  Scope detection failed, using PAT defaults');
+    return PAT_SCOPE_DEFAULTS;
+  }
+}
+
+// ==========================================
+// PAT: PAGE ACCESS TOKEN OPERATIONS
 // ==========================================
 
 /**
@@ -437,6 +553,11 @@ async function storePageToken({ userId, igBusinessAccountId, pageAccessToken, pa
       console.warn('⚠️  Key provisioning error, using shared key:', keyErr.message);
     }
 
+    // ===== STEP 2.8: Resolve scope early — needed by both business account and credential upserts =====
+    // Priority: 1) Passed scope, 2) PAT_SCOPE_DEFAULTS (comprehensive fallback)
+    const finalScope = scope || PAT_SCOPE_DEFAULTS;
+    console.log('📋 Using scope:', finalScope.length, 'permissions');
+
     // ===== STEP 3: Create/Update business account record FIRST =====
     console.log('📝 Creating/updating Instagram business account record...');
 
@@ -445,10 +566,12 @@ async function storePageToken({ userId, igBusinessAccountId, pageAccessToken, pa
       .upsert({
         user_id: userId,
         instagram_business_id: igBusinessAccountId,
-        name: pageName, // FIXED: Added required 'name' field
+        name: pageName,
         username: pageName, // Use page name as username initially
         is_connected: true,
+        connection_status: 'active',
         encryption_key_id: encryptionKeyId,
+        granted_permissions: finalScope,
         last_sync_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }, {
@@ -491,12 +614,6 @@ async function storePageToken({ userId, igBusinessAccountId, pageAccessToken, pa
     }
 
     console.log('✅ Token encrypted successfully');
-
-    // ===== STEP 5: Smart defaults for scope and expiration (v3 OPTIMIZATION) =====
-    // Priority: 1) Passed scope, 2) Detected from debug_token, 3) Fallback defaults
-    const finalScope = scope || ['instagram_manage_insights', 'pages_show_list', 'pages_read_engagement'];
-
-    console.log('📋 Using scope:', finalScope);
 
     // Page access tokens are non-expiring per Meta documentation.
     // We store NULL for expires_at. Token health is validated via daily /debug_token cron.
@@ -679,13 +796,215 @@ async function retrievePageToken(userId, businessAccountId) {
 }
 
 // ==========================================
-// SCOPE VALIDATION & AUDIT LOGGING
-// =====================================
-// ✅ NEW (bff586c pattern): Scope validation and resilient audit logging
-// ===========================================
+// UAT: USER ACCESS TOKEN OPERATIONS
+// ==========================================
 
 /**
- * ✅ NEW (bff586c pattern): Validate token has required scopes
+ * Store a validated UAT in the split vault as token_type='user'.
+ * Called by /exchange-token after UAT validation/extension, and by importMode.
+ * Shares the same encryption infrastructure as storePageToken (per-user Vault key).
+ *
+ * @param {{ userId: string, businessAccountId: string, userAccessToken: string, scope: string[], expiresAt: string|null }} params
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+async function storeUserToken({ userId, businessAccountId, userAccessToken, scope, expiresAt, dataAccessExpiresAt }) {
+  try {
+    const supabase = getSupabaseAdmin();
+    if (!supabase) return { success: false, error: 'Database not available' };
+
+    // Look up per-user encryption key from business account (provisioned by storePageToken)
+    let encryptionKeyId = null;
+    try {
+      const { data: bizAccount } = await supabase
+        .from('instagram_business_accounts')
+        .select('encryption_key_id')
+        .eq('id', businessAccountId)
+        .maybeSingle();
+      encryptionKeyId = bizAccount?.encryption_key_id || null;
+    } catch (keyErr) {
+      console.warn('⚠️ UAT encryption key lookup failed, using shared key:', keyErr.message);
+    }
+
+    const { data: encryptedToken, error: encryptError } = await supabase
+      .rpc('encrypt_instagram_token', { token: userAccessToken, p_key_id: encryptionKeyId });
+
+    if (encryptError) {
+      console.warn('⚠️ UAT encryption failed:', encryptError.message);
+      return { success: false, error: encryptError.message };
+    }
+
+    const { error: credError } = await supabase
+      .from('instagram_credentials')
+      .upsert({
+        user_id: userId,
+        business_account_id: businessAccountId,
+        access_token_encrypted: encryptedToken,
+        token_type: 'user',
+        scope: scope || [],
+        issued_at: new Date().toISOString(),
+        expires_at: expiresAt,
+        data_access_expires_at: dataAccessExpiresAt || null,
+        is_active: true,
+        last_refreshed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'user_id,business_account_id,token_type' })
+      .select();
+
+    if (credError) {
+      console.warn('⚠️ UAT store failed:', credError.message);
+      return { success: false, error: credError.message };
+    }
+
+    console.log('✅ UAT stored in vault (token_type=user)');
+    return { success: true };
+  } catch (err) {
+    console.warn('⚠️ storeUserToken error:', err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Retrieve a stored UAT from the split vault with decryption.
+ * Returns an object with token + expiry metadata (unlike retrievePageToken which returns just the token string).
+ * Checks expires_at and throws if expired — UATs DO expire (~60 days), unlike PATs.
+ *
+ * @param {string} userId - User's UUID
+ * @param {string} businessAccountId - Business account UUID
+ * @returns {Promise<{token: string, expiresAt: string|null, dataAccessExpiresAt: string|null, scope: string[], issuedAt: string|null}>}
+ * @throws {Error} If UAT not found, expired, or decryption fails
+ */
+async function retrieveUserToken(userId, businessAccountId) {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) throw new Error('Database not available');
+
+  const { data, error } = await supabase
+    .from('instagram_credentials')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('business_account_id', businessAccountId)
+    .eq('token_type', 'user')
+    .eq('is_active', true)
+    .single();
+
+  if (error || !data) {
+    if (error?.code === 'PGRST116') {
+      throw new Error('No UAT found. User must complete OAuth flow.');
+    }
+    throw new Error(`UAT retrieval failed: ${error?.message || 'not found'}`);
+  }
+
+  // UATs expire (~60 days) — reject if past expiry
+  if (data.expires_at && new Date(data.expires_at) < new Date()) {
+    throw new Error('UAT has expired. User must reconnect via OAuth.');
+  }
+
+  // Look up per-user Vault encryption key
+  let encryptionKeyId = null;
+  try {
+    const { data: bizAccount } = await supabase
+      .from('instagram_business_accounts')
+      .select('encryption_key_id')
+      .eq('id', businessAccountId)
+      .maybeSingle();
+    encryptionKeyId = bizAccount?.encryption_key_id || null;
+  } catch (keyErr) {
+    console.warn('⚠️ UAT key lookup failed, using shared key:', keyErr.message);
+  }
+
+  const { data: decryptedToken, error: decryptError } = await supabase
+    .rpc('decrypt_instagram_token', {
+      encrypted_token: data.access_token_encrypted,
+      p_key_id: encryptionKeyId
+    });
+
+  if (decryptError || !decryptedToken) {
+    throw new Error(`UAT decryption failed: ${decryptError?.message || 'null result'}`);
+  }
+
+  return {
+    token: decryptedToken,
+    expiresAt: data.expires_at,
+    dataAccessExpiresAt: data.data_access_expires_at,
+    scope: data.scope,
+    issuedAt: data.issued_at
+  };
+}
+
+/**
+ * Refresh a stored UAT via Meta's fb_exchange_token grant.
+ * Retrieves the current UAT, extends it, validates the new token via /debug_token,
+ * stores the refreshed token, and busts the credential cache.
+ *
+ * Important: Cannot refresh an expired UAT — user must re-login via OAuth.
+ *
+ * @param {string} userId - User's UUID
+ * @param {string} businessAccountId - Business account UUID
+ * @returns {Promise<{success: boolean, expiresAt: string|null, scopes: string[]}>}
+ * @throws {Error} If current UAT expired, extension fails, or validation fails
+ */
+async function refreshUserToken(userId, businessAccountId) {
+  // 1. Retrieve current UAT (throws if expired or missing)
+  const current = await retrieveUserToken(userId, businessAccountId);
+
+  // 2. Call fb_exchange_token to extend
+  const extendRes = await axios.get(`${GRAPH_API_BASE}/oauth/access_token`, {
+    params: {
+      grant_type: 'fb_exchange_token',
+      client_id: process.env.INSTAGRAM_APP_ID,
+      client_secret: process.env.INSTAGRAM_APP_SECRET,
+      fb_exchange_token: current.token
+    },
+    timeout: 10000
+  });
+
+  const newToken = extendRes.data.access_token;
+  const expiresIn = extendRes.data.expires_in; // seconds
+
+  // 3. Validate new token via /debug_token
+  const tokenInfo = await detectTokenType(newToken);
+  if (!tokenInfo || !tokenInfo.isValid) {
+    throw new Error('Refreshed UAT failed /debug_token validation');
+  }
+
+  // 4. Compute expiry timestamps
+  const newExpiresAt = expiresIn
+    ? new Date(Date.now() + expiresIn * 1000).toISOString()
+    : null;
+
+  const dataAccessExpiresAt = tokenInfo.dataAccessExpiresAt
+    ? new Date(tokenInfo.dataAccessExpiresAt * 1000).toISOString()
+    : null;
+
+  // 5. Store refreshed UAT (upserts on conflict)
+  const storeResult = await storeUserToken({
+    userId,
+    businessAccountId,
+    userAccessToken: newToken,
+    scope: tokenInfo.scopes,
+    expiresAt: newExpiresAt,
+    dataAccessExpiresAt
+  });
+
+  if (!storeResult.success) {
+    throw new Error(`Failed to store refreshed UAT: ${storeResult.error}`);
+  }
+
+  // 6. Bust credential cache
+  clearCredentialCache(businessAccountId);
+
+  return {
+    success: true,
+    expiresAt: newExpiresAt,
+    scopes: tokenInfo.scopes
+  };
+}
+
+// ==========================================
+// SCOPE VALIDATION & AUDIT LOGGING
+// ==========================================
+
+/**
+ * Validate token has required scopes.
  * Uses cached scopes from instagram_credentials.scope_cache
  * @param {string} userId - User UUID
  * @param {string} businessAccountId - Business account UUID
@@ -763,23 +1082,31 @@ async function logAudit(action, userId, metadata = {}) {
 // ==========================================
 
 module.exports = {
-  // Token exchange
+  // Shared: token detection & scope
+  detectTokenType,
+  fetchDynamicScope,
+  validateTokenScopes,
+
+  // PAT: page access token operations
   exchangeForPageToken,
+  storePageToken,
+  retrievePageToken,
+
+  // UAT: user access token operations
+  storeUserToken,
+  retrieveUserToken,
+  refreshUserToken,
 
   // Insights API
   getAccountInsights,
 
-  // Database operations
-  storePageToken,
-  retrievePageToken,
-
-  // ✅ NEW: Scope validation & audit logging (bff586c pattern)
-  validateTokenScopes,
+  // Audit logging
   logAudit,
 
-  // Constants (for testing)
+  // Constants
   GRAPH_API_VERSION,
   GRAPH_API_BASE,
   DEFAULT_METRICS,
-  SAFE_METRICS  // ✅ Added: Safe metrics that work for all account types
+  SAFE_METRICS,
+  PAT_SCOPE_DEFAULTS,
 };

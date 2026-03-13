@@ -49,6 +49,10 @@ function delay(ms) {
 // A1: In-memory rate-limit circuit breaker
 const _rateLimitedAccounts = new Map(); // accountId → unblocked_at ms
 
+// B1: Auth-failure strike counter — disconnect only after N consecutive failures
+const _authFailureStrikes = new Map(); // accountId → strike count
+const AUTH_FAILURE_MAX_STRIKES = 3;
+
 function isAccountRateLimited(accountId) {
   const unblocked = _rateLimitedAccounts.get(accountId);
   if (!unblocked) return false;
@@ -94,10 +98,20 @@ async function markAccountDisconnectedOnAuthFailure(accountId, errorMessage) {
 
 // A3: Result error-handler (sync — callers use return value for flow control)
 function handleFetchError(result, accountId) {
-  if (!result || result.success) return { skip: false, break: false };
+  if (!result || result.success) {
+    _authFailureStrikes.delete(accountId);
+    return { skip: false, break: false };
+  }
 
   if (result.error_category === 'auth_failure') {
-    markAccountDisconnectedOnAuthFailure(accountId, result.error || 'auth_failure').catch(() => {});
+    const strikes = (_authFailureStrikes.get(accountId) || 0) + 1;
+    _authFailureStrikes.set(accountId, strikes);
+    console.warn(`[ProactiveSync] Account ${accountId} auth_failure strike ${strikes}/${AUTH_FAILURE_MAX_STRIKES}`);
+
+    if (strikes >= AUTH_FAILURE_MAX_STRIKES) {
+      _authFailureStrikes.delete(accountId);
+      markAccountDisconnectedOnAuthFailure(accountId, result.error || 'auth_failure').catch(() => {});
+    }
     return { skip: true, break: false };
   }
 
@@ -543,6 +557,88 @@ async function runTokenHealthCheck() {
   }
 }
 
+/**
+ * Proactive UAT refresh: finds UATs expiring within 14 days and attempts
+ * fb_exchange_token renewal. On failure, creates a system_alert so the
+ * user knows they need to reconnect.
+ * Runs in the same daily 3am cron slot as runTokenHealthCheck.
+ */
+async function runUATRefreshCheck() {
+  console.log('[UATRefresh] Running proactive UAT refresh check...');
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    console.warn('[UATRefresh] Supabase not available, skipping');
+    return;
+  }
+
+  const { refreshUserToken } = require('./instagram-tokens');
+
+  // Find UATs expiring within 14 days
+  const fourteenDaysFromNow = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+
+  const { data: expiringUATs, error } = await supabase
+    .from('instagram_credentials')
+    .select('id, user_id, business_account_id, expires_at')
+    .eq('token_type', 'user')
+    .eq('is_active', true)
+    .not('expires_at', 'is', null)
+    .lt('expires_at', fourteenDaysFromNow);
+
+  if (error) {
+    console.error('[UATRefresh] Query failed:', error.message);
+    return;
+  }
+
+  if (!expiringUATs?.length) {
+    console.log('[UATRefresh] No UATs need refresh');
+    return;
+  }
+
+  console.log(`[UATRefresh] Found ${expiringUATs.length} UAT(s) expiring within 14 days`);
+
+  for (const uat of expiringUATs) {
+    const daysLeft = Math.ceil((new Date(uat.expires_at) - Date.now()) / (24 * 60 * 60 * 1000));
+    console.log(`[UATRefresh] UAT ${uat.id}: ${daysLeft} days remaining`);
+
+    try {
+      const result = await refreshUserToken(uat.user_id, uat.business_account_id);
+      console.log(`[UATRefresh] UAT refreshed, new expiry: ${result.expiresAt}`);
+
+      // Success notification
+      await supabase.from('system_alerts').insert({
+        alert_type: 'uat_auto_refreshed',
+        business_account_id: uat.business_account_id,
+        message: `Your access token was automatically refreshed. New expiry: ${result.expiresAt}`,
+        details: {
+          old_expires_at: uat.expires_at,
+          new_expires_at: result.expiresAt,
+          days_remaining_at_refresh: daysLeft
+        },
+        resolved: true
+      });
+    } catch (refreshErr) {
+      console.error(`[UATRefresh] UAT refresh failed: ${refreshErr.message}`);
+
+      // Failure notification — user must take action
+      await supabase.from('system_alerts').insert({
+        alert_type: 'uat_expiry_warning',
+        business_account_id: uat.business_account_id,
+        message: `Your access token expires in ${daysLeft} days and auto-refresh failed. Please reconnect your Instagram account.`,
+        details: {
+          expires_at: uat.expires_at,
+          error: refreshErr.message,
+          days_remaining: daysLeft
+        },
+        resolved: false
+      });
+    }
+
+    await delay(1000); // Rate-limit between refresh attempts
+  }
+
+  console.log('[UATRefresh] Proactive UAT refresh check complete');
+}
+
 function initScheduledJobs() {
   // ── Token health check (always active, regardless of PROACTIVE_SYNC_ENABLED) ──
   const tokenHealthSchedule = process.env.TOKEN_HEALTH_CRON || DEFAULT_SCHEDULES.tokenHealth;
@@ -559,6 +655,7 @@ function initScheduledJobs() {
         tokenHealthRunning = true;
         try {
           await runTokenHealthCheck();
+          await runUATRefreshCheck();
         } catch (err) {
           console.error('[TokenHealthCheck] Unhandled error:', err.message);
         } finally {
@@ -761,6 +858,7 @@ module.exports = {
   proactiveUgcSync,
   proactiveInsightsSync,
   runTokenHealthCheck,
+  runUATRefreshCheck,
   // Exposed for unit testing
   getActiveAccounts,
   getRecentMedia,

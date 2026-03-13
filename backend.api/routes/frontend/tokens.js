@@ -7,7 +7,12 @@ const {
   exchangeForPageToken,
   storePageToken,
   retrievePageToken,
-  logAudit: logAuditService
+  storeUserToken,
+  refreshUserToken,
+  detectTokenType,
+  fetchDynamicScope,
+  logAudit: logAuditService,
+  GRAPH_API_BASE,
 } = require('../../services/instagram-tokens');
 const { getSupabaseAdmin } = require('../../config/supabase');
 const { clearCredentialCache } = require('../../helpers/agent-helpers');
@@ -47,69 +52,6 @@ async function validateMetaToken(token, instagramBusinessId) {
       success: false,
       error: error.response?.data?.error?.message || error.message
     };
-  }
-}
-
-/**
- * Fetches dynamic scope from Meta debug_token API with caching
- * @param {string} token - Access token to inspect
- * @param {object} supabase - Supabase client
- * @param {string} credentialId - Credential record ID for caching
- * @returns {Promise<string[]>} - Array of scope strings
- */
-async function fetchDynamicScope(token, supabase, credentialId = null) {
-  // Check cache first
-  if (credentialId) {
-    const { data: cached } = await supabase
-      .from('instagram_credentials')
-      .select('scope_cache, scope_cache_updated_at')
-      .eq('id', credentialId)
-      .single();
-
-    // Use cache if less than 7 days old
-    if (cached?.scope_cache && cached?.scope_cache_updated_at) {
-      const cacheAge = Date.now() - new Date(cached.scope_cache_updated_at).getTime();
-      const sevenDays = 7 * 24 * 60 * 60 * 1000;
-
-      if (cacheAge < sevenDays) {
-        console.log('✅ Using cached scope (age: ' + Math.floor(cacheAge / 1000 / 60 / 60) + 'h)');
-        return cached.scope_cache;
-      }
-    }
-  }
-
-  // Fetch from Meta API
-  try {
-    const debugResponse = await axios.get(
-      `https://graph.facebook.com/${GRAPH_API_VERSION}/debug_token`,
-      {
-        params: {
-          input_token: token,
-          access_token: token // Self-debug
-        },
-        timeout: 5000
-      }
-    );
-
-    const detectedScope = debugResponse.data.data?.scopes || [];
-    console.log('✅ Detected scopes from Meta API:', detectedScope.join(', '));
-
-    // Update cache
-    if (credentialId && detectedScope.length > 0) {
-      await supabase
-        .from('instagram_credentials')
-        .update({
-          scope_cache: detectedScope,
-          scope_cache_updated_at: new Date().toISOString()
-        })
-        .eq('id', credentialId);
-    }
-
-    return detectedScope;
-
-  } catch (debugError) {
-    console.warn('⚠️  Scope detection failed, using defaults');
-    return ['instagram_manage_insights', 'pages_show_list', 'pages_read_engagement'];
   }
 }
 
@@ -229,15 +171,61 @@ router.post('/exchange-token', async (req, res) => {
       });
     }
 
-    // ===== STEP 4: Store the page token =====
-    console.log('💾 Storing token and creating business account record...');
+    // ===== STEP 4: Validate & potentially extend UAT =====
+    // Per Meta docs: long-lived UAT → non-expiring PAT. Short-lived UAT → short-lived PAT.
+    let finalUAT = userAccessToken || selectedPage?.originalUAT;
+    let uatScopes = [];
+    let uatExpiresAt = null;
+    let uatDetected = false;
+
+    if (finalUAT) {
+      const uatInfo = await detectTokenType(finalUAT);
+      if (uatInfo && uatInfo.isValid) {
+        uatDetected = true;
+        uatScopes = uatInfo.scopes || [];
+        const expiresAt = uatInfo.expiresAt;
+        // Short-lived: expires_at > 0 and less than 7 days from now
+        const isShortLived = expiresAt > 0 && (expiresAt - Math.floor(Date.now() / 1000)) < 3600 * 24 * 7;
+
+        if (isShortLived) {
+          try {
+            const extendRes = await axios.get(`${GRAPH_API_BASE}/oauth/access_token`, {
+              params: {
+                grant_type: 'fb_exchange_token',
+                client_id: process.env.INSTAGRAM_APP_ID,
+                client_secret: process.env.INSTAGRAM_APP_SECRET,
+                fb_exchange_token: finalUAT
+              },
+              timeout: 10000
+            });
+            finalUAT = extendRes.data.access_token;
+            uatExpiresAt = extendRes.data.expires_in
+              ? new Date(Date.now() + extendRes.data.expires_in * 1000).toISOString()
+              : null;
+            console.log('✅ UAT extended to long-lived');
+          } catch (extErr) {
+            console.warn('⚠️ UAT extension failed, storing as short-lived:', extErr.message);
+            uatExpiresAt = new Date(expiresAt * 1000).toISOString();
+          }
+        } else {
+          uatExpiresAt = expiresAt > 0 ? new Date(expiresAt * 1000).toISOString() : null;
+        }
+      }
+    }
+
+    // ===== STEP 5: Detect PAT scopes via /debug_token =====
+    const patScopes = await fetchDynamicScope(pageAccessToken, supabaseAdmin);
+
+    // ===== STEP 6: Store PAT in vault =====
+    console.log('💾 Storing PAT and creating business account record...');
 
     const storeResult = await storePageToken({
       userId,
       igBusinessAccountId: discoveredBusinessAccountId,
       pageAccessToken,
       pageId,
-      pageName
+      pageName,
+      scope: patScopes
     });
 
     if (!storeResult.success) {
@@ -250,10 +238,31 @@ router.post('/exchange-token', async (req, res) => {
       });
     }
 
-    console.log('✅ Page token stored successfully');
+    console.log('✅ PAT stored successfully (token_type=page)');
     clearCredentialCache(storeResult.businessAccountId);
 
-    // ===== STEP 5: Return success =====
+    // ===== STEP 7: Store UAT in split vault =====
+    if (uatDetected && finalUAT) {
+      // Re-detect after potential extension to get data_access_expires_at
+      const finalUatInfo = await detectTokenType(finalUAT);
+      const dataAccessExpiresAt = finalUatInfo?.dataAccessExpiresAt
+        ? new Date(finalUatInfo.dataAccessExpiresAt * 1000).toISOString()
+        : null;
+
+      const uatResult = await storeUserToken({
+        userId,
+        businessAccountId: storeResult.businessAccountId,
+        userAccessToken: finalUAT,
+        scope: uatScopes,
+        expiresAt: uatExpiresAt,
+        dataAccessExpiresAt
+      });
+      if (uatResult.success) {
+        console.log('✅ UAT stored in split vault (token_type=user)');
+      }
+    }
+
+    // ===== STEP 8: Return success =====
     return res.status(200).json({
       success: true,
       message: 'Token exchange and storage successful',
@@ -261,7 +270,8 @@ router.post('/exchange-token', async (req, res) => {
         businessAccountId: storeResult.businessAccountId,
         instagramBusinessId: discoveredBusinessAccountId,
         pageId,
-        pageName
+        pageName,
+        tokensStored: uatDetected ? ['page', 'user'] : ['page']
       }
     });
 
@@ -324,7 +334,9 @@ router.post('/release-account', async (req, res) => {
 
 /**
  * POST /api/instagram/refresh-token
- * Manually refresh a user's Instagram access token
+ * Refresh token — branched by type.
+ * PAT: non-expiring, returns early.
+ * UAT: calls refreshUserToken() which uses fb_exchange_token (only works on UATs per Meta docs).
  */
 router.post('/refresh-token', async (req, res) => {
   const requestStartTime = Date.now();
@@ -345,20 +357,18 @@ router.post('/refresh-token', async (req, res) => {
       });
     }
 
-    // ===== STEP 2: SMART PRE-CHECK =====
     const supabase = getSupabaseAdmin();
 
-    const { data: credentials, error: fetchError } = await supabase
+    // ===== STEP 2: Check what token types exist =====
+    // Query without .single() since user may have both PAT and UAT rows
+    const { data: credentials } = await supabase
       .from('instagram_credentials')
-      .select('expires_at')
+      .select('token_type')
       .eq('user_id', userId)
       .eq('business_account_id', businessAccountId)
-      .eq('token_type', 'page')
-      .single();
+      .eq('is_active', true);
 
-    if (fetchError || !credentials) {
-      console.error('[Token] ❌ Credentials not found:', fetchError?.message);
-
+    if (!credentials || credentials.length === 0) {
       await logAudit('token_refresh_failed', userId, {
         action: 'refresh_token',
         business_account_id: businessAccountId,
@@ -368,230 +378,93 @@ router.post('/refresh-token', async (req, res) => {
 
       return res.status(404).json({
         success: false,
-        error: 'Credentials not found',
+        error: 'No credentials found',
         code: 'CREDENTIALS_NOT_FOUND'
       });
     }
 
-    // Page tokens are non-expiring (expires_at = null). Only run the pre-check
-    // for legacy rows that have an explicit expiry timestamp.
-    if (credentials.expires_at !== null && credentials.expires_at !== undefined) {
-      const expiresAt = new Date(credentials.expires_at);
-      const now = new Date();
+    const tokenTypes = credentials.map(c => c.token_type);
+    const hasUAT = tokenTypes.includes('user');
+    const hasPAT = tokenTypes.includes('page');
 
-      if (expiresAt < now) {
-        console.error('[Token] ❌ Token already expired');
-
-        await logAudit('token_refresh_already_expired', userId, {
-          action: 'refresh_token',
-          business_account_id: businessAccountId,
-          expired_at: expiresAt.toISOString(),
-          error: 'token_already_expired',
-          response_time_ms: Date.now() - requestStartTime
-        });
-
-        return res.status(401).json({
-          success: false,
-          error: 'Token has already expired. Please reconnect your Instagram account.',
-          code: 'TOKEN_EXPIRED_REQUIRE_LOGIN',
-          details: {
-            expired_at: expiresAt.toISOString(),
-            requires_reconnect: true
-          }
-        });
-      }
-    }
-
-    console.log('[Token] ✅ Proceeding with refresh');
-
-    // ===== STEP 3: Retrieve decrypted page token =====
-    let pageToken;
-    try {
-      pageToken = await retrievePageToken(userId, businessAccountId);
-      console.log('[Token] ✅ Retrieved and decrypted page token');
-    } catch (tokenError) {
-      console.error('[Token] ❌ Token retrieval failed:', tokenError.message);
-
-      await logAudit('token_retrieval_failed', userId, {
-        action: 'refresh_token',
-        business_account_id: businessAccountId,
-        error: tokenError.message,
-        response_time_ms: Date.now() - requestStartTime
-      });
-
-      return res.status(401).json({
-        success: false,
-        error: 'Failed to retrieve access token. Please reconnect your Instagram account.',
-        code: 'TOKEN_RETRIEVAL_FAILED'
-      });
-    }
-
-    // ===== STEP 4: Call Meta Graph API to refresh token =====
-    const refreshUrl = `https://graph.facebook.com/${GRAPH_API_VERSION}/oauth/access_token`;
-
-    console.log('[Token] Calling Meta Graph API to refresh token...');
-
-    try {
-      const response = await axios.get(refreshUrl, {
-        params: {
-          grant_type: 'fb_exchange_token',
-          client_id: process.env.INSTAGRAM_APP_ID || process.env.FACEBOOK_APP_ID,
-          client_secret: process.env.INSTAGRAM_APP_SECRET || process.env.FACEBOOK_APP_SECRET,
-          fb_exchange_token: pageToken
-        },
-        timeout: 10000
-      });
-
-      const { access_token, expires_in } = response.data;
-
-      console.log('[Token] ✅ Token refreshed successfully from Meta');
-      console.log('   New token expires in:', expires_in, 'seconds');
-
-      // ===== STEP 5: Calculate new expiration =====
-      const newExpiresAt = new Date();
-      newExpiresAt.setSeconds(newExpiresAt.getSeconds() + expires_in);
-
-      console.log('[Token] New expiration date:', newExpiresAt.toISOString());
-
-      // ===== STEP 6: Encrypt and update database =====
-      const { data: newEncryptedToken, error: encryptErr } = await supabase
-        .rpc('encrypt_instagram_token', { token: access_token });
-
-      if (encryptErr || !newEncryptedToken) {
-        console.error('[Token] ❌ Failed to encrypt refreshed token:', encryptErr?.message);
-        throw new Error(`Failed to encrypt refreshed token: ${encryptErr?.message || 'null result'}`);
-      }
-
-      const { error: updateError } = await supabase
-        .from('instagram_credentials')
-        .update({
-          access_token_encrypted: newEncryptedToken,
-          expires_at: newExpiresAt.toISOString(),
-          last_refreshed_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .eq('user_id', userId)
-        .eq('business_account_id', businessAccountId)
-        .eq('token_type', 'page');
-
-      if (updateError) {
-        console.error('[Token] ❌ Database update failed:', updateError.message);
-        throw updateError;
-      }
-
-      console.log('[Token] ✅ Database updated with encrypted token and new expiration');
-
-      clearCredentialCache(businessAccountId);
-
-      // ===== STEP 7: Log audit trail =====
-      const responseTime = Date.now() - requestStartTime;
-
-      await logAudit('token_refreshed', userId, {
-        action: 'refresh_token',
-        business_account_id: businessAccountId,
-        new_expiration: newExpiresAt.toISOString(),
-        expires_in_seconds: expires_in,
-        response_time_ms: responseTime
-      });
-
-      // ===== SUCCESS RESPONSE =====
-      res.json({
+    // ===== PAT GUARD: Page tokens are non-expiring =====
+    if (hasPAT && !hasUAT) {
+      console.log('[Token] PAT only — page tokens are non-expiring, skipping refresh');
+      return res.status(200).json({
         success: true,
-        message: 'Token refreshed successfully',
-        data: {
-          expires_at: newExpiresAt.toISOString(),
-          expires_in_seconds: expires_in
-        },
-        meta: {
-          response_time_ms: responseTime
-        }
+        message: 'Page Access Tokens are non-expiring and do not require refresh (per Meta docs)',
+        token_type: 'page'
       });
+    }
 
-      console.log(`[Token] ✅ Refresh completed successfully (${responseTime}ms)`);
+    // ===== UAT REFRESH: Call refreshUserToken from service layer =====
+    if (hasUAT) {
+      console.log('[Token] UAT detected — attempting fb_exchange_token refresh');
+      try {
+        const result = await refreshUserToken(userId, businessAccountId);
 
-    } catch (refreshError) {
-      if (refreshError.response) {
-        const { status, data } = refreshError.response;
-        const errorCode = data?.error?.code;
-        const errorMessage = data?.error?.message || 'Token refresh failed';
-
-        console.error(`[Token] ❌ Meta API error (${status}):`, data);
-
-        if (errorCode === 190) {
-          console.error('[Token] ❌ Meta returned error 190 - Token invalid/expired');
-
-          await logAudit('token_refresh_expired_by_meta', userId, {
-            action: 'refresh_token',
-            business_account_id: businessAccountId,
-            error_code: errorCode,
-            error_message: errorMessage,
-            response_time_ms: Date.now() - requestStartTime
-          });
-
-          // Insert auth_failure system_alert so the notification bell lights up.
-          try {
-            const { data: existingAlert } = await supabase
-              .from('system_alerts')
-              .select('id')
-              .eq('business_account_id', businessAccountId)
-              .eq('alert_type', 'auth_failure')
-              .eq('resolved', false)
-              .maybeSingle();
-
-            if (!existingAlert) {
-              await supabase.from('system_alerts').insert({
-                alert_type: 'auth_failure',
-                business_account_id: businessAccountId,
-                message: 'Instagram access token is no longer valid. Please reconnect your account.',
-                details: { user_id: userId, source: 'refresh_token' },
-                resolved: false
-              });
-            }
-          } catch (alertErr) {
-            console.warn('[Token] ⚠️  system_alert insert failed (non-blocking):', alertErr.message);
-          }
-
-          return res.status(401).json({
-            success: false,
-            error: 'Token has expired or is invalid. Please reconnect your Instagram account.',
-            code: 'TOKEN_EXPIRED_REQUIRE_LOGIN',
-            details: {
-              meta_error_code: errorCode,
-              meta_error_message: errorMessage,
-              requires_reconnect: true
-            }
-          });
-        }
-
-        await logAudit('token_refresh_api_error', userId, {
-          action: 'refresh_token',
+        // Success notification
+        await supabase.from('system_alerts').insert({
+          alert_type: 'uat_refresh_success',
           business_account_id: businessAccountId,
-          status_code: status,
-          error_code: errorCode,
-          error_message: errorMessage,
+          message: 'Your access token has been refreshed successfully.',
+          details: { new_expires_at: result.expiresAt, scopes: result.scopes },
+          resolved: true
+        });
+
+        await logAudit('uat_refreshed', userId, {
+          business_account_id: businessAccountId,
+          new_expires_at: result.expiresAt,
           response_time_ms: Date.now() - requestStartTime
         });
 
-        return res.status(status).json({
+        return res.json({
+          success: true,
+          message: 'User Access Token refreshed',
+          token_type: 'user',
+          expiresAt: result.expiresAt
+        });
+      } catch (refreshErr) {
+        console.error('[Token] UAT refresh failed:', refreshErr.message);
+
+        // Failure notification — user may need to reconnect
+        await supabase.from('system_alerts').insert({
+          alert_type: 'uat_refresh_failed',
+          business_account_id: businessAccountId,
+          message: 'Token refresh failed. You may need to reconnect your Instagram account.',
+          details: { error: refreshErr.message },
+          resolved: false
+        });
+
+        await logAudit('uat_refresh_failed', userId, {
+          business_account_id: businessAccountId,
+          error: refreshErr.message,
+          response_time_ms: Date.now() - requestStartTime
+        });
+
+        return res.status(400).json({
           success: false,
-          error: errorMessage,
-          code: 'META_API_ERROR',
-          details: data.error
+          error: refreshErr.message,
+          code: 'UAT_REFRESH_FAILED'
         });
       }
-
-      throw refreshError;
     }
+
+    // Fallback — no refreshable token found
+    return res.status(400).json({
+      success: false,
+      error: 'No refreshable token found',
+      code: 'NO_REFRESHABLE_TOKEN'
+    });
 
   } catch (error) {
     const responseTime = Date.now() - requestStartTime;
 
-    console.error('[Token] ❌ Unexpected error:', error.message);
+    console.error('[Token] Unexpected error:', error.message);
 
     await logAudit('token_refresh_error', req.body.userId, {
       action: 'refresh_token',
       error: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
       response_time_ms: responseTime
     });
 
@@ -622,7 +495,7 @@ router.post('/validate-token', async (req, res) => {
       pageName
     } = req.body;
 
-    // ===== IMPORT MODE: Direct token import =====
+    // ===== IMPORT MODE: Direct token import with type detection =====
     if (importMode) {
       console.log('📥 Token import mode activated');
 
@@ -636,16 +509,15 @@ router.post('/validate-token', async (req, res) => {
         });
       }
 
-      const validation = await validateMetaToken(pageAccessToken, instagramBusinessId);
+      // Detect token type via /debug_token before storing
+      const tokenInfo = await detectTokenType(pageAccessToken);
 
-      if (!validation.success) {
-        console.error('❌ Token validation failed:', validation.error);
-
+      if (!tokenInfo || !tokenInfo.isValid) {
         try {
           await logAudit('token_import_failed', userId, {
             action: 'import_token',
-            error: 'validation_failed',
-            details: validation.error
+            error: 'invalid_token',
+            detected_type: tokenInfo?.type || 'unknown'
           });
         } catch (auditError) {
           console.warn('⚠️  Audit log failed (non-blocking):', auditError.message);
@@ -653,29 +525,97 @@ router.post('/validate-token', async (req, res) => {
 
         return res.status(401).json({
           success: false,
-          error: 'Invalid or expired token',
-          details: validation.error
+          error: 'Token is invalid or expired',
+          detected_type: tokenInfo?.type || 'unknown'
         });
       }
 
-      console.log('✅ Token validated:', validation.data.username);
+      const detectedType = tokenInfo.type; // 'USER' or 'PAGE'
+      console.log(`✅ Token validated — detected type: ${detectedType}`);
 
-      const detectedScope = await fetchDynamicScope(pageAccessToken, supabase, null);
+      let storeResult;
+      let detectedScope = tokenInfo.scopes || [];
+      let tokensStored = [];
 
-      const storeResult = await storePageToken({
-        userId,
-        igBusinessAccountId: instagramBusinessId,
-        pageAccessToken,
-        pageId: pageId || instagramBusinessId,
-        pageName: pageName || 'Imported Account',
-        scope: detectedScope
-      });
+      if (detectedType === 'USER') {
+        // UAT imported — auto-exchange for PAT, store both
+        console.log('🔄 UAT detected in import — auto-exchanging for PAT...');
+        const exchangeResult = await exchangeForPageToken(pageAccessToken);
 
-      if (!storeResult.success) {
+        if (!exchangeResult.success) {
+          return res.status(400).json({
+            success: false,
+            error: 'Token is a User Access Token but PAT exchange failed',
+            details: exchangeResult.error,
+            code: 'UAT_EXCHANGE_FAILED'
+          });
+        }
+
+        if (exchangeResult.requiresSelection) {
+          return res.status(200).json({
+            success: true,
+            requiresSelection: true,
+            pages: exchangeResult.pages,
+            detectedType: 'USER'
+          });
+        }
+
+        // Detect PAT scopes
+        const patScopes = await fetchDynamicScope(exchangeResult.pageAccessToken, supabase);
+
+        // Store PAT
+        storeResult = await storePageToken({
+          userId,
+          igBusinessAccountId: exchangeResult.igBusinessAccountId,
+          pageAccessToken: exchangeResult.pageAccessToken,
+          pageId: exchangeResult.pageId,
+          pageName: exchangeResult.pageName || pageName || 'Imported Account',
+          scope: patScopes
+        });
+
+        tokensStored.push('page');
+        detectedScope = patScopes;
+
+        // Store UAT in split vault
+        if (storeResult.success) {
+          const uatExpiresAt = tokenInfo.expiresAt > 0
+            ? new Date(tokenInfo.expiresAt * 1000).toISOString()
+            : null;
+          const uatDataAccessExpiresAt = tokenInfo.dataAccessExpiresAt
+            ? new Date(tokenInfo.dataAccessExpiresAt * 1000).toISOString()
+            : null;
+          await storeUserToken({
+            userId,
+            businessAccountId: storeResult.businessAccountId,
+            userAccessToken: pageAccessToken,
+            scope: tokenInfo.scopes,
+            expiresAt: uatExpiresAt,
+            dataAccessExpiresAt: uatDataAccessExpiresAt
+          });
+          tokensStored.push('user');
+        }
+
+      } else {
+        // PAGE token imported — store directly
+        detectedScope = await fetchDynamicScope(pageAccessToken, supabase);
+
+        storeResult = await storePageToken({
+          userId,
+          igBusinessAccountId: instagramBusinessId,
+          pageAccessToken,
+          pageId: pageId || instagramBusinessId,
+          pageName: pageName || 'Imported Account',
+          scope: detectedScope
+        });
+
+        tokensStored.push('page');
+      }
+
+      if (!storeResult || !storeResult.success) {
         try {
           await logAudit('token_storage_failed', userId, {
             action: 'import_token',
-            error: storeResult.error
+            error: storeResult?.error || 'unknown'
           });
         } catch (auditError) {
           console.warn('⚠️  Audit log failed (non-blocking):', auditError.message);
@@ -684,7 +624,7 @@ router.post('/validate-token', async (req, res) => {
         return res.status(500).json({
           success: false,
           error: 'Failed to store token',
-          details: storeResult.error
+          details: storeResult?.error
         });
       }
 
@@ -692,7 +632,8 @@ router.post('/validate-token', async (req, res) => {
         await logAudit('token_imported', userId, {
           action: 'import_token',
           business_account_id: storeResult.businessAccountId,
-          instagram_business_id: instagramBusinessId,
+          detected_type: detectedType,
+          tokens_stored: tokensStored,
           scope: detectedScope,
           response_time_ms: Date.now() - requestStartTime,
           success: true
@@ -704,11 +645,12 @@ router.post('/validate-token', async (req, res) => {
       return res.json({
         success: true,
         status: 'imported',
+        detectedType,
         data: {
           businessAccountId: storeResult.businessAccountId,
-          instagramBusinessId,
           expiresAt: storeResult.expiresAt,
-          scope: detectedScope
+          scope: detectedScope,
+          tokensStored
         }
       });
     }
@@ -1012,6 +954,73 @@ router.post('/validate-token', async (req, res) => {
         code: error.code
       } : undefined
     });
+  }
+});
+
+/**
+ * GET /api/instagram/token-status
+ * Lightweight endpoint for frontend to poll token health.
+ * Returns status of both PAT and UAT with warning thresholds.
+ */
+router.get('/token-status', async (req, res) => {
+  try {
+    const { userId, businessAccountId } = req.query;
+    if (!userId || !businessAccountId) {
+      return res.status(400).json({ error: 'userId and businessAccountId required' });
+    }
+
+    const supabase = getSupabaseAdmin();
+
+    // Fetch both token types
+    const { data: creds } = await supabase
+      .from('instagram_credentials')
+      .select('token_type, expires_at, data_access_expires_at, is_active, scope, last_refreshed_at')
+      .eq('user_id', userId)
+      .eq('business_account_id', businessAccountId)
+      .eq('is_active', true);
+
+    const pat = creds?.find(c => c.token_type === 'page');
+    const uat = creds?.find(c => c.token_type === 'user');
+
+    const now = new Date();
+    const sevenDays = 7 * 24 * 60 * 60 * 1000;
+    const fourteenDays = 14 * 24 * 60 * 60 * 1000;
+
+    let uatStatus = 'missing';
+    let uatWarning = null;
+    if (uat) {
+      if (!uat.expires_at) {
+        uatStatus = 'valid';
+      } else {
+        const remaining = new Date(uat.expires_at) - now;
+        if (remaining <= 0) {
+          uatStatus = 'expired';
+          uatWarning = 'Your access token has expired. Please reconnect your Instagram account.';
+        } else if (remaining < sevenDays) {
+          uatStatus = 'critical';
+          uatWarning = 'Your access token expires in less than 7 days. Please refresh it.';
+        } else if (remaining < fourteenDays) {
+          uatStatus = 'warning';
+          uatWarning = 'Your access token expires in less than 14 days.';
+        } else {
+          uatStatus = 'valid';
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      pat: pat ? { status: 'valid', scope: pat.scope } : { status: 'missing' },
+      uat: {
+        status: uatStatus,
+        warning: uatWarning,
+        expiresAt: uat?.expires_at || null,
+        dataAccessExpiresAt: uat?.data_access_expires_at || null,
+        lastRefreshedAt: uat?.last_refreshed_at || null
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
