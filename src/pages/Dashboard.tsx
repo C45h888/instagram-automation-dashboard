@@ -169,8 +169,11 @@ const Dashboard: React.FC = () => {
         />
       )}
 
-      {/* ✅ NEW: Token Warning Banner - Shows proactive warning when UAT is expiring soon */}
-      {!isExpired && (uatStatus?.status === 'warning' || uatStatus?.status === 'critical') && (
+      {/* ✅ NEW: Token Warning Banner - UAT expiry or data access expiry approaching */}
+      {!isExpired && uatStatus && (
+        uatStatus.status === 'warning' || uatStatus.status === 'critical' ||
+        uatStatus.dataAccessStatus === 'warning' || uatStatus.dataAccessStatus === 'critical' || uatStatus.dataAccessStatus === 'expired'
+      ) && (
         <TokenWarningBanner
           uat={uatStatus}
           onRefresh={refreshToken}

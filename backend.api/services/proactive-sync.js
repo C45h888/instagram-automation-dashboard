@@ -9,6 +9,10 @@ const { clearCredentialCache } = require('../helpers/agent-helpers');
 const {
   retrievePageToken,
   detectTokenType,
+  retrieveUserToken,
+  exchangeForPageToken,
+  storePageToken,
+  fetchDynamicScope,
 } = require('../services/instagram-tokens');
 const {
   fetchAndStoreComments,
@@ -506,23 +510,63 @@ async function runTokenHealthCheck() {
         const tokenInfo = await detectTokenType(token);
 
         if (!tokenInfo || !tokenInfo.isValid) {
-          // Mark token inactive
-          await supabase
-            .from('instagram_credentials')
-            .update({ is_active: false, updated_at: new Date().toISOString() })
-            .eq('id', cred.id);
+          // ── Attempt silent PAT recovery via stored UAT ──
+          // If a valid UAT exists, use it to re-derive a fresh PAT without
+          // requiring user reconnect. Only falls back to auth_failure alert
+          // if no UAT is available or the exchange fails.
+          let recovered = false;
 
-          // Create auth_failure alert — visible in user's NotificationDropdown
-          await supabase.from('system_alerts').insert({
-            alert_type: 'auth_failure',
-            business_account_id: cred.business_account_id,
-            message: 'Instagram access token is no longer valid. Please reconnect your account.',
-            details: { user_id: cred.user_id, credential_id: cred.id, source: 'token_health_check' },
-            resolved: false
-          });
+          try {
+            const uatData = await retrieveUserToken(cred.user_id, cred.business_account_id);
+            const exchangeResult = await exchangeForPageToken(uatData.token);
 
-          console.warn(`[TokenHealthCheck] Token invalid for cred ${cred.id} (user ${cred.user_id}), marked inactive`);
-          invalid++;
+            if (exchangeResult.success && !exchangeResult.requiresSelection) {
+              const newScope = await fetchDynamicScope(exchangeResult.pageAccessToken, supabase);
+              await storePageToken({
+                userId: cred.user_id,
+                igBusinessAccountId: exchangeResult.igBusinessAccountId,
+                pageAccessToken: exchangeResult.pageAccessToken,
+                pageId: exchangeResult.pageId,
+                pageName: exchangeResult.pageName,
+                scope: newScope
+              });
+              clearCredentialCache(cred.business_account_id);
+
+              await supabase.from('system_alerts').insert({
+                alert_type: 'pat_auto_recovered',
+                business_account_id: cred.business_account_id,
+                message: 'Your Instagram access token was automatically recovered using stored credentials.',
+                details: { user_id: cred.user_id, old_credential_id: cred.id, source: 'token_health_check' },
+                resolved: true
+              });
+
+              console.log(`[TokenHealthCheck] PAT auto-recovered for cred ${cred.id} via stored UAT`);
+              recovered = true;
+            }
+          } catch (recoveryErr) {
+            console.warn(`[TokenHealthCheck] UAT recovery failed for cred ${cred.id}:`, recoveryErr.message);
+          }
+
+          if (!recovered) {
+            // No UAT or exchange failed — mark PAT inactive and alert user
+            await supabase
+              .from('instagram_credentials')
+              .update({ is_active: false, updated_at: new Date().toISOString() })
+              .eq('id', cred.id);
+
+            await supabase.from('system_alerts').insert({
+              alert_type: 'auth_failure',
+              business_account_id: cred.business_account_id,
+              message: 'Instagram access token is no longer valid. Please reconnect your account.',
+              details: { user_id: cred.user_id, credential_id: cred.id, source: 'token_health_check' },
+              resolved: false
+            });
+
+            console.warn(`[TokenHealthCheck] Token invalid for cred ${cred.id} (user ${cred.user_id}), marked inactive`);
+            invalid++;
+          } else {
+            valid++;
+          }
         } else {
           // Stamp the check time so we skip this token for the next 24h
           await supabase
@@ -623,6 +667,48 @@ async function runUATRefreshCheck() {
     }
 
     await delay(1000); // Rate-limit between refresh attempts
+  }
+
+  // ── Data access expiry check ──
+  // data_access_expires_at is a separate Meta-controlled expiry that caps
+  // access to user messages and comments. It cannot be extended via
+  // fb_exchange_token — only a fresh user OAuth consent resets it.
+  const thirtyDaysFromNow = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+  const { data: dataAccessExpiring } = await supabase
+    .from('instagram_credentials')
+    .select('id, user_id, business_account_id, data_access_expires_at')
+    .eq('token_type', 'user')
+    .eq('is_active', true)
+    .not('data_access_expires_at', 'is', null)
+    .lt('data_access_expires_at', thirtyDaysFromNow);
+
+  for (const uat of (dataAccessExpiring || [])) {
+    const daysLeft = Math.ceil((new Date(uat.data_access_expires_at) - Date.now()) / (24 * 60 * 60 * 1000));
+
+    // Deduplicate: skip if an unresolved warning already exists for this account
+    const { data: existing } = await supabase
+      .from('system_alerts')
+      .select('id')
+      .eq('business_account_id', uat.business_account_id)
+      .eq('alert_type', 'data_access_expiry_warning')
+      .eq('resolved', false)
+      .maybeSingle();
+
+    if (!existing) {
+      await supabase.from('system_alerts').insert({
+        alert_type: 'data_access_expiry_warning',
+        business_account_id: uat.business_account_id,
+        message: `Instagram data access expires in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}. Reconnect your account to renew access to messages and comments.`,
+        details: {
+          data_access_expires_at: uat.data_access_expires_at,
+          days_remaining: daysLeft,
+          note: 'Cannot be refreshed via fb_exchange_token — requires fresh OAuth consent'
+        },
+        resolved: false
+      });
+      console.log(`[UATRefresh] data_access_expiry_warning created for account ${uat.business_account_id} (${daysLeft} days left)`);
+    }
   }
 
   console.log('[UATRefresh] Proactive UAT refresh check complete');

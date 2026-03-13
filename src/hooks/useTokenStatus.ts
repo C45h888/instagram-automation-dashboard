@@ -11,6 +11,8 @@ export interface UatStatus {
   warning: string | null;
   expiresAt: string | null;
   dataAccessExpiresAt: string | null;
+  dataAccessStatus: 'valid' | 'warning' | 'critical' | 'expired' | 'missing';
+  dataAccessWarning: string | null;
   lastRefreshedAt: string | null;
 }
 

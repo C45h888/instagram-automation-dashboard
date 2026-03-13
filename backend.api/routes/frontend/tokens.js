@@ -983,9 +983,11 @@ router.get('/token-status', async (req, res) => {
     const uat = creds?.find(c => c.token_type === 'user');
 
     const now = new Date();
-    const sevenDays = 7 * 24 * 60 * 60 * 1000;
+    const sevenDays  = 7  * 24 * 60 * 60 * 1000;
     const fourteenDays = 14 * 24 * 60 * 60 * 1000;
+    const thirtyDays   = 30 * 24 * 60 * 60 * 1000;
 
+    // ── UAT token expiry status ──
     let uatStatus = 'missing';
     let uatWarning = null;
     if (uat) {
@@ -1008,6 +1010,24 @@ router.get('/token-status', async (req, res) => {
       }
     }
 
+    // ── Data access expiry status (separate Meta-controlled window) ──
+    // Cannot be refreshed via fb_exchange_token — only resets on fresh OAuth consent.
+    let dataAccessStatus = uat ? 'valid' : 'missing';
+    let dataAccessWarning = null;
+    if (uat?.data_access_expires_at) {
+      const daRemaining = new Date(uat.data_access_expires_at) - now;
+      if (daRemaining <= 0) {
+        dataAccessStatus = 'expired';
+        dataAccessWarning = 'Instagram data access has expired. Please reconnect your account to restore access to messages and comments.';
+      } else if (daRemaining < sevenDays) {
+        dataAccessStatus = 'critical';
+        dataAccessWarning = 'Instagram data access expires in less than 7 days. Reconnect your account to renew it.';
+      } else if (daRemaining < thirtyDays) {
+        dataAccessStatus = 'warning';
+        dataAccessWarning = 'Instagram data access expires soon. Reconnect your account to renew access to messages and comments.';
+      }
+    }
+
     res.json({
       success: true,
       pat: pat ? { status: 'valid', scope: pat.scope } : { status: 'missing' },
@@ -1016,6 +1036,8 @@ router.get('/token-status', async (req, res) => {
         warning: uatWarning,
         expiresAt: uat?.expires_at || null,
         dataAccessExpiresAt: uat?.data_access_expires_at || null,
+        dataAccessStatus,
+        dataAccessWarning,
         lastRefreshedAt: uat?.last_refreshed_at || null
       }
     });
