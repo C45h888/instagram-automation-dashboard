@@ -1063,7 +1063,7 @@ async function logAudit(action, userId, metadata = {}) {
   try {
     const supabase = getSupabaseAdmin();
 
-    await supabase.from('audit_logs').insert({
+    await supabase.from('audit_log').insert({
       user_id: userId,
       action,
       metadata,
