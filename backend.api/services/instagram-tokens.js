@@ -13,20 +13,22 @@ const { getSupabaseAdmin } = require('../config/supabase');
 const GRAPH_API_VERSION = 'v23.0';
 const GRAPH_API_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
 
-// Safe metrics - work for all Instagram Business/Creator accounts
-// ✅ FIXED: Changed 'impressions' to 'accounts_engaged' (Meta API error 100 - impressions not valid)
-const SAFE_METRICS = [
-  'accounts_engaged',
-  'reach',
-  'profile_views'
-];
+// ─── METRIC CLASSES ─────────────────────────────────────────────────────────
+// Meta Graph API v23.0 splits account-level metrics into two incompatible classes.
+// They require separate API calls — mixing them in one request causes Error 100.
+//
+// v1 time-series: returns { name, values: [{value, end_time}] } — daily array
+// v2 total_value: returns { name, total_value: {value: N} }   — single aggregate
+// ─────────────────────────────────────────────────────────────────────────────
 
-// Default metrics - includes optional metrics that require specific account setup
-// Note: website_clicks requires a website URL in Instagram profile
-const DEFAULT_METRICS = [
-  ...SAFE_METRICS,
-  'website_clicks'
-];
+// v1 — time-series metrics (period=day, no metric_type needed)
+const V1_METRICS = ['reach'];
+
+// v2 — total_value metrics (metric_type=total_value required)
+const V2_METRICS_BASE = ['accounts_engaged', 'profile_views'];
+
+// v2 conditional — only include if account has a website URL configured in their IG profile
+const V2_METRICS_WEBSITE = ['website_clicks'];
 
 // Comprehensive PAT scope set — used as fallback when /debug_token is unavailable.
 // Matches the full permission set granted via Facebook Login for Business.
@@ -312,8 +314,8 @@ async function getAccountInsights(igBusinessAccountId, pageToken, options = {}) 
   try {
     const {
       period = '7d',
-      metrics = DEFAULT_METRICS,
-      until: untilParam  // ✅ FIXED: Accept until parameter for previous period queries
+      until: untilParam,
+      hasWebsite = false  // passed from fetchAndStoreAccountInsights after DB check
     } = options;
 
     // ===== STEP 1: Parse and validate period =====
@@ -329,97 +331,69 @@ async function getAccountInsights(igBusinessAccountId, pageToken, options = {}) 
     }
 
     // ===== STEP 2: Calculate date range (Unix timestamps) =====
-    // ✅ FIXED: Use provided until timestamp if available, otherwise use current time
     const until = untilParam || Math.floor(Date.now() / 1000);
     const since = until - (periodDays * 24 * 60 * 60);
 
+    const v2Metrics = [...V2_METRICS_BASE, ...(hasWebsite ? V2_METRICS_WEBSITE : [])];
+
     console.log(`📊 Fetching insights for account: ${igBusinessAccountId}`);
     console.log(`   Period: ${periodDays} days (${new Date(since * 1000).toISOString()} to ${new Date(until * 1000).toISOString()})`);
-    console.log(`   Until param: ${untilParam ? 'provided' : 'using current time'}`);
-    console.log(`   Metrics requested: ${metrics.join(', ')}`);
+    console.log(`   Call A (v1 time-series): [${V1_METRICS.join(', ')}]`);
+    console.log(`   Call B (v2 total_value): [${v2Metrics.join(', ')}]`);
+    console.log(`   Website detected: ${hasWebsite} — website_clicks ${hasWebsite ? 'included' : 'excluded'}`);
 
-    // ===== STEP 3: Call Instagram Insights API with FALLBACK STRATEGY =====
-    // ✅ REFACTORED: Try with all metrics first, fallback to safe metrics if error 100
-    let response;
-    let actualMetrics = metrics;
-    let usedFallback = false;
-
-    try {
-      // First attempt: Try with requested metrics (may include website_clicks)
-      response = await axios.get(
-        `${GRAPH_API_BASE}/${igBusinessAccountId}/insights`,
-        {
-          params: {
-            metric: metrics.join(','),
-            period: 'day',
-            since,
-            until,
-            access_token: pageToken
-          },
-          timeout: 15000
-        }
-      );
-    } catch (firstAttemptError) {
-      // Check if error is code 100 (invalid parameter/missing permission)
-      const apiError = firstAttemptError.response?.data?.error;
-
-      if (apiError?.code === 100 && metrics.includes('website_clicks')) {
-        // ✅ FALLBACK: Retry with safe metrics only
-        console.warn('⚠️  Error 100 detected - website_clicks likely unavailable');
-        console.warn('   Retrying with safe metrics only (accounts_engaged, reach, profile_views)...');
-
-        try {
-          response = await axios.get(
-            `${GRAPH_API_BASE}/${igBusinessAccountId}/insights`,
-            {
-              params: {
-                metric: SAFE_METRICS.join(','),
-                period: 'day',
-                since,
-                until,
-                access_token: pageToken
-              },
-              timeout: 15000
-            }
-          );
-
-          actualMetrics = SAFE_METRICS;
-          usedFallback = true;
-          console.log('✅ Fallback successful - using safe metrics');
-
-        } catch (fallbackError) {
-          // Fallback also failed - re-throw original error
-          throw firstAttemptError;
-        }
-      } else {
-        // Not a code 100 error or no website_clicks - re-throw
-        throw firstAttemptError;
+    // ===== STEP 3: Call A — v1 time-series metrics (reach) =====
+    // Returns: { name, values: [{value, end_time}] } — daily array for charts
+    const v1Response = await axios.get(
+      `${GRAPH_API_BASE}/${igBusinessAccountId}/insights`,
+      {
+        params: {
+          metric: V1_METRICS.join(','),
+          period: 'day',
+          since,
+          until,
+          access_token: pageToken
+        },
+        timeout: 15000
       }
+    );
+
+    if (v1Response.data.error) {
+      throw new Error(`Instagram API Error (v1 call): ${v1Response.data.error.message}`);
     }
 
-    // ===== STEP 4: Check for API errors in response =====
-    if (response.data.error) {
-      console.error('❌ Instagram API returned error:', response.data.error);
-      throw new Error(`Instagram API Error: ${response.data.error.message}`);
+    // ===== STEP 4: Call B — v2 total_value metrics =====
+    // Returns: { name, total_value: {value: N} } — single aggregate per metric
+    // Requires metric_type=total_value — Meta rejects these without it (Error 100)
+    const v2Response = await axios.get(
+      `${GRAPH_API_BASE}/${igBusinessAccountId}/insights`,
+      {
+        params: {
+          metric: v2Metrics.join(','),
+          period: 'day',
+          metric_type: 'total_value',
+          since,
+          until,
+          access_token: pageToken
+        },
+        timeout: 15000
+      }
+    );
+
+    if (v2Response.data.error) {
+      throw new Error(`Instagram API Error (v2 call): ${v2Response.data.error.message}`);
     }
 
-    // ===== STEP 5: Validate and format response =====
-    const insightsData = response.data.data;
-
-    if (!insightsData || !Array.isArray(insightsData)) {
-      console.warn('⚠️  Unexpected insights response format');
-      console.warn('   Response:', JSON.stringify(response.data, null, 2));
-    }
-
-    console.log('✅ Account insights retrieved successfully');
-    console.log(`   Returned ${insightsData?.length || 0} metric(s)`);
-    if (usedFallback) {
-      console.log(`   ⚠️  Note: website_clicks unavailable (account may not have website URL configured)`);
-    }
+    console.log('✅ Account insights fetched successfully (2 calls)');
+    console.log(`   v1 time-series: ${v1Response.data.data?.length || 0} metric(s)`);
+    console.log(`   v2 totals: ${v2Response.data.data?.length || 0} metric(s)`);
 
     return {
       success: true,
-      data: insightsData,
+      data: {
+        time_series: v1Response.data.data || [],  // [{name:'reach', values:[{value,end_time}]}]
+        totals: v2Response.data.data || []         // [{name:'accounts_engaged', total_value:{value:N}}, ...]
+      },
       period: {
         since,
         until,
@@ -427,8 +401,7 @@ async function getAccountInsights(igBusinessAccountId, pageToken, options = {}) 
         start_date: new Date(since * 1000).toISOString(),
         end_date: new Date(until * 1000).toISOString()
       },
-      metrics: actualMetrics,  // ✅ Return actual metrics used (may be fallback)
-      usedFallback  // ✅ Indicate if fallback was used
+      hasWebsite
     };
 
   } catch (error) {
@@ -1110,7 +1083,8 @@ module.exports = {
   // Constants
   GRAPH_API_VERSION,
   GRAPH_API_BASE,
-  DEFAULT_METRICS,
-  SAFE_METRICS,
+  V1_METRICS,
+  V2_METRICS_BASE,
+  V2_METRICS_WEBSITE,
   PAT_SCOPE_DEFAULTS,
 };

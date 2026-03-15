@@ -385,6 +385,8 @@ async function logApiRequest(userIdOrObj, endpoint, method, responseTime, status
     // Object:     logApiRequest({ user_id, endpoint, method, latency, status_code, success, business_account_id })
     let userId_v, endpoint_v, method_v, responseTime_v, statusCode_v, success_v, businessAccountId_v;
 
+    let errorMessage_v = null;
+
     if (userIdOrObj !== null && typeof userIdOrObj === 'object' && !Array.isArray(userIdOrObj)) {
       // Object form (used by agent-proxy.js)
       userId_v = userIdOrObj.user_id || null;
@@ -394,6 +396,7 @@ async function logApiRequest(userIdOrObj, endpoint, method, responseTime, status
       statusCode_v = userIdOrObj.status_code || (userIdOrObj.success ? 200 : 500);
       success_v = userIdOrObj.success !== undefined ? userIdOrObj.success : true;
       businessAccountId_v = userIdOrObj.business_account_id || null;
+      errorMessage_v = userIdOrObj.error || null;
     } else {
       // Positional form (used by server.js middleware)
       userId_v = userIdOrObj;
@@ -423,6 +426,7 @@ async function logApiRequest(userIdOrObj, endpoint, method, responseTime, status
       response_time_ms: responseTime_v,
       status_code: statusCode_v,
       success: success_v,
+      error_message: errorMessage_v,
       hour_bucket: _hourBucket.toISOString(),
       request_count: 1,
       created_at: _now.toISOString()

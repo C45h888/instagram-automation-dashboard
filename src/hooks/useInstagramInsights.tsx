@@ -18,13 +18,14 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useInstagramAccount } from './useInstagramAccount';
-import { Eye, Users, User, MousePointer } from 'lucide-react';
+import { Users, User, MousePointer } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import type {
   InsightsData,
   InsightsDailyData,
   MetricCardData,
   InsightMetric,
+  InsightMetricTotal,
   UseInsightsResult,
   RetryConfig,
   TrendsData,
@@ -132,47 +133,47 @@ const safeGetMetricValue = (
 };
 
 /**
- * Aggregate daily values into totals
+ * Aggregate v1 time-series and v2 total_value data into a single InsightsData object.
+ * v1 (timeSeries): reach — daily values[] array, summed over the period
+ * v2 (totals): accounts_engaged, profile_views, website_clicks — total_value.value
  */
-const aggregateInsights = (data: InsightMetric[]): InsightsData => {
-  const sumMetric = (name: string): number => {
-    const metric = data.find(m => m.name === name);
+const aggregateInsights = (
+  timeSeries: InsightMetric[],
+  totals: InsightMetricTotal[]
+): InsightsData => {
+  const getTotal = (name: string): number =>
+    totals.find(m => m.name === name)?.total_value?.value ?? 0;
+
+  const sumTimeSeries = (name: string): number => {
+    const metric = timeSeries.find(m => m.name === name);
     if (!metric?.values) return 0;
     return metric.values.reduce((sum, v) => sum + (v.value ?? 0), 0);
   };
 
   return {
-    impressions: sumMetric('impressions'),
-    reach: sumMetric('reach'),
-    profile_views: sumMetric('profile_views'),
-    website_clicks: sumMetric('website_clicks')
+    accounts_engaged: getTotal('accounts_engaged'),
+    reach: sumTimeSeries('reach'),
+    profile_views: getTotal('profile_views'),
+    website_clicks: getTotal('website_clicks')
   };
 };
 
 /**
- * Parse daily data with UTC normalization
+ * Parse daily reach data with UTC normalization.
+ * Only reach has daily time-series data from Meta — other metrics are period totals only.
  */
-const parseDailyDataWithUTC = (data: InsightMetric[]): InsightsDailyData[] => {
-  // Find impressions metric to get date structure (it should always exist)
-  const impressionsMetric = data.find(m => m.name === 'impressions');
-  if (!impressionsMetric?.values?.length) return [];
+const parseDailyDataWithUTC = (timeSeries: InsightMetric[]): InsightsDailyData[] => {
+  // reach is the only v1 time-series metric — use it as the date anchor
+  const reachMetric = timeSeries.find(m => m.name === 'reach');
+  if (!reachMetric?.values?.length) return [];
 
-  return impressionsMetric.values.map((v, index) => {
+  return reachMetric.values.map((v, index) => {
     // ✅ UTC NORMALIZATION: Consistent parsing across timezones
     const utcDate = new Date(v.end_time);
-    const dateStr = utcDate.toISOString().split('T')[0]; // "2024-01-15"
-    const dateLabel = utcDate.toLocaleDateString('en-US', {
-      weekday: 'short',
-      timeZone: 'UTC'
-    }); // "Mon"
-
     return {
-      date: dateStr,
-      dateLabel,
-      impressions: safeGetMetricValue(data, 'impressions', index),
-      reach: safeGetMetricValue(data, 'reach', index),
-      profile_views: safeGetMetricValue(data, 'profile_views', index),
-      website_clicks: safeGetMetricValue(data, 'website_clicks', index)
+      date: utcDate.toISOString().split('T')[0],
+      dateLabel: utcDate.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' }),
+      reach: safeGetMetricValue(timeSeries, 'reach', index)
     };
   });
 };
@@ -193,7 +194,7 @@ const calculateTrends = (current: InsightsData, previous: InsightsData | null): 
   };
 
   return {
-    impressions: calcTrend(current.impressions, previous?.impressions ?? null),
+    accounts_engaged: calcTrend(current.accounts_engaged, previous?.accounts_engaged ?? null),
     reach: calcTrend(current.reach, previous?.reach ?? null),
     profile_views: calcTrend(current.profile_views, previous?.profile_views ?? null),
     website_clicks: calcTrend(current.website_clicks, previous?.website_clicks ?? null)
@@ -223,14 +224,14 @@ const formatMetricsWithTooltips = (
 
   return [
     {
-      label: 'Impressions',
-      value: formatNumber(insights.impressions),
-      change: trends.impressions.change,
+      label: 'Accounts Engaged',
+      value: formatNumber(insights.accounts_engaged),
+      change: trends.accounts_engaged.change,
       changeLabel: 'vs previous 7 days',
-      trend: trends.impressions.trend,
-      icon: <Eye className="w-5 h-5" />,
+      trend: trends.accounts_engaged.trend,
+      icon: <Users className="w-5 h-5" />,
       color: 'from-blue-500 to-cyan-500',
-      tooltip: createTooltip(insights.impressions, 'impressions')
+      tooltip: createTooltip(insights.accounts_engaged, 'engagement data')
     },
     {
       label: 'Reach',
@@ -362,14 +363,19 @@ export const useInstagramInsights = (period: string = '7d'): UseInsightsResult =
         console.log('ℹ️ Previous period data unavailable (new account or insufficient history)');
       }
 
-      // ✅ Process responses
-      const currentData = currentResponse?.data || [];
-      const previousData = previousResponse?.data || [];
+      // ✅ Process responses — data is { time_series: InsightMetric[], totals: InsightMetricTotal[] }
+      const currentData = currentResponse?.data;
+      const previousData = previousResponse?.data;
 
-      setRawData(currentData);
+      const currentTimeSeries = currentData?.time_series || [];
+      const currentTotalValues = currentData?.totals || [];
 
-      const currentTotals = aggregateInsights(currentData);
-      const previousTotals = previousData.length > 0 ? aggregateInsights(previousData) : null;
+      setRawData(currentTimeSeries);
+
+      const currentTotals = aggregateInsights(currentTimeSeries, currentTotalValues);
+      const previousTotals = previousData
+        ? aggregateInsights(previousData.time_series || [], previousData.totals || [])
+        : null;
 
       setInsights(currentTotals);
       setTrends(calculateTrends(currentTotals, previousTotals));

@@ -204,9 +204,13 @@ async function fetchAndStoreConversations(businessAccountId, limit = 20) {
               const windowExpiresAt = isOpen && hr != null
                 ? new Date(Date.now() + hr * 3600000).toISOString()
                 : null;
+              // participants includes both business and customer — find the non-business one
+              const customerParticipant = conv.participants.find(
+                p => p.id !== igUserId && p.id !== pageId
+              ) || conv.participants[0];
               return {
                 instagram_thread_id: conv.id,
-                customer_instagram_id: conv.participants[0].id,
+                customer_instagram_id: customerParticipant.id,
                 business_account_id: businessAccountId,
                 within_window: isOpen,
                 window_expires_at: windowExpiresAt,
@@ -278,7 +282,7 @@ async function fetchAndStoreMessages(businessAccountId, conversationId, limit = 
 
     const msgRes = await axios.get(`${GRAPH_API_BASE}/${conversationId}/messages`, {
       params: {
-        fields: 'id,message,from,created_time,attachments',
+        fields: 'id,message,from,to,created_time,attachments',
         limit: fetchLimit,
         access_token: pageToken
       },
@@ -320,7 +324,7 @@ async function fetchAndStoreMessages(businessAccountId, conversationId, limit = 
               conversation_id: conversationUUID,
               business_account_id: businessAccountId,
               is_from_business: m.from?.id === igUserId,
-              recipient_instagram_id: m.from?.id || '',
+              recipient_instagram_id: m.to?.data?.[0]?.id || '',
               sent_at: m.created_time,
               send_status: 'delivered',
             }));
@@ -811,9 +815,23 @@ async function fetchAndStoreAccountInsights(businessAccountId, options = {}) {
   const startTime = Date.now();
 
   try {
+    // DB-aware: check if account has a website URL configured before requesting website_clicks.
+    // website_clicks is a v2 total_value metric that Meta only returns for accounts with websites.
+    const supabase = getSupabaseAdmin();
+    const { data: accountRow } = await supabase
+      .from('instagram_business_accounts')
+      .select('website')
+      .eq('id', businessAccountId)
+      .single();
+
+    const hasWebsite = !!accountRow?.website;
+
     const { igUserId, pageToken } = await resolveAccountCredentials(businessAccountId);
 
-    const accountInsights = await getAccountInsights(igUserId, pageToken, options);
+    const accountInsights = await getAccountInsights(igUserId, pageToken, {
+      ...options,
+      hasWebsite
+    });
 
     const latency = Date.now() - startTime;
 
@@ -839,6 +857,19 @@ async function fetchAndStoreAccountInsights(businessAccountId, options = {}) {
       success: false,
       error: errorMessage,
       latency
+    }).catch(() => {});
+
+    // Write insights failure to audit_log for observability
+    const supabase = getSupabaseAdmin();
+    await supabase.from('audit_log').insert({
+      event_type: 'api_error',
+      action: 'fetch_account_insights_failed',
+      success: false,
+      error_message: errorMessage,
+      details: {
+        code: error.response?.data?.error?.code,
+        business_account_id: businessAccountId
+      }
     }).catch(() => {});
 
     const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);

@@ -21,8 +21,9 @@ export interface InsightMetricValue {
 }
 
 /**
- * Complete insight metric with values array from Instagram Graph API
- * Example: { name: 'impressions', period: 'day', values: [...] }
+ * v1 time-series metric from Instagram Graph API (period=day, no metric_type)
+ * Example: { name: 'reach', period: 'day', values: [{value: 123, end_time: '...'}] }
+ * Used for: reach (daily chart data)
  */
 export interface InsightMetric {
   name: string;
@@ -34,26 +35,37 @@ export interface InsightMetric {
 }
 
 /**
- * Aggregated insights data for metric cards (totals)
+ * v2 total_value metric from Instagram Graph API (metric_type=total_value)
+ * Example: { name: 'accounts_engaged', period: 'day', total_value: { value: 847 } }
+ * Used for: accounts_engaged, profile_views, website_clicks
  */
-export interface InsightsData {
-  impressions: number;
-  reach: number;
-  profile_views: number;
-  website_clicks: number;
+export interface InsightMetricTotal {
+  name: string;
+  period: string;
+  title?: string;
+  id?: string;
+  total_value: { value: number };
 }
 
 /**
- * Daily breakdown data for chart visualization
- * UTC-normalized to prevent timezone issues
+ * Aggregated insights data for metric cards (totals for the period)
+ */
+export interface InsightsData {
+  accounts_engaged: number;  // v2 total — was: impressions (removed from Meta account-level API)
+  reach: number;             // v1 sum over period
+  profile_views: number;     // v2 total
+  website_clicks: number;    // v2 total (0 if account has no website URL)
+}
+
+/**
+ * Daily breakdown data for chart visualization — reach only.
+ * UTC-normalized to prevent timezone issues.
+ * Note: only reach has daily data from Meta; other metrics are period totals only.
  */
 export interface InsightsDailyData {
-  date: string;           // UTC normalized: "2024-01-15"
-  dateLabel: string;      // Display: "Mon", "Tue", etc.
-  impressions: number;
-  reach: number;
-  profile_views: number;
-  website_clicks: number;
+  date: string;       // UTC normalized: "2024-01-15"
+  dateLabel: string;  // Display: "Mon", "Tue", etc.
+  reach: number;      // daily value — the only account-level metric Meta returns as time-series
 }
 
 /**
@@ -83,7 +95,7 @@ export interface TrendData {
  * Trend calculations for all metrics
  */
 export interface TrendsData {
-  impressions: TrendData;
+  accounts_engaged: TrendData;  // was: impressions
   reach: TrendData;
   profile_views: TrendData;
   website_clicks: TrendData;
@@ -114,13 +126,18 @@ export interface UseInsightsResult {
 }
 
 /**
- * Instagram Graph API response structure
+ * Instagram Graph API response structure — structured with v1 and v2 data separate.
+ * time_series: v1 metrics (reach) with daily values[] arrays
+ * totals: v2 metrics (accounts_engaged, profile_views, website_clicks) with total_value
  */
 export interface InstagramInsightsApiResponse {
   success: boolean;
-  data: InsightMetric[];
+  data: {
+    time_series: InsightMetric[];    // v1: [{name, values:[{value,end_time}]}]
+    totals: InsightMetricTotal[];    // v2: [{name, total_value:{value:N}}]
+  };
   error?: string;
-  code?: number;          // Error code from Meta API
+  code?: number;
 }
 
 /**

@@ -199,32 +199,13 @@ const transformToChartData = (dailyData: InsightsDailyData[]): ChartData => {
     labels: dailyData.map(d => d.dateLabel),
     datasets: [
       {
-        label: 'Impressions',
-        data: dailyData.map(d => d.impressions),
-        color: '#3b82f6',         // blue-500
-        borderColor: '#3b82f6',
-        backgroundColor: 'rgba(59, 130, 246, 0.1)'
-      },
-      {
+        // Reach is the only account-level metric Meta returns as daily time-series.
+        // accounts_engaged, profile_views, website_clicks are period totals only.
         label: 'Reach',
         data: dailyData.map(d => d.reach),
         color: '#8b5cf6',         // purple-500
         borderColor: '#8b5cf6',
         backgroundColor: 'rgba(139, 92, 246, 0.1)'
-      },
-      {
-        label: 'Profile Views',
-        data: dailyData.map(d => d.profile_views),
-        color: '#ec4899',         // pink-500
-        borderColor: '#ec4899',
-        backgroundColor: 'rgba(236, 72, 153, 0.1)'
-      },
-      {
-        label: 'Website Clicks',
-        data: dailyData.map(d => d.website_clicks),
-        color: '#22c55e',         // green-500
-        borderColor: '#22c55e',
-        backgroundColor: 'rgba(34, 197, 94, 0.1)'
       }
     ]
   };
