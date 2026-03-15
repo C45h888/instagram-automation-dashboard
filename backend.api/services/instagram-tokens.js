@@ -3,7 +3,8 @@
 // Layout: Configuration → Shared (detection/scope) → PAT ops → UAT ops → Insights → Exports
 const axios = require('axios');
 const { getSupabaseAdmin } = require('../config/supabase');
-const { clearCredentialCache } = require('../helpers/agent-helpers');
+// NOTE: clearCredentialCache is required lazily inside functions to avoid
+// circular dependency: instagram-tokens → agent-helpers → instagram-tokens
 
 // ==========================================
 // CONFIGURATION
@@ -670,6 +671,7 @@ async function storePageToken({ userId, igBusinessAccountId, pageAccessToken, pa
     }
 
     // === BUST CACHE: Ensure fresh token on next read ===
+    const { clearCredentialCache } = require('../helpers/agent-helpers');
     clearCredentialCache(businessAccount.id);
 
     return {
@@ -990,6 +992,7 @@ async function refreshUserToken(userId, businessAccountId) {
   }
 
   // 6. Bust credential cache
+  const { clearCredentialCache } = require('../helpers/agent-helpers');
   clearCredentialCache(businessAccountId);
 
   return {
