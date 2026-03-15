@@ -318,9 +318,10 @@ export const useInstagramInsights = (period: string = '7d'): UseInsightsResult =
       };
 
       // ✅ Fetch current period (last 7 days)
+      // Route: /account-insights?business_account_id=UUID — agent endpoint, calls Meta directly
       console.log('📊 Fetching current period insights...');
       const currentResponse = await fetchWithRetry(
-        `${apiBaseUrl}/api/instagram/insights/${instagramBusinessId}?userId=${user.id}&businessAccountId=${businessAccountId}&period=${period}`,
+        `${apiBaseUrl}/api/instagram/account-insights?business_account_id=${businessAccountId}`,
         DEFAULT_RETRY_CONFIG,
         0,
         onRetry
@@ -335,7 +336,7 @@ export const useInstagramInsights = (period: string = '7d'): UseInsightsResult =
       let previousResponse = null;
       try {
         previousResponse = await fetchWithRetry(
-          `${apiBaseUrl}/api/instagram/insights/${instagramBusinessId}?userId=${user.id}&businessAccountId=${businessAccountId}&period=${period}&until=${untilTimestamp}`,
+          `${apiBaseUrl}/api/instagram/account-insights?business_account_id=${businessAccountId}&until=${untilTimestamp}`,
           DEFAULT_RETRY_CONFIG,
           0,
           onRetry

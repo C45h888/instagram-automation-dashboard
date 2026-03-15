@@ -63,7 +63,7 @@ router.get('/visitor-posts', async (req, res) => {
       .from('ugc_content')
       .select('*', { count: 'exact' })
       .eq('business_account_id', businessAccountId)
-      .order('timestamp', { ascending: false })
+      .order('created_time', { ascending: false })
       .range(postsOffset, postsOffset + postsLimit - 1);
 
     if (error) {
@@ -87,7 +87,7 @@ router.get('/visitor-posts', async (req, res) => {
     // Calculate stats from database
     const { data: statsData } = await supabase
       .from('ugc_content')
-      .select('sentiment, featured, timestamp')
+      .select('sentiment, featured, created_time')
       .eq('business_account_id', businessAccountId);
 
     const weekAgo = new Date();
@@ -96,7 +96,7 @@ router.get('/visitor-posts', async (req, res) => {
     const stats = {
       totalPosts: count || 0,
       postsThisWeek: statsData?.filter(p => {
-        return new Date(p.timestamp) > weekAgo;
+        return new Date(p.created_time) > weekAgo;
       }).length || 0,
       sentimentBreakdown: {
         positive: statsData?.filter(p => p.sentiment === 'positive').length || 0,
