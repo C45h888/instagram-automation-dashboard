@@ -19,6 +19,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useInstagramAccount } from './useInstagramAccount';
 import { Eye, Users, User, MousePointer } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 import type {
   InsightsData,
   InsightsDailyData,
@@ -49,18 +50,28 @@ const RATE_LIMIT_CODES = [17, 4, 32, 613];
 // =====================================
 
 /**
+ * Get authentication headers with JWT Bearer token from Supabase session
+ */
+async function getAgentAuthHeaders(): Promise<Record<string, string>> {
+  const { data: { session } } = await supabase.auth.getSession();
+  return {
+    'Content-Type': 'application/json',
+    ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {}),
+  };
+}
+
+/**
  * Fetch with exponential backoff for rate limits
  */
 const fetchWithRetry = async (
   url: string,
   config: RetryConfig,
+  headers: Record<string, string>,
   attempt: number = 0,
   onRetry?: (attempt: number) => void
 ): Promise<any> => {
   try {
-    const response = await fetch(url, {
-      headers: { 'Content-Type': 'application/json' }
-    });
+    const response = await fetch(url, { headers });
 
     const result = await response.json();
 
@@ -78,7 +89,7 @@ const fetchWithRetry = async (
         if (onRetry) onRetry(attempt + 1);
 
         await new Promise(resolve => setTimeout(resolve, delay));
-        return fetchWithRetry(url, config, attempt + 1, onRetry);
+        return fetchWithRetry(url, config, headers, attempt + 1, onRetry);
       }
 
       // Check for specific error codes
@@ -102,7 +113,7 @@ const fetchWithRetry = async (
       if (onRetry) onRetry(attempt + 1);
 
       await new Promise(resolve => setTimeout(resolve, delay));
-      return fetchWithRetry(url, config, attempt + 1, onRetry);
+      return fetchWithRetry(url, config, headers, attempt + 1, onRetry);
     }
     throw err;
   }
@@ -311,6 +322,9 @@ export const useInstagramInsights = (period: string = '7d'): UseInsightsResult =
     try {
       const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
 
+      // ✅ Get auth headers with JWT Bearer token
+      const headers = await getAgentAuthHeaders();
+
       // Retry callback to update UI state
       const onRetry = (attempt: number) => {
         setIsRetrying(true);
@@ -323,6 +337,7 @@ export const useInstagramInsights = (period: string = '7d'): UseInsightsResult =
       const currentResponse = await fetchWithRetry(
         `${apiBaseUrl}/api/instagram/account-insights?business_account_id=${businessAccountId}`,
         DEFAULT_RETRY_CONFIG,
+        headers,
         0,
         onRetry
       );
@@ -338,6 +353,7 @@ export const useInstagramInsights = (period: string = '7d'): UseInsightsResult =
         previousResponse = await fetchWithRetry(
           `${apiBaseUrl}/api/instagram/account-insights?business_account_id=${businessAccountId}&until=${untilTimestamp}`,
           DEFAULT_RETRY_CONFIG,
+          headers,
           0,
           onRetry
         );
