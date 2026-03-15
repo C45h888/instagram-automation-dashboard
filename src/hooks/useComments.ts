@@ -72,8 +72,14 @@ export const useComments = (mediaId?: string): UseCommentsResult => {
       // ✅ UPDATED: Use VITE_API_BASE_URL from environment
       const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
 
-      // Route to agent /post-comments — uses business_account_id (UUID) not userId query params
-      const targetMediaId = mediaId || instagramBusinessId;
+      // Route to agent /post-comments — requires a specific post media ID.
+      // instagramBusinessId is the IG User ID, not a post ID — never use it as media_id.
+      if (!mediaId) {
+        setComments([]);
+        setIsLoading(false);
+        return;
+      }
+      const targetMediaId = mediaId;
       const headers = await getAgentAuthHeaders();
       const response = await fetch(
         `${apiBaseUrl}/api/instagram/post-comments?business_account_id=${businessAccountId}&media_id=${targetMediaId}`,

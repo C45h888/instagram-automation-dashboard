@@ -269,7 +269,8 @@ const ContentManagement: React.FC = () => {
     try {
       console.log('📥 Fetching Instagram media...');
 
-      const url = `/api/instagram/media/${instagramBusinessId}?userId=${userId}&businessAccountId=${businessAccountId}&limit=50`;
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
+      const url = `${apiBaseUrl}/api/instagram/media/${instagramBusinessId}?userId=${userId}&businessAccountId=${businessAccountId}&limit=50`;
       const response = await fetch(url);
       const result: MediaGridResponse = await response.json();
 
@@ -308,7 +309,8 @@ const ContentManagement: React.FC = () => {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [userId, businessAccountId, instagramBusinessId, toastSuccess, toastError]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, businessAccountId, instagramBusinessId]);
 
   // Initial fetch
   useEffect(() => {
