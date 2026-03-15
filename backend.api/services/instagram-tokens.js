@@ -14,8 +14,9 @@ const GRAPH_API_VERSION = 'v23.0';
 const GRAPH_API_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
 
 // Safe metrics - work for all Instagram Business/Creator accounts
+// ✅ FIXED: Changed 'impressions' to 'accounts_engaged' (Meta API error 100 - impressions not valid)
 const SAFE_METRICS = [
-  'impressions',
+  'accounts_engaged',
   'reach',
   'profile_views'
 ];
@@ -365,7 +366,7 @@ async function getAccountInsights(igBusinessAccountId, pageToken, options = {}) 
       if (apiError?.code === 100 && metrics.includes('website_clicks')) {
         // ✅ FALLBACK: Retry with safe metrics only
         console.warn('⚠️  Error 100 detected - website_clicks likely unavailable');
-        console.warn('   Retrying with safe metrics only (impressions, reach, profile_views)...');
+        console.warn('   Retrying with safe metrics only (accounts_engaged, reach, profile_views)...');
 
         try {
           response = await axios.get(
