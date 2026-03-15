@@ -492,9 +492,11 @@ router.post('/send-dm', async (req, res) => {
       }
     }
 
-    const { igUserId, pageToken, userId } = await resolveAccountCredentials(business_account_id);
+    const { igUserId, pageToken, userId, pageId } = await resolveAccountCredentials(business_account_id);
 
-    const dmRes = await axios.post(`${GRAPH_API_BASE}/${igUserId}/messages`, {
+    // Meta docs: POST /{page-id}/messages — pageId = Facebook Page ID, NOT igUserId
+    const dmNode = pageId || igUserId;
+    const dmRes = await axios.post(`${GRAPH_API_BASE}/${dmNode}/messages`, {
       recipient: { id: String(recipient_id) },
       message: { text: message_text.trim() }
     }, {

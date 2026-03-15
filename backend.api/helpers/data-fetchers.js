@@ -134,12 +134,15 @@ async function fetchAndStoreConversations(businessAccountId, limit = 20) {
   const fetchLimit = Math.min(parseInt(limit) || 20, 50);
 
   try {
-    const { igUserId, pageToken, userId } = await resolveAccountCredentials(businessAccountId);
+    const { igUserId, pageToken, userId, pageId } = await resolveAccountCredentials(businessAccountId);
 
-    const convRes = await axios.get(`${GRAPH_API_BASE}/${igUserId}/conversations`, {
+    // Meta docs: GET /{page-id}/conversations?platform=INSTAGRAM
+    // pageId = Facebook Page ID (e.g. "632688196603930"), NOT igUserId (IG User ID)
+    const conversationNode = pageId || igUserId;
+    const convRes = await axios.get(`${GRAPH_API_BASE}/${conversationNode}/conversations`, {
       params: {
         fields: 'id,participants,updated_time,message_count,messages{created_time,from}',
-        platform: 'instagram',
+        platform: 'INSTAGRAM',
         limit: fetchLimit,
         access_token: pageToken
       },
@@ -568,7 +571,7 @@ async function fetchAndStoreMediaInsights(businessAccountId, since, until) {
 
     const mediaUrl = `${GRAPH_API_BASE}/${igUserId}/media`;
     const mediaParams = {
-      fields: 'id,media_type,timestamp,caption',
+      fields: 'id,media_type,timestamp,caption,media_url,thumbnail_url,permalink,like_count,comments_count',
       limit: 50,
       access_token: pageToken
     };
@@ -593,6 +596,12 @@ async function fetchAndStoreMediaInsights(businessAccountId, since, until) {
           media_id: media.id,
           media_type: media.media_type,
           timestamp: media.timestamp,
+          caption: media.caption || null,
+          media_url: media.media_url || null,
+          thumbnail_url: media.thumbnail_url || null,
+          permalink: media.permalink || null,
+          like_count: media.like_count || 0,
+          comments_count: media.comments_count || 0,
           insights: insightsRes.data.data || []
         };
       } catch (err) {
@@ -601,6 +610,12 @@ async function fetchAndStoreMediaInsights(businessAccountId, since, until) {
           media_id: media.id,
           media_type: media.media_type,
           timestamp: media.timestamp,
+          caption: media.caption || null,
+          media_url: media.media_url || null,
+          thumbnail_url: media.thumbnail_url || null,
+          permalink: media.permalink || null,
+          like_count: media.like_count || 0,
+          comments_count: media.comments_count || 0,
           insights: [],
           error: err.message
         };
@@ -638,6 +653,12 @@ async function fetchAndStoreMediaInsights(businessAccountId, since, until) {
             instagram_media_id: m.media_id,
             business_account_id: businessAccountId,
             media_type: m.media_type || null,
+            caption: m.caption || null,
+            media_url: m.media_url || null,
+            thumbnail_url: m.thumbnail_url || null,
+            permalink: m.permalink || null,
+            like_count: m.like_count || 0,
+            comments_count: m.comments_count || 0,
             reach: m.insights.find(i => i.name === 'reach')?.values?.[0]?.value || 0,
             impressions: m.insights.find(i => i.name === 'impressions')?.values?.[0]?.value || 0,
             saves: m.insights.find(i => i.name === 'saved')?.values?.[0]?.value || 0,
@@ -674,6 +695,100 @@ async function fetchAndStoreMediaInsights(businessAccountId, since, until) {
     const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
     return {
       success: false, mediaInsights: [], count: 0, error: errorMessage,
+      code: error.response?.data?.error?.code,
+      retryable, error_category, retry_after_seconds
+    };
+  }
+}
+
+// ============================================
+// BUSINESS POSTS (Media feed — Hypothesis 2 fix)
+// ============================================
+
+/**
+ * Fetches the business account's own media feed and upserts full post data to instagram_media.
+ * This is the missing proactive sync that populates the table read by GET /media/:accountId.
+ *
+ * @param {string} businessAccountId - UUID
+ * @param {number} [limit=50] - Max posts to fetch
+ * @returns {Promise<{success: boolean, count: number, error?: string}>}
+ */
+async function fetchAndStoreBusinessPosts(businessAccountId, limit = 50) {
+  const startTime = Date.now();
+  const fetchLimit = Math.min(parseInt(limit) || 50, 100);
+
+  try {
+    const { igUserId, pageToken } = await resolveAccountCredentials(businessAccountId);
+
+    const mediaRes = await axios.get(`${GRAPH_API_BASE}/${igUserId}/media`, {
+      params: {
+        fields: 'id,media_type,caption,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count',
+        limit: fetchLimit,
+        access_token: pageToken
+      },
+      timeout: 15000
+    });
+
+    const posts = mediaRes.data.data || [];
+    const latency = Date.now() - startTime;
+
+    await logApiRequest({
+      endpoint: '/sync/posts',
+      method: 'GET',
+      business_account_id: businessAccountId,
+      user_id: igUserId,
+      success: true,
+      latency
+    }).catch(() => {});
+
+    if (posts.length > 0) {
+      try {
+        const supabase = getSupabaseAdmin();
+        if (supabase) {
+          const mediaRecords = posts.map(p => ({
+            instagram_media_id: p.id,
+            business_account_id: businessAccountId,
+            media_type: p.media_type || null,
+            caption: p.caption || null,
+            media_url: p.media_url || null,
+            thumbnail_url: p.thumbnail_url || null,
+            permalink: p.permalink || null,
+            like_count: p.like_count || 0,
+            comments_count: p.comments_count || 0,
+            published_at: p.timestamp || null,
+          }));
+          const { error: upsertErr } = await supabase
+            .from('instagram_media')
+            .upsert(mediaRecords, { onConflict: 'instagram_media_id', ignoreDuplicates: false });
+          if (upsertErr) console.warn('[DataFetcher] Business posts upsert failed:', upsertErr.message);
+
+          // Auto-populate monitored hashtags from captions
+          const captions = posts.map(p => p.caption).filter(Boolean);
+          await syncHashtagsFromCaptions(supabase, businessAccountId, captions);
+        }
+      } catch (wtErr) {
+        console.warn('[DataFetcher] Business posts write-through error:', wtErr.message);
+      }
+    }
+
+    return { success: true, count: posts.length };
+
+  } catch (error) {
+    const latency = Date.now() - startTime;
+    const errorMessage = error.response?.data?.error?.message || error.message;
+
+    await logApiRequest({
+      endpoint: '/sync/posts',
+      method: 'GET',
+      business_account_id: businessAccountId,
+      success: false,
+      error: errorMessage,
+      latency
+    }).catch(() => {});
+
+    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
+    return {
+      success: false, count: 0, error: errorMessage,
       code: error.response?.data?.error?.code,
       retryable, error_category, retry_after_seconds
     };
@@ -741,6 +856,7 @@ module.exports = {
   fetchAndStoreMessages,
   fetchAndStoreHashtagMedia,
   fetchAndStoreTaggedMedia,
+  fetchAndStoreBusinessPosts,
   fetchAndStoreMediaInsights,
   fetchAndStoreAccountInsights,
 };

@@ -20,6 +20,7 @@ const {
   fetchAndStoreMessages,
   fetchAndStoreHashtagMedia,
   fetchAndStoreTaggedMedia,
+  fetchAndStoreBusinessPosts,
   fetchAndStoreMediaInsights,
 } = require('../helpers/data-fetchers');
 
@@ -30,6 +31,7 @@ const {
 const DEFAULT_SCHEDULES = {
   engagement:   '*/3 * * * *',   // Every 3 min (agent polls every 5 min)
   ugc:          '0 */3 * * *',   // Every 3 hours (agent polls every 4h)
+  media:        '0 */6 * * *',   // Every 6 hours — populates instagram_media for frontend
   insights:     '0 2 * * *',     // Daily at 02:00 UTC (agent runs daily)
   tokenHealth:  '0 3 * * *',     // Daily at 03:00 UTC (offset from insights to avoid overlap)
 };
@@ -440,6 +442,52 @@ async function proactiveInsightsSync() {
   console.log(`[ProactiveSync:insights] Run #${runId} complete`);
 }
 
+/**
+ * Proactive media posts sync: fetches the business account's own media feed
+ * and writes full post data (caption, media_url, thumbnail_url, permalink) to
+ * instagram_media. This is what populates the table read by GET /media/:accountId.
+ * Runs every 6 hours.
+ */
+async function proactiveMediaSync() {
+  const runId = Date.now();
+  console.log(`[ProactiveSync:media] Starting run #${runId}`);
+
+  const accounts = await getActiveAccounts();
+  if (accounts.length === 0) {
+    console.log('[ProactiveSync:media] No active accounts, skipping');
+    return;
+  }
+
+  for (const account of accounts) {
+    if (isAccountRateLimited(account.id)) {
+      console.log(`[ProactiveSync:media] Account ${account.id} rate-limited, skipping`);
+      await logSyncAudit('media', account.id, { success: false, error: 'rate_limited', skipped: true });
+      continue;
+    }
+
+    try {
+      const result = await fetchAndStoreBusinessPosts(account.id, 50);
+      const { skip, break: brk } = handleFetchError(result, account.id);
+
+      await logSyncAudit('media_posts', account.id, {
+        success: result.success && !skip,
+        count: result.count,
+        error: result.success ? undefined : result.error,
+      });
+
+      if (skip || brk) continue;
+
+    } catch (accountError) {
+      console.error(`[ProactiveSync:media] Account ${account.id} failed:`, accountError.message);
+      await logSyncAudit('media', account.id, { success: false, error: accountError.message });
+    }
+
+    await delay(INTER_ACCOUNT_DELAY_MS);
+  }
+
+  console.log(`[ProactiveSync:media] Run #${runId} complete`);
+}
+
 // ============================================
 // CRON LIFECYCLE
 // ============================================
@@ -752,6 +800,7 @@ function initScheduledJobs() {
   const schedules = {
     engagement: process.env.PROACTIVE_COMMENTS_CRON || DEFAULT_SCHEDULES.engagement,
     ugc:        process.env.PROACTIVE_UGC_CRON       || DEFAULT_SCHEDULES.ugc,
+    media:      process.env.PROACTIVE_MEDIA_CRON     || DEFAULT_SCHEDULES.media,
     insights:   process.env.PROACTIVE_INSIGHTS_CRON   || DEFAULT_SCHEDULES.insights,
   };
 
@@ -768,11 +817,13 @@ function initScheduledJobs() {
   console.log('[ProactiveSync] Initializing scheduled jobs:');
   console.log(`   Engagement (comments+conversations): ${schedules.engagement}`);
   console.log(`   UGC discovery: ${schedules.ugc}`);
+  console.log(`   Media posts feed: ${schedules.media}`);
   console.log(`   Media insights: ${schedules.insights}`);
 
   // Overlap guards
   let engagementRunning = false;
   let ugcRunning = false;
+  let mediaRunning = false;
   let insightsRunning = false;
 
   const engagementJob = cron.schedule(schedules.engagement, async () => {
@@ -802,6 +853,21 @@ function initScheduledJobs() {
       console.error('[ProactiveSync:ugc] Unhandled error:', err.message);
     } finally {
       ugcRunning = false;
+    }
+  }, { scheduled: true, timezone: 'UTC' });
+
+  const mediaJob = cron.schedule(schedules.media, async () => {
+    if (mediaRunning) {
+      console.log('[ProactiveSync:media] Previous run still active, skipping');
+      return;
+    }
+    mediaRunning = true;
+    try {
+      await proactiveMediaSync();
+    } catch (err) {
+      console.error('[ProactiveSync:media] Unhandled error:', err.message);
+    } finally {
+      mediaRunning = false;
     }
   }, { scheduled: true, timezone: 'UTC' });
 
@@ -913,7 +979,7 @@ function initScheduledJobs() {
     }
   }, { scheduled: true, timezone: 'UTC' });
 
-  scheduledJobs = [engagementJob, ugcJob, insightsJob, heartbeatJob, ...(tokenHealthJob ? [tokenHealthJob] : [])];
+  scheduledJobs = [engagementJob, ugcJob, mediaJob, insightsJob, heartbeatJob, ...(tokenHealthJob ? [tokenHealthJob] : [])];
   console.log(`[ProactiveSync] ${scheduledJobs.length} jobs scheduled`);
 
   return function stopScheduledJobs() {
@@ -931,6 +997,7 @@ module.exports = {
   // Exposed for manual testing
   proactiveEngagementSync,
   proactiveUgcSync,
+  proactiveMediaSync,
   proactiveInsightsSync,
   runTokenHealthCheck,
   runUATRefreshCheck,
