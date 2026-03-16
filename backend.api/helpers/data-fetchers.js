@@ -141,7 +141,7 @@ async function fetchAndStoreConversations(businessAccountId, limit = 20) {
     const conversationNode = pageId || igUserId;
     const convRes = await axios.get(`${GRAPH_API_BASE}/${conversationNode}/conversations`, {
       params: {
-        fields: 'id,participants,updated_time,message_count,messages{created_time,from}',
+        fields: 'id,participants{id,name,username},updated_time,message_count,messages{created_time,from}',
         platform: 'INSTAGRAM',
         limit: fetchLimit,
         access_token: pageToken
@@ -211,6 +211,8 @@ async function fetchAndStoreConversations(businessAccountId, limit = 20) {
               return {
                 instagram_thread_id: conv.id,
                 customer_instagram_id: customerParticipant.id,
+                customer_username: customerParticipant.username || null,
+                customer_name: customerParticipant.name || null,
                 business_account_id: businessAccountId,
                 within_window: isOpen,
                 window_expires_at: windowExpiresAt,
@@ -301,37 +303,57 @@ async function fetchAndStoreMessages(businessAccountId, conversationId, limit = 
     }).catch(() => {});
 
     const messages = msgRes.data.data || [];
+    let dbMessages = null;
 
     // Supabase write-through: upsert messages with is_from_business flag
     if (messages.length > 0) {
       try {
         const supabase = getSupabaseAdmin();
         if (supabase) {
-          // Resolve IG thread ID → Supabase UUID for conversation FK
+          // Resolve IG thread ID → Supabase UUID + customer_instagram_id for recipient fallback
           let conversationUUID = null;
+          let customerIgId = null;
           const { data: conv } = await supabase
             .from('instagram_dm_conversations')
-            .select('id')
+            .select('id, customer_instagram_id')
             .eq('instagram_thread_id', conversationId)
             .maybeSingle();
           conversationUUID = conv?.id || null;
+          customerIgId = conv?.customer_instagram_id || null;
 
           const msgRecords = messages
             .filter(m => m.id)
-            .map(m => ({
-              instagram_message_id: m.id,
-              message_text: m.message || '',
-              conversation_id: conversationUUID,
-              business_account_id: businessAccountId,
-              is_from_business: m.from?.id === igUserId,
-              recipient_instagram_id: m.to?.data?.[0]?.id || '',
-              sent_at: m.created_time,
-              send_status: 'delivered',
-            }));
+            .map(m => {
+              const fromBusiness = m.from?.id === igUserId;
+              return {
+                instagram_message_id: m.id,
+                message_text: m.message || '',
+                conversation_id: conversationUUID,
+                business_account_id: businessAccountId,
+                is_from_business: fromBusiness,
+                // Meta omits `to` field when no data — derive from known IDs as fallback
+                recipient_instagram_id: m.to?.data?.[0]?.id
+                  || (fromBusiness ? customerIgId : igUserId)
+                  || '',
+                sent_at: m.created_time,
+                send_status: 'delivered',
+              };
+            });
           const { error: upsertErr } = await supabase
             .from('instagram_dm_messages')
             .upsert(msgRecords, { onConflict: 'instagram_message_id', ignoreDuplicates: false });
-          if (upsertErr) console.warn('[DataFetcher] Message upsert failed:', upsertErr.message);
+          if (upsertErr) {
+            console.warn('[DataFetcher] Message upsert failed:', upsertErr.message);
+          } else if (conversationUUID) {
+            // Query DB rows after upsert — return correct DB shape so frontend fields match
+            const { data: rows } = await supabase
+              .from('instagram_dm_messages')
+              .select('*')
+              .eq('conversation_id', conversationUUID)
+              .order('sent_at', { ascending: true })
+              .limit(fetchLimit);
+            if (rows) dbMessages = rows;
+          }
         }
       } catch (wtErr) {
         console.warn('[DataFetcher] Message write-through error:', wtErr.message);
@@ -340,8 +362,8 @@ async function fetchAndStoreMessages(businessAccountId, conversationId, limit = 
 
     return {
       success: true,
-      messages,
-      count: messages.length,
+      messages: dbMessages || messages,
+      count: (dbMessages || messages).length,
       paging: msgRes.data.paging || {}
     };
 

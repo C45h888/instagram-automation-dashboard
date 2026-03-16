@@ -224,6 +224,13 @@ export const useDMInbox = (): UseDMInboxResult => {
     }
   }, [selectedConversationId, fetchMessages]);
 
+  // Auto-refresh messages every 30s so new inbound messages appear without manual re-click
+  useEffect(() => {
+    if (!selectedConversationId) return;
+    const intervalId = setInterval(() => fetchMessages(selectedConversationId), 30000);
+    return () => clearInterval(intervalId);
+  }, [selectedConversationId, fetchMessages]);
+
   const selectedConversation =
     conversations.find((c) => c.id === selectedConversationId) || null;
 

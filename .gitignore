@@ -70,4 +70,4 @@ trace.zip
 *.sln
 *.sw?
 .env.production
-.claude/resources/errors.txt
+
