@@ -210,7 +210,7 @@ router.post('/reply-dm', async (req, res) => {
       }
     }
 
-    const { pageToken, userId } = await resolveAccountCredentials(business_account_id);
+    const { pageToken, userId, igUsername } = await resolveAccountCredentials(business_account_id);
 
     const dmRes = await axios.post(`${GRAPH_API_BASE}/${conversation_id}/messages`, null, {
       params: {
@@ -271,6 +271,7 @@ router.post('/reply-dm', async (req, res) => {
             conversation_id: conversationUUID,
             business_account_id,
             is_from_business: true,
+            sender_username: igUsername || null,
             recipient_instagram_id: recipient_id || '',
             sent_at: new Date().toISOString(),
             send_status: 'sent',
@@ -492,7 +493,7 @@ router.post('/send-dm', async (req, res) => {
       }
     }
 
-    const { igUserId, pageToken, userId, pageId } = await resolveAccountCredentials(business_account_id);
+    const { igUserId, pageToken, userId, pageId, igUsername } = await resolveAccountCredentials(business_account_id);
 
     // Meta docs: POST /{page-id}/messages — pageId = Facebook Page ID, NOT igUserId
     const dmNode = pageId || igUserId;
@@ -547,6 +548,7 @@ router.post('/send-dm', async (req, res) => {
             recipient_instagram_id: String(recipient_id),
             sent_at: new Date().toISOString(),
             send_status: 'sent',
+            sender_username: igUsername || null,
           }, { onConflict: 'instagram_message_id', ignoreDuplicates: false });
         if (msgErr) console.warn('⚠️ Send-DM write-through failed:', msgErr.message);
       }

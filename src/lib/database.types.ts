@@ -1039,7 +1039,9 @@ export type Database = {
       instagram_dm_messages: {
         Row: {
           ai_generated: boolean | null
+          automated_response_sent: boolean | null
           automation_workflow_id: string | null
+          business_account_id: string | null
           conversation_id: string | null
           created_at: string
           delivered_at: string | null
@@ -1053,8 +1055,11 @@ export type Database = {
           media_url: string | null
           message_text: string | null
           message_type: string
+          processed_by_automation: boolean | null
           read_at: string | null
           recipient_instagram_id: string
+          response_sent_at: string | null
+          response_text: string | null
           send_status: string
           sender_username: string | null
           sent_at: string
@@ -1064,7 +1069,9 @@ export type Database = {
         }
         Insert: {
           ai_generated?: boolean | null
+          automated_response_sent?: boolean | null
           automation_workflow_id?: string | null
+          business_account_id?: string | null
           conversation_id?: string | null
           created_at?: string
           delivered_at?: string | null
@@ -1078,8 +1085,11 @@ export type Database = {
           media_url?: string | null
           message_text?: string | null
           message_type?: string
+          processed_by_automation?: boolean | null
           read_at?: string | null
           recipient_instagram_id: string
+          response_sent_at?: string | null
+          response_text?: string | null
           send_status?: string
           sender_username?: string | null
           sent_at: string
@@ -1089,7 +1099,9 @@ export type Database = {
         }
         Update: {
           ai_generated?: boolean | null
+          automated_response_sent?: boolean | null
           automation_workflow_id?: string | null
+          business_account_id?: string | null
           conversation_id?: string | null
           created_at?: string
           delivered_at?: string | null
@@ -1103,8 +1115,11 @@ export type Database = {
           media_url?: string | null
           message_text?: string | null
           message_type?: string
+          processed_by_automation?: boolean | null
           read_at?: string | null
           recipient_instagram_id?: string
+          response_sent_at?: string | null
+          response_text?: string | null
           send_status?: string
           sender_username?: string | null
           sent_at?: string

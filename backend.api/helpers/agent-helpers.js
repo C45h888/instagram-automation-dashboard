@@ -179,7 +179,7 @@ async function resolveAccountCredentials(businessAccountId) {
 
     const { data: account, error } = await supabase
       .from('instagram_business_accounts')
-      .select('instagram_business_id, user_id, is_connected')
+      .select('instagram_business_id, user_id, is_connected, username')
       .eq('id', businessAccountId)
       .single();
 
@@ -215,7 +215,7 @@ async function resolveAccountCredentials(businessAccountId) {
       console.warn('⚠️ page_id lookup failed (non-blocking):', pageIdErr.message);
     }
 
-    const result = { igUserId, pageToken, userId, pageId };
+    const result = { igUserId, pageToken, userId, pageId, igUsername: account.username || null };
     _credentialCache.set(businessAccountId, { value: result, ts: Date.now() });
     return result;
   } catch (error) {

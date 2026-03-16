@@ -141,7 +141,7 @@ async function fetchAndStoreConversations(businessAccountId, limit = 20) {
     const conversationNode = pageId || igUserId;
     const convRes = await axios.get(`${GRAPH_API_BASE}/${conversationNode}/conversations`, {
       params: {
-        fields: 'id,participants{id,name,username},updated_time,message_count,messages{created_time,from}',
+        fields: 'id,participants{id,username},updated_time,message_count,messages{created_time,from{id}}',
         platform: 'INSTAGRAM',
         limit: fetchLimit,
         access_token: pageToken
@@ -191,6 +191,7 @@ async function fetchAndStoreConversations(businessAccountId, limit = 20) {
     }).catch(() => {});
 
     // Supabase write-through: upsert DM conversations with 24h window status
+    let dbConversations = null;
     if (conversations.length > 0) {
       try {
         const supabase = getSupabaseAdmin();
@@ -208,15 +209,24 @@ async function fetchAndStoreConversations(businessAccountId, limit = 20) {
               const customerParticipant = conv.participants.find(
                 p => p.id !== igUserId && p.id !== pageId
               ) || conv.participants[0];
+              // last_user_message_at: only set when the last message was from the customer
+              const lastMsg = conv.last_message;
+              const lastUserMessageAt = (
+                lastMsg &&
+                lastMsg.from?.id !== igUserId &&
+                lastMsg.from?.id !== pageId
+              ) ? lastMsg.created_time : null;
+
               return {
                 instagram_thread_id: conv.id,
                 customer_instagram_id: customerParticipant.id,
                 customer_username: customerParticipant.username || null,
-                customer_name: customerParticipant.name || null,
+                // customer_name intentionally omitted — participants.name is Page-only, never returned for Instagram
                 business_account_id: businessAccountId,
                 within_window: isOpen,
                 window_expires_at: windowExpiresAt,
                 last_message_at: conv.last_message_at,
+                last_user_message_at: lastUserMessageAt,
                 message_count: conv.message_count || 0,
                 conversation_status: 'active',
               };
@@ -225,7 +235,37 @@ async function fetchAndStoreConversations(businessAccountId, limit = 20) {
             const { error: upsertErr } = await supabase
               .from('instagram_dm_conversations')
               .upsert(convRecords, { onConflict: 'instagram_thread_id', ignoreDuplicates: false });
-            if (upsertErr) console.warn('[DataFetcher] Conversation upsert failed:', upsertErr.message);
+            if (upsertErr) {
+              console.warn('[DataFetcher] Conversation upsert failed:', upsertErr.message);
+            } else {
+              // Query DB rows after upsert — return correct DB shape so frontend fields match
+              // id is overridden with instagram_thread_id so fetchMessages still gets the Meta thread ID
+              const threadIds = convRecords.map(c => c.instagram_thread_id);
+              const { data: dbRows } = await supabase
+                .from('instagram_dm_conversations')
+                .select('*')
+                .in('instagram_thread_id', threadIds)
+                .order('last_message_at', { ascending: false });
+              if (dbRows) {
+                const nowMs = Date.now();
+                dbConversations = dbRows.map(row => {
+                  const expiresMs = row.window_expires_at
+                    ? new Date(row.window_expires_at).getTime()
+                    : null;
+                  const hoursRemaining = expiresMs && expiresMs > nowMs
+                    ? (expiresMs - nowMs) / (1000 * 60 * 60)
+                    : 0;
+                  return {
+                    ...row,
+                    id: row.instagram_thread_id, // override UUID — hook uses id for Meta API calls
+                    window_remaining_hours: parseFloat(hoursRemaining.toFixed(1)),
+                    can_send_messages: row.within_window || false,
+                    requires_template: !(row.within_window || false),
+                    priority: 'normal',
+                  };
+                });
+              }
+            }
           }
         }
       } catch (wtErr) {
@@ -235,8 +275,8 @@ async function fetchAndStoreConversations(businessAccountId, limit = 20) {
 
     return {
       success: true,
-      conversations,
-      count: conversations.length,
+      conversations: dbConversations || conversations,
+      count: (dbConversations || conversations).length,
       paging: convRes.data.paging || {}
     };
 
@@ -280,11 +320,13 @@ async function fetchAndStoreMessages(businessAccountId, conversationId, limit = 
   const fetchLimit = Math.min(parseInt(limit) || 20, 100);
 
   try {
-    const { igUserId, pageToken, userId } = await resolveAccountCredentials(businessAccountId);
+    const { igUserId, pageToken, userId, pageId } = await resolveAccountCredentials(businessAccountId);
 
     const msgRes = await axios.get(`${GRAPH_API_BASE}/${conversationId}/messages`, {
       params: {
-        fields: 'id,message,from,to,created_time,attachments',
+        fields: 'id,message,from{id,username},to{id,username},created_time,' +
+                'attachments{id,image_data{url,preview_url,render_as_sticker,animated_gif_url},file_url,name},' +
+                'story,shares,is_unsupported',
         limit: fetchLimit,
         access_token: pageToken
       },
@@ -321,38 +363,89 @@ async function fetchAndStoreMessages(businessAccountId, conversationId, limit = 
           conversationUUID = conv?.id || null;
           customerIgId = conv?.customer_instagram_id || null;
 
-          const msgRecords = messages
-            .filter(m => m.id)
-            .map(m => {
-              const fromBusiness = m.from?.id === igUserId;
-              return {
-                instagram_message_id: m.id,
-                message_text: m.message || '',
-                conversation_id: conversationUUID,
-                business_account_id: businessAccountId,
-                is_from_business: fromBusiness,
-                // Meta omits `to` field when no data — derive from known IDs as fallback
-                recipient_instagram_id: m.to?.data?.[0]?.id
-                  || (fromBusiness ? customerIgId : igUserId)
-                  || '',
-                sent_at: m.created_time,
-                send_status: 'delivered',
-              };
-            });
-          const { error: upsertErr } = await supabase
-            .from('instagram_dm_messages')
-            .upsert(msgRecords, { onConflict: 'instagram_message_id', ignoreDuplicates: false });
-          if (upsertErr) {
-            console.warn('[DataFetcher] Message upsert failed:', upsertErr.message);
-          } else if (conversationUUID) {
-            // Query DB rows after upsert — return correct DB shape so frontend fields match
-            const { data: rows } = await supabase
+          // Maps any Meta message object → DB row shape.
+          // Used for both upsert AND the no-UUID fallback — eliminates shape mismatch.
+          const transformMessage = (m) => {
+            // pageId: defensive fallback — Meta docs list IGSID for business as either igUserId or pageId
+            const fromBusiness = m.from?.id === igUserId || (pageId && m.from?.id === pageId);
+
+            // Graph API attachment sub-fields (NOT webhook payload.url format)
+            const att = m.attachments?.data?.[0] || null;
+            const imgData = att?.image_data || null;
+            const isSticker = imgData?.render_as_sticker === true;
+
+            // Media URL: priority order covers all attachment variants
+            const mediaUrl = imgData?.url
+              || imgData?.animated_gif_url       // animated GIF
+              || att?.file_url                   // PDF / file
+              || m.story?.link                   // story reply CDN URL (top-level field)
+              || null;
+
+            // message_type: derived from what Meta actually returned for this message
+            let messageType = 'text';
+            if (isSticker)                    messageType = 'sticker';
+            else if (att)                     messageType = 'attachment';
+            else if (m.story)                 messageType = 'story_reply';
+            else if (m.shares?.data?.length)  messageType = 'share';
+            else if (m.is_unsupported)        messageType = 'unsupported';
+
+            // media_type: coarse MIME category for frontend rendering decisions
+            const mediaType = imgData ? 'image' : att?.file_url ? 'file' : null;
+
+            return {
+              instagram_message_id: m.id,
+              message_text: m.message || null,  // null not '' — empty string is semantically wrong
+              message_type: messageType,
+              media_url: mediaUrl,
+              media_type: mediaType,
+              conversation_id: conversationUUID,
+              business_account_id: businessAccountId,
+              is_from_business: fromBusiness,
+              // Meta omits `to` when no data — derive from known IDs as fallback
+              recipient_instagram_id: m.to?.data?.[0]?.id
+                || (fromBusiness ? customerIgId : igUserId)
+                || '',
+              sender_username: m.from?.username || null,
+              sent_at: m.created_time,
+              send_status: fromBusiness ? 'sent' : 'delivered',
+            };
+          };
+
+          if (!conversationUUID) {
+            // Conversation not yet in DB (race condition or prior upsert failure).
+            // Return correctly shaped data WITHOUT persisting — prevents permanent orphan rows
+            // (ignoreDuplicates: true can never repair conversation_id: null rows).
+            console.warn(`[DataFetcher] ${conversationId} not in DB — returning without write`);
+            dbMessages = messages.filter(m => m.id).map(transformMessage);
+          } else {
+            const msgRecords = messages.filter(m => m.id).map(transformMessage);
+
+            const { error: upsertErr } = await supabase
               .from('instagram_dm_messages')
-              .select('*')
-              .eq('conversation_id', conversationUUID)
-              .order('sent_at', { ascending: true })
-              .limit(fetchLimit);
-            if (rows) dbMessages = rows;
+              // ignoreDuplicates: true — never overwrite existing status (preserves 'read' on re-fetch)
+              .upsert(msgRecords, { onConflict: 'instagram_message_id', ignoreDuplicates: true });
+
+            if (upsertErr) {
+              console.warn('[DataFetcher] Message upsert failed:', upsertErr.message);
+            } else {
+              // Orphan repair: messages stored with conversation_id: null by /send-dm or /reply-dm
+              // before the conversation row existed. IS NULL guard prevents touching already-linked rows.
+              const messageIds = msgRecords.map(r => r.instagram_message_id);
+              await supabase
+                .from('instagram_dm_messages')
+                .update({ conversation_id: conversationUUID, business_account_id: businessAccountId })
+                .in('instagram_message_id', messageIds)
+                .is('conversation_id', null);
+
+              // DB query-back — returns fully populated DB rows (correct shape for frontend)
+              const { data: rows } = await supabase
+                .from('instagram_dm_messages')
+                .select('*')
+                .eq('conversation_id', conversationUUID)
+                .order('sent_at', { ascending: true })
+                .limit(fetchLimit);
+              if (rows) dbMessages = rows;
+            }
           }
         }
       } catch (wtErr) {

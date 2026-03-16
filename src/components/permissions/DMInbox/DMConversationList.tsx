@@ -77,10 +77,10 @@ export const DMConversationList: React.FC<DMConversationListProps> = ({
                   {/* Name + Username */}
                   <div className="flex-1 min-w-0">
                     <p className="text-white font-semibold text-sm truncate">
-                      {conversation.customer_name || 'Unknown'}
+                      {conversation.customer_username || 'Unknown'}
                     </p>
                     <p className="text-gray-400 text-xs truncate">
-                      @{conversation.customer_username}
+                      {conversation.customer_instagram_id || ''}
                     </p>
                   </div>
                 </div>
