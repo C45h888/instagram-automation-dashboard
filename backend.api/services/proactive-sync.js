@@ -18,11 +18,15 @@ const {
   fetchAndStoreComments,
   fetchAndStoreConversations,
   fetchAndStoreMessages,
+} = require('../helpers/data-fetchers/messaging-fetchers');
+const {
   fetchAndStoreHashtagMedia,
   fetchAndStoreTaggedMedia,
+} = require('../helpers/data-fetchers/ugc-fetchers');
+const {
   fetchAndStoreBusinessPosts,
   fetchAndStoreMediaInsights,
-} = require('../helpers/data-fetchers');
+} = require('../helpers/data-fetchers/media-fetchers');
 
 // ============================================
 // CONFIGURATION

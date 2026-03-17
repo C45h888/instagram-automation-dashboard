@@ -13,6 +13,7 @@ router.use(require('./frontend/tokens'));
 router.use(require('./frontend/media'));
 router.use(require('./frontend/ugc'));
 router.use(require('./frontend/sync'));
+router.use(require('./frontend/inbox'));
 
 // Health check (inline — zero dependencies)
 router.get('/health', (req, res) => {

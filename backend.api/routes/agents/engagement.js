@@ -19,7 +19,7 @@ const {
   fetchAndStoreComments,
   fetchAndStoreConversations,
   fetchAndStoreMessages,
-} = require('../../helpers/data-fetchers');
+} = require('../../helpers/data-fetchers/messaging-fetchers');
 
 // ============================================
 // ENDPOINT 6: POST /reply-comment (Engagement Monitor)

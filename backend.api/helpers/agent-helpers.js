@@ -225,70 +225,6 @@ async function resolveAccountCredentials(businessAccountId) {
 }
 
 // ============================================
-// HELPER: HANDLE INSIGHTS REQUEST
-// ============================================
-// Shared by /insights, /account-insights, and /media-insights.
-// metricTypeOverride: if provided, ignores the metric_type query param.
-// Delegates to data-fetchers for Graph API + Supabase logic.
-
-async function handleInsightsRequest(req, res, _startTime, metricTypeOverride) {
-  const { business_account_id, since, until, metric_type } = req.query;
-
-  // Lazy-require to avoid circular dependency (data-fetchers imports from this file)
-  const {
-    fetchAndStoreMediaInsights,
-    fetchAndStoreAccountInsights,
-  } = require('./data-fetchers');
-
-  try {
-    if (!business_account_id) {
-      return res.status(400).json({
-        error: 'Missing required query parameter: business_account_id'
-      });
-    }
-
-    const type = metricTypeOverride || metric_type || 'account';
-
-    let insightsData = {};
-
-    if (type === 'account') {
-      const result = await fetchAndStoreAccountInsights(business_account_id, { since, until });
-      if (!result.success) {
-        throw new Error(result.error);
-      }
-      insightsData = result.data;
-
-    } else if (type === 'media') {
-      const result = await fetchAndStoreMediaInsights(business_account_id, since, until);
-      if (!result.success) {
-        throw new Error(result.error);
-      }
-      insightsData = { media_insights: result.mediaInsights };
-
-    } else {
-      return res.status(400).json({
-        error: 'Invalid metric_type. Must be "account" or "media"'
-      });
-    }
-
-    res.json({ success: true, data: insightsData });
-
-  } catch (error) {
-    const errorMessage = error.response?.data?.error?.message || error.message;
-
-    console.error('❌ Insights fetch failed:', errorMessage);
-    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
-    res.status(error.response?.status || 500).json({
-      error: errorMessage,
-      code: error.response?.data?.error?.code,
-      retryable,
-      error_category,
-      retry_after_seconds
-    });
-  }
-}
-
-// ============================================
 // HELPER: IDEMPOTENCY KEY
 // ============================================
 
@@ -376,7 +312,6 @@ module.exports = {
   resolveAccountCredentials,
   clearCredentialCache,
   categorizeIgError,
-  handleInsightsRequest,
   GRAPH_API_BASE,
   buildIdempotencyKey,
   insertQueueRow,

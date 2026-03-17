@@ -72,7 +72,7 @@ export const useComments = (mediaId?: string): UseCommentsResult => {
       // ✅ UPDATED: Use VITE_API_BASE_URL from environment
       const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
 
-      // Route to agent /post-comments — requires a specific post media ID.
+      // Route to frontend /comments — reads from Supabase cache (no live Graph API call).
       // instagramBusinessId is the IG User ID, not a post ID — never use it as media_id.
       if (!mediaId) {
         setComments([]);
@@ -82,7 +82,7 @@ export const useComments = (mediaId?: string): UseCommentsResult => {
       const targetMediaId = mediaId;
       const headers = await getAgentAuthHeaders();
       const response = await fetch(
-        `${apiBaseUrl}/api/instagram/post-comments?business_account_id=${businessAccountId}&media_id=${targetMediaId}`,
+        `${apiBaseUrl}/api/instagram/comments?business_account_id=${businessAccountId}&media_id=${targetMediaId}`,
         { headers }
       );
 
@@ -125,7 +125,7 @@ export const useComments = (mediaId?: string): UseCommentsResult => {
     }
 
     try {
-      // Route to agent /reply-comment — body fields: business_account_id, comment_id, reply_text
+      // Route to agent /reply-comment — write action, stays on agent proxy (shared by agent + frontend)
       const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
       const headers = await getAgentAuthHeaders();
       const response = await fetch(

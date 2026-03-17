@@ -1,9 +1,64 @@
 // backend.api/routes/agents/analytics.js
 // Analytics/Insights endpoints: /insights, /account-insights, /media-insights
+//
+// handleInsightsRequest lives here (not in agent-helpers) — it's a route-level
+// concern and was previously there only due to a circular dependency workaround.
+// That circular dep (agent-helpers ← data-fetchers → agent-helpers) is now gone.
 
 const express = require('express');
 const router = express.Router();
-const { handleInsightsRequest } = require('../../helpers/agent-helpers');
+const { fetchAndStoreMediaInsights } = require('../../helpers/data-fetchers/media-fetchers');
+const { fetchAndStoreAccountInsights } = require('../../helpers/data-fetchers/account-fetchers');
+const { categorizeIgError } = require('../../helpers/agent-helpers');
+
+// ============================================
+// SHARED HANDLER
+// ============================================
+
+async function handleInsightsRequest(req, res, _startTime, metricTypeOverride) {
+  const { business_account_id, since, until, metric_type } = req.query;
+
+  try {
+    if (!business_account_id) {
+      return res.status(400).json({
+        error: 'Missing required query parameter: business_account_id'
+      });
+    }
+
+    const type = metricTypeOverride || metric_type || 'account';
+    let insightsData = {};
+
+    if (type === 'account') {
+      const result = await fetchAndStoreAccountInsights(business_account_id, { since, until });
+      if (!result.success) throw new Error(result.error);
+      insightsData = result.data;
+
+    } else if (type === 'media') {
+      const result = await fetchAndStoreMediaInsights(business_account_id, since, until);
+      if (!result.success) throw new Error(result.error);
+      insightsData = { media_insights: result.mediaInsights };
+
+    } else {
+      return res.status(400).json({
+        error: 'Invalid metric_type. Must be "account" or "media"'
+      });
+    }
+
+    res.json({ success: true, data: insightsData });
+
+  } catch (error) {
+    const errorMessage = error.response?.data?.error?.message || error.message;
+    console.error('❌ Insights fetch failed:', errorMessage);
+    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
+    res.status(error.response?.status || 500).json({
+      error: errorMessage,
+      code: error.response?.data?.error?.code,
+      retryable,
+      error_category,
+      retry_after_seconds
+    });
+  }
+}
 
 // ============================================
 // ENDPOINT 5: GET /insights (Analytics Reports)

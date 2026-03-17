@@ -70,10 +70,10 @@ export const useDMInbox = (): UseDMInboxResult => {
       // ✅ UPDATED: Use VITE_API_BASE_URL from environment
       const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
 
-      // Route to agent /conversations — uses businessAccountId (UUID), not instagramBusinessId (IG numeric ID)
+      // Route to frontend /dm-conversations — reads from Supabase cache (no live Graph API call)
       const headers = await getAgentAuthHeaders();
       const response = await fetch(
-        `${apiBaseUrl}/api/instagram/conversations?business_account_id=${businessAccountId}`,
+        `${apiBaseUrl}/api/instagram/dm-conversations?business_account_id=${businessAccountId}`,
         { headers }
       );
 
@@ -114,11 +114,11 @@ export const useDMInbox = (): UseDMInboxResult => {
     }
 
     try {
-      // Route to agent /conversation-messages — uses business_account_id + conversation_id query params
+      // Route to frontend /dm-messages — reads from Supabase cache (no live Graph API call)
       const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
       const headers = await getAgentAuthHeaders();
       const response = await fetch(
-        `${apiBaseUrl}/api/instagram/conversation-messages?business_account_id=${businessAccountId}&conversation_id=${conversationId}`,
+        `${apiBaseUrl}/api/instagram/dm-messages?business_account_id=${businessAccountId}&conversation_id=${conversationId}`,
         { headers }
       );
 
@@ -165,7 +165,7 @@ export const useDMInbox = (): UseDMInboxResult => {
     }
 
     try {
-      // Route to agent /reply-dm — body fields: business_account_id, conversation_id, message_text
+      // Route to agent /reply-dm — write action, stays on agent proxy (shared by agent + frontend)
       const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
       const headers = await getAgentAuthHeaders();
       const response = await fetch(
