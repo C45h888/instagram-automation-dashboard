@@ -351,13 +351,23 @@ async function fetchAndStoreMessages(businessAccountId, conversationId, limit = 
               || m.story?.link                   // story reply CDN URL (top-level field)
               || null;
 
-            // message_type: derived from what Meta actually returned for this message
+            // message_type: mapped to DB CHECK constraint values.
+            // DB allows: text, media, story_reply, story_mention, post_share,
+            //            voice_note, reel_share, icebreaker
+            //
+            // Previous values 'sticker', 'attachment', 'share', 'unsupported' are NOT
+            // in the DB enum — they caused silent CHECK constraint failures that killed
+            // entire message batches (all messages in a conversation lost on one bad type).
+            //
+            // Meta docs confirm NO separate endpoints for non-text content — all message
+            // types come through the same /{conversation-id}/messages endpoint.
+            // Attachments[] type field is the discriminator, not a separate API call.
             let messageType = 'text';
-            if (isSticker)                    messageType = 'sticker';
-            else if (att)                     messageType = 'attachment';
+            if (isSticker)                    messageType = 'media';      // sticker = image attachment
+            else if (att)                     messageType = 'media';      // image, GIF, audio, video, file
             else if (m.story)                 messageType = 'story_reply';
-            else if (m.shares?.data?.length)  messageType = 'share';
-            else if (m.is_unsupported)        messageType = 'unsupported';
+            else if (m.shares?.data?.length)  messageType = 'post_share'; // was 'share' — DB enum is 'post_share'
+            else if (m.is_unsupported)        messageType = 'text';       // unrenderable — null body, safe fallback
 
             // media_type: coarse MIME category for frontend rendering decisions
             const mediaType = imgData ? 'image' : att?.file_url ? 'file' : null;
