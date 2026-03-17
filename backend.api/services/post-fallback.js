@@ -17,7 +17,7 @@ const {
 const {
   isAccountRateLimited,
   markAccountRateLimited,
-} = require('./proactive-sync');
+} = require('./sync/helpers');
 
 const DEFAULT_CRON = '*/5 * * * *';
 const MAX_RETRIES = 5;

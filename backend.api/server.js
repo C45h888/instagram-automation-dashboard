@@ -15,7 +15,7 @@ const {
 } = require('./config/supabase');
 
 // Proactive sync (Bus 1: backend-driven cron data sync)
-const { initScheduledJobs } = require('./services/proactive-sync');
+const { initScheduledJobs } = require('./services/sync');
 
 // Post fallback (Bus 2: outgoing IG write retry queue)
 const { initPostFallbackJob } = require('./services/post-fallback');
