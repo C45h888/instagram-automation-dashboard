@@ -75,11 +75,14 @@ async function fetchAndStoreComments(businessAccountId, mediaId, limit = 50) {
                 business_account_id: businessAccountId,
                 created_at: c.timestamp,
                 like_count: c.like_count || 0,
+                reply_count: c.replies_count || 0,
                 // processed_by_automation omitted — DB DEFAULT false on insert, preserved on update
               }));
             const { error: upsertErr } = await supabase
               .from('instagram_comments')
-              .upsert(commentRecords, { onConflict: 'instagram_comment_id', ignoreDuplicates: false });
+              // ignoreDuplicates: true — never overwrite existing rows (preserves agent enrichment:
+              // sentiment, category, processed_by_automation set by the automation pipeline)
+              .upsert(commentRecords, { onConflict: 'instagram_comment_id', ignoreDuplicates: true });
             if (upsertErr) console.warn('[messaging] Comment upsert failed:', upsertErr.message);
           }
         }

@@ -20,7 +20,7 @@ const crypto = require('crypto');                                  // promoted f
 const { getSupabaseAdmin, logAudit } = require('../../config/supabase');
 const { insertQueueRow } = require('../../helpers/agent-helpers'); // promoted from lazy require
 
-const { proactiveEngagementSync } = require('./engagement');
+const { proactiveEngagementSync, proactiveCommentSync } = require('./engagement');
 const { proactiveUgcSync }        = require('./ugc');
 const { proactiveMediaSync }      = require('./media');
 const { proactiveInsightsSync }   = require('./insights');
@@ -38,7 +38,8 @@ const {
 // ── Cron Defaults ────────────────────────────────────────────────────────────
 
 const DEFAULT_SCHEDULES = {
-  engagement:  '*/3 * * * *',
+  comments:    '0 */6 * * *',  // comment sync every 6h (aligned with media sync)
+  engagement:  '*/3 * * * *',  // DM conversations + messages every 3 min
   ugc:         '0 */3 * * *',
   media:       '0 */6 * * *',
   insights:    '0 2 * * *',
@@ -143,6 +144,7 @@ let scheduledJobs = [];
 function initScheduledJobs() {
   // Per-domain overlap guards — one object prevents one stalled job blocking another
   const running = {
+    comments:    false,
     engagement:  false,
     ugc:         false,
     media:       false,
@@ -187,10 +189,11 @@ function initScheduledJobs() {
   }
 
   const schedules = {
-    engagement: process.env.PROACTIVE_COMMENTS_CRON || DEFAULT_SCHEDULES.engagement,
-    ugc:        process.env.PROACTIVE_UGC_CRON       || DEFAULT_SCHEDULES.ugc,
-    media:      process.env.PROACTIVE_MEDIA_CRON     || DEFAULT_SCHEDULES.media,
-    insights:   process.env.PROACTIVE_INSIGHTS_CRON  || DEFAULT_SCHEDULES.insights,
+    comments:   process.env.PROACTIVE_COMMENTS_CRON  || DEFAULT_SCHEDULES.comments,
+    engagement: process.env.PROACTIVE_DM_CRON        || DEFAULT_SCHEDULES.engagement,
+    ugc:        process.env.PROACTIVE_UGC_CRON        || DEFAULT_SCHEDULES.ugc,
+    media:      process.env.PROACTIVE_MEDIA_CRON      || DEFAULT_SCHEDULES.media,
+    insights:   process.env.PROACTIVE_INSIGHTS_CRON   || DEFAULT_SCHEDULES.insights,
   };
 
   // Validate cron expressions
@@ -204,10 +207,26 @@ function initScheduledJobs() {
   }
 
   console.log('[ProactiveSync] Initializing scheduled jobs:');
-  console.log(`   Engagement (comments+conversations): ${schedules.engagement}`);
+  console.log(`   Comment sync (most recent posts): ${schedules.comments}`);
+  console.log(`   Engagement (DM conversations+messages): ${schedules.engagement}`);
   console.log(`   UGC discovery: ${schedules.ugc}`);
   console.log(`   Media posts feed: ${schedules.media}`);
   console.log(`   Media insights: ${schedules.insights}`);
+
+  const commentJob = cron.schedule(schedules.comments, async () => {
+    if (running.comments) {
+      console.log('[Sync:comments] Previous run still active, skipping');
+      return;
+    }
+    running.comments = true;
+    try {
+      await proactiveCommentSync();
+    } catch (err) {
+      console.error('[Sync:comments] Unhandled error:', err.message);
+    } finally {
+      running.comments = false;
+    }
+  }, { scheduled: true, timezone: 'UTC' });
 
   const engagementJob = cron.schedule(schedules.engagement, async () => {
     if (running.engagement) {
@@ -287,6 +306,7 @@ function initScheduledJobs() {
   }, { scheduled: true, timezone: 'UTC' });
 
   scheduledJobs = [
+    commentJob,
     engagementJob,
     ugcJob,
     mediaJob,
@@ -313,6 +333,7 @@ module.exports = {
   initScheduledJobs,
 
   // Domain sync functions (for manual testing / agent triggering)
+  proactiveCommentSync,
   proactiveEngagementSync,
   proactiveUgcSync,
   proactiveMediaSync,

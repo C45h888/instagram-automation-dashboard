@@ -363,7 +363,7 @@ async function logAudit(eventTypeOrObj, userId = null, eventData = {}, req = nul
       action: eventData_v.action || 'unknown',
       resource_type: eventData_v.resource_type,
       resource_id: eventData_v.resource_id,
-      details: eventData_v,
+      details: eventData_v.details,
       ip_address: req_v?.ip || req_v?.connection?.remoteAddress || null,
       user_agent: req_v?.headers?.['user-agent'] || 'unknown',
       success: eventData_v.success !== false,
@@ -427,6 +427,7 @@ async function logApiRequest(userIdOrObj, endpoint, method, responseTime, status
       status_code: statusCode_v,
       success: success_v,
       error_message: errorMessage_v,
+      domain: (typeof userIdOrObj === 'object' && userIdOrObj !== null) ? (userIdOrObj.domain || null) : null,
       hour_bucket: _hourBucket.toISOString(),
       request_count: 1,
       created_at: _now.toISOString()

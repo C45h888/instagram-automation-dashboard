@@ -115,18 +115,19 @@ async function getActiveAccounts() {
   return data || [];
 }
 
-async function getRecentMedia(accountId, hours = 48) {
+async function getRecentMedia(accountId) {
   const supabase = getSupabaseAdmin();
   if (!supabase) return [];
 
-  const since = new Date(Date.now() - hours * 3600000).toISOString();
-
+  // No time filter — always return the N most recent posts regardless of age.
+  // Comment sync (proactiveCommentSync) slices to COMMENT_MAX_POSTS at call site.
+  // Fetching 10 here gives the caller room to cap without a second DB query.
   const { data, error } = await supabase
     .from('instagram_media')
     .select('instagram_media_id')
     .eq('business_account_id', accountId)
-    .gte('published_at', since)
-    .order('published_at', { ascending: false });
+    .order('published_at', { ascending: false })
+    .limit(10);
 
   if (error) {
     console.warn('[Sync:helpers] Failed to fetch recent media:', error.message);

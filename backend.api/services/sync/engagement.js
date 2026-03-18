@@ -1,12 +1,18 @@
 // backend.api/services/sync/engagement.js
-// Proactive engagement sync: comments + conversations + messages.
-// Runs every 3 min (cron: */3 * * * *) via services/sync/index.js.
+// Proactive engagement sync: comments (every 6h) + conversations/messages (every 3 min).
+//
+// Two separate exported functions — each wired to its own cron in services/sync/index.js:
+//
+//   proactiveCommentSync()     → comment fetching for N most recent posts (every 6h)
+//   proactiveEngagementSync()  → DM conversations + messages (every 3 min)
 //
 // Data flow:
-//   node-cron → proactiveEngagementSync()
+//   node-cron (6h)  → proactiveCommentSync()
 //     → fetchAndStoreComments()     → instagram_comments
+//
+//   node-cron (3m)  → proactiveEngagementSync()
 //     → fetchAndStoreConversations() → instagram_dm_conversations
-//     → fetchAndStoreMessages()     → instagram_dm_messages
+//     → fetchAndStoreMessages()      → instagram_dm_messages
 
 const {
   delay,
@@ -23,40 +29,38 @@ const {
   fetchAndStoreMessages,
 } = require('../../helpers/data-fetchers/messaging-fetchers');
 
-const ENGAGEMENT_MAX_POSTS         = 5;
+const COMMENT_MAX_POSTS          = 5;
 const ENGAGEMENT_MAX_CONVERSATIONS = 5;
 const INTER_ITEM_DELAY_MS          = 1000;
 const INTER_ACCOUNT_DELAY_MS       =
   parseInt(process.env.SYNC_ENGAGEMENT_DELAY_MS || '3000', 10);
 
-/**
- * Proactive engagement sync: comments + conversations + messages.
- * For each active account:
- *   1. Fetch comments for recent media posts
- *   2. Fetch DM conversations
- *   3. Fetch messages for open-window conversations
- */
-async function proactiveEngagementSync() {
-  const runId    = Date.now();
-  const startTime = runId;
-  console.log(`[Sync:engagement] Starting run #${runId}`);
+// ── Comment Sync ──────────────────────────────────────────────────────────────
 
-  // Lifecycle start marker
-  await logSyncAudit('engagement', null, { run_id: runId, status: 'started' });
+/**
+ * Proactive comment sync — runs every 6 hours.
+ * Fetches comments for the N most recent posts regardless of age.
+ * Decoupled from DM sync so heavy Meta API calls don't block real-time DM pipeline.
+ */
+async function proactiveCommentSync() {
+  const runId     = Date.now();
+  const startTime = runId;
+  console.log(`[Sync:comments] Starting run #${runId}`);
+
+  await logSyncAudit('comments', null, { run_id: runId, status: 'started' });
 
   const accounts = await getActiveAccounts();
   if (accounts.length === 0) {
-    console.log('[Sync:engagement] No active accounts, skipping');
+    console.log('[Sync:comments] No active accounts, skipping');
     return;
   }
 
   for (const account of accounts) {
-    // Rate-limit circuit breaker
     if (isAccountRateLimited(account.id)) {
-      console.log(`[Sync:engagement] Account ${account.id} rate-limited, skipping`);
-      await logSyncAudit('engagement', account.id, {
-        run_id:       runId,
-        duration_ms:  Date.now() - startTime,
+      console.log(`[Sync:comments] Account ${account.id} rate-limited, skipping`);
+      await logSyncAudit('comments', account.id, {
+        run_id:        runId,
+        duration_ms:   Date.now() - startTime,
         items_fetched: 0,
         errors_count:  0,
         skipped:       true,
@@ -68,11 +72,10 @@ async function proactiveEngagementSync() {
     }
 
     try {
-      // ── Comments for recent posts ────────────────────────────────────────
-      const recentMedia = await getRecentMedia(account.id, 48);
-      let totalComments   = 0;
+      const recentMedia = await getRecentMedia(account.id);
+      let totalComments    = 0;
       let commentAuthFailed = false;
-      const postsToCheck  = recentMedia.slice(0, ENGAGEMENT_MAX_POSTS);
+      const postsToCheck   = recentMedia.slice(0, COMMENT_MAX_POSTS);
 
       for (const media of postsToCheck) {
         const result = await fetchAndStoreComments(account.id, media.instagram_media_id, 50);
@@ -96,8 +99,62 @@ async function proactiveEngagementSync() {
         total_comments: totalComments,
       });
 
-      if (commentAuthFailed) continue; // auth failure — skip rest of this account
+      await delay(INTER_ACCOUNT_DELAY_MS);
 
+    } catch (accountError) {
+      console.error(`[Sync:comments] Account ${account.id} failed:`, accountError.message);
+      await logSyncAudit('comments', account.id, {
+        run_id:          runId,
+        duration_ms:     Date.now() - startTime,
+        items_fetched:   0,
+        errors_count:    1,
+        success:         false,
+        status:          'error',
+        error_message:   accountError.message,
+        skipped_accounts: 1,
+      });
+    }
+  }
+
+  console.log(`[Sync:comments] Run #${runId} complete`);
+}
+
+// ── DM Sync (Conversations + Messages) ───────────────────────────────────────
+
+/**
+ * Proactive DM engagement sync — runs every 3 minutes.
+ * Handles conversations and messages only. Comment fetching moved to proactiveCommentSync.
+ */
+async function proactiveEngagementSync() {
+  const runId     = Date.now();
+  const startTime = runId;
+  console.log(`[Sync:engagement] Starting run #${runId}`);
+
+  await logSyncAudit('engagement', null, { run_id: runId, status: 'started' });
+
+  const accounts = await getActiveAccounts();
+  if (accounts.length === 0) {
+    console.log('[Sync:engagement] No active accounts, skipping');
+    return;
+  }
+
+  for (const account of accounts) {
+    if (isAccountRateLimited(account.id)) {
+      console.log(`[Sync:engagement] Account ${account.id} rate-limited, skipping`);
+      await logSyncAudit('engagement', account.id, {
+        run_id:        runId,
+        duration_ms:   Date.now() - startTime,
+        items_fetched: 0,
+        errors_count:  0,
+        skipped:       true,
+        success:       false,
+        status:        'skipped',
+        error_message: 'rate_limited',
+      });
+      continue;
+    }
+
+    try {
       // ── Conversations ────────────────────────────────────────────────────
       const convResult = await fetchAndStoreConversations(account.id, 20);
       const { skip: convSkip, break: convBrk } = handleFetchError(convResult, account.id);
@@ -148,13 +205,13 @@ async function proactiveEngagementSync() {
     } catch (accountError) {
       console.error(`[Sync:engagement] Account ${account.id} failed:`, accountError.message);
       await logSyncAudit('engagement', account.id, {
-        run_id:          runId,
-        duration_ms:     Date.now() - startTime,
-        items_fetched:   0,
-        errors_count:    1,
-        success:         false,
-        status:          'error',
-        error_message:   accountError.message,
+        run_id:           runId,
+        duration_ms:      Date.now() - startTime,
+        items_fetched:    0,
+        errors_count:     1,
+        success:          false,
+        status:           'error',
+        error_message:    accountError.message,
         skipped_accounts: 1,
       });
     }
@@ -163,4 +220,4 @@ async function proactiveEngagementSync() {
   console.log(`[Sync:engagement] Run #${runId} complete`);
 }
 
-module.exports = { proactiveEngagementSync };
+module.exports = { proactiveCommentSync, proactiveEngagementSync };
