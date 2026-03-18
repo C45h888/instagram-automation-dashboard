@@ -13,7 +13,7 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
-const { logApiRequest, getSupabaseAdmin } = require('../../config/supabase');
+const { logApiRequest, logAudit, shouldLog, getSupabaseAdmin } = require('../../config/supabase');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -193,10 +193,20 @@ router.post('/oversight/chat', async (req, res) => {
     details: { stream: 'started' }
   });
 
+  logAudit({
+    event_type: 'oversight_chat_stream_opened',
+    action: 'chat',
+    resource_type: 'oversight',
+    details: { business_account_id, question_length: question.length },
+    success: true,
+  }).catch(() => {});
+
   // Keep-alive ping every 15s (SSE comment lines are ignored by EventSource)
   pingInterval = setInterval(() => {
     if (!res.writableEnded) res.write(': ping\n\n');
   }, 15000);
+
+  let lastChunkLoggedAt = 0;
 
   // Client disconnect handler
   req.on('close', () => cleanup('client disconnected'));
@@ -213,6 +223,12 @@ router.post('/oversight/chat', async (req, res) => {
     // Pipe agent SSE chunks to client, normalizing error shapes in transit
     agentStream.on('data', (chunk) => {
       if (!res.writableEnded) res.write(normalizeAgentSseChunk(chunk.toString()));
+      const now = Date.now();
+      if (shouldLog('debug') && now - lastChunkLoggedAt > 5000) {
+        lastChunkLoggedAt = now;
+        logApiRequest({ endpoint: '/oversight/chat/chunk', method: 'SSE', success: true,
+          business_account_id, domain: 'oversight' }).catch(() => {});
+      }
     });
 
     agentStream.on('end', async () => {
@@ -228,6 +244,15 @@ router.post('/oversight/chat', async (req, res) => {
         latency,
         details: { stream: true }
       });
+
+      if (supabase) {
+        supabase.from('oversight_chat_sessions').upsert({
+          business_account_id,
+          last_question: question,
+          last_latency_ms: latency,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'business_account_id' }).catch(() => {});
+      }
 
       cleanup('stream ended');
     });

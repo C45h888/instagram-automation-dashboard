@@ -243,6 +243,15 @@ async function dispatchAction(supabase, row) {
       .update({ status: 'sent', instagram_id })
       .eq('id', id);
 
+    logAudit({
+      event_type: 'post_queue_sent',
+      action: 'post_queue_dispatch',
+      resource_type: 'post_queue',
+      resource_id: id,
+      details: { action_type, instagram_id, retry_count, business_account_id },
+      success: true,
+    }).catch(() => {});
+
     console.log(`[PostFallback] ✅ ${action_type} row ${id} sent (instagram_id: ${instagram_id})`);
 
   } catch (error) {
@@ -297,6 +306,15 @@ async function dispatchAction(supabase, row) {
         })
         .eq('id', id);
 
+      logAudit({
+        event_type: 'post_queue_retry_scheduled',
+        action: 'post_queue_dispatch',
+        resource_type: 'post_queue',
+        resource_id: id,
+        details: { action_type, retry_count: newRetryCount, next_retry_at: nextRetryAt, error_category, business_account_id },
+        success: false,
+      }).catch(() => {});
+
       console.warn(
         `[PostFallback] ⚠️ ${action_type} row ${id} failed (${newRetryCount}/${MAX_RETRIES}), ` +
         `retry at ${nextRetryAt}: ${errorMessage}`
@@ -346,6 +364,14 @@ async function runPostFallback() {
       console.log(
         `[PostFallback] Account ${row.business_account_id} rate-limited, skipping row ${row.id}`
       );
+      logAudit({
+        event_type: 'post_queue_rate_limited_skip',
+        action: 'post_queue_dispatch',
+        resource_type: 'post_queue',
+        resource_id: row.id,
+        details: { action_type: row.action_type, business_account_id: row.business_account_id },
+        success: false,
+      }).catch(() => {});
       continue;
     }
     await dispatchAction(supabase, row);

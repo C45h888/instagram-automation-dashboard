@@ -104,6 +104,7 @@ async function fetchAndStoreAccountInsights(businessAccountId, options = {}) {
   } catch (error) {
     const latency = Date.now() - startTime;
     const errorMessage = error.response?.data?.error?.message || error.message;
+    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
 
     await logWithDomain('account', {
       endpoint: '/account-insights',
@@ -111,24 +112,11 @@ async function fetchAndStoreAccountInsights(businessAccountId, options = {}) {
       business_account_id: businessAccountId,
       success: false,
       error: errorMessage,
-      latency
+      latency,
+      status_code: error.response?.status || null,
+      details: { action: 'proxy_failure', error_category, retryable, retry_after_seconds: retry_after_seconds || null, latency_ms: latency },
     });
 
-    // Write insights failure to audit_log for observability — domain embedded in details JSONB
-    const supabase = getSupabaseAdmin();
-    await supabase.from('audit_log').insert({
-      event_type: 'api_error',
-      action: 'fetch_account_insights_failed',
-      success: false,
-      error_message: errorMessage,
-      details: {
-        domain: 'account',
-        code: error.response?.data?.error?.code,
-        business_account_id: businessAccountId
-      }
-    }).catch(() => {});
-
-    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
     return {
       success: false, data: {}, error: errorMessage,
       code: error.response?.data?.error?.code,

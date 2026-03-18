@@ -33,6 +33,7 @@ const {
   getRecentMedia,
   getMonitoredHashtags,
   logSyncAudit,
+  checkStaleDomains,
 } = require('./helpers');
 
 // ── Cron Defaults ────────────────────────────────────────────────────────────
@@ -298,6 +299,9 @@ function initScheduledJobs() {
       const supabase = getSupabaseAdmin();
       if (!supabase) return;
       await proactiveHeartbeatFailover(supabase, HEARTBEAT_STALE_MINUTES);
+      await checkStaleDomains().catch((err) => {
+        console.warn('[Failover] checkStaleDomains error:', err.message);
+      });
     } catch (err) {
       console.error('[Failover] Heartbeat cron error:', err.message);
     } finally {

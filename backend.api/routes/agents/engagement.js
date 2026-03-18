@@ -10,6 +10,7 @@ const {
   resolveAccountCredentials,
   ensureMediaRecord,
   categorizeIgError,
+  logDataBusEvent,
   GRAPH_API_BASE,
   buildIdempotencyKey,
   insertQueueRow,
@@ -576,6 +577,15 @@ router.post('/send-dm', async (req, res) => {
         next_retry_at: nextRetryAt
       });
     }
+
+    logDataBusEvent('messaging', 'post_to_dm_failed', {
+      payload_keys: Object.keys(req.body),
+      media_url_present: !!req.body?.image_url,
+      recipient_present: !!req.body?.recipient_id,
+      error: errorMessage,
+      success: false,
+      account_id: business_account_id,
+    }).catch(() => {});
 
     await logApiRequest({
       endpoint: '/send-dm',

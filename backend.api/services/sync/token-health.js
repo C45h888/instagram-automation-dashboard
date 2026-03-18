@@ -14,7 +14,7 @@
 //
 // NO import from ./helpers — this file is intentionally isolated.
 
-const { getSupabaseAdmin } = require('../../config/supabase');
+const { getSupabaseAdmin, logAudit } = require('../../config/supabase');
 const {
   retrievePageToken,
   detectTokenType,
@@ -40,6 +40,7 @@ function delay(ms) {
  */
 async function runTokenHealthCheck() {
   console.log('[TokenHealthCheck] Starting daily token validation...');
+  const startTime = Date.now();
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     console.warn('[TokenHealthCheck] Supabase not available, skipping');
@@ -49,7 +50,7 @@ async function runTokenHealthCheck() {
   try {
     const { data: credentials, error } = await supabase
       .from('instagram_credentials')
-      .select('id, user_id, business_account_id, debug_token_checked_at')
+      .select('id, user_id, business_account_id, debug_token_checked_at, issued_at')
       .eq('token_type', 'page')
       .eq('is_active', true);
 
@@ -60,6 +61,12 @@ async function runTokenHealthCheck() {
     }
 
     console.log(`[TokenHealthCheck] Checking ${credentials.length} active token(s)...`);
+    logAudit({
+      event_type: 'token_health_run_started',
+      action: 'token_health_check',
+      details: { credentials_count: credentials.length, node_env: process.env.NODE_ENV },
+    }).catch(() => {});
+
     let valid = 0, invalid = 0, skipped = 0;
 
     for (const cred of credentials) {
@@ -119,6 +126,13 @@ async function runTokenHealthCheck() {
             }
           } catch (recoveryErr) {
             console.warn(`[TokenHealthCheck] UAT recovery failed for cred ${cred.id}:`, recoveryErr.message);
+            await supabase.from('token_lifecycle_events').insert({
+              credential_id:       cred.id,
+              business_account_id: cred.business_account_id,
+              event_type:          'pat_invalid',
+              token_age_days:      cred.issued_at ? Math.floor((Date.now() - new Date(cred.issued_at).getTime()) / 86400000) : null,
+              details:             { source: 'daily_health_check', error: recoveryErr.message },
+            }).catch(() => {});
           }
 
           if (!recovered) {
@@ -136,9 +150,24 @@ async function runTokenHealthCheck() {
               resolved:            false,
             });
 
+            await supabase.from('token_lifecycle_events').insert({
+              credential_id:       cred.id,
+              business_account_id: cred.business_account_id,
+              event_type:          'pat_recovery_failed',
+              token_age_days:      cred.issued_at ? Math.floor((Date.now() - new Date(cred.issued_at).getTime()) / 86400000) : null,
+              details:             { source: 'daily_health_check', error: 'uat_unavailable_or_exchange_failed' },
+            }).catch(() => {});
+
             console.warn(`[TokenHealthCheck] Token invalid for cred ${cred.id} (user ${cred.user_id}), marked inactive`);
             invalid++;
           } else {
+            await supabase.from('token_lifecycle_events').insert({
+              credential_id:       cred.id,
+              business_account_id: cred.business_account_id,
+              event_type:          'pat_auto_recovered',
+              token_age_days:      cred.issued_at ? Math.floor((Date.now() - new Date(cred.issued_at).getTime()) / 86400000) : null,
+              details:             { source: 'daily_health_check' },
+            }).catch(() => {});
             valid++;
           }
         } else {
@@ -147,6 +176,14 @@ async function runTokenHealthCheck() {
             .from('instagram_credentials')
             .update({ debug_token_checked_at: new Date().toISOString() })
             .eq('id', cred.id);
+
+          await supabase.from('token_lifecycle_events').insert({
+            credential_id:       cred.id,
+            business_account_id: cred.business_account_id,
+            event_type:          'pat_validated',
+            token_age_days:      cred.issued_at ? Math.floor((Date.now() - new Date(cred.issued_at).getTime()) / 86400000) : null,
+            details:             { source: 'daily_health_check' },
+          }).catch(() => {});
           valid++;
         }
       } catch (apiErr) {
@@ -159,8 +196,20 @@ async function runTokenHealthCheck() {
     }
 
     console.log(`[TokenHealthCheck] Complete — valid: ${valid}, invalid: ${invalid}, skipped: ${skipped}`);
+    logAudit({
+      event_type: 'token_health_run_completed',
+      action: 'token_health_check',
+      details: { valid, invalid, skipped, duration_ms: Date.now() - startTime },
+      success: invalid === 0,
+    }).catch(() => {});
   } catch (err) {
     console.error('[TokenHealthCheck] Fatal error:', err.message);
+    logAudit({
+      event_type: 'token_health_run_error',
+      action: 'token_health_check',
+      details: { error: err.message, duration_ms: Date.now() - startTime },
+      success: false,
+    }).catch(() => {});
   }
 }
 
@@ -222,6 +271,13 @@ async function runUATRefreshCheck() {
         },
         resolved: true,
       });
+
+      await supabase.from('token_lifecycle_events').insert({
+        credential_id:       uat.id,
+        business_account_id: uat.business_account_id,
+        event_type:          'uat_refreshed',
+        details:             { source: 'uat_refresh_check', old_expires_at: uat.expires_at, new_expires_at: result.expiresAt, days_remaining: daysLeft },
+      }).catch(() => {});
     } catch (refreshErr) {
       console.error(`[UATRefresh] UAT refresh failed: ${refreshErr.message}`);
 
@@ -236,6 +292,13 @@ async function runUATRefreshCheck() {
         },
         resolved: false,
       });
+
+      await supabase.from('token_lifecycle_events').insert({
+        credential_id:       uat.id,
+        business_account_id: uat.business_account_id,
+        event_type:          'uat_refresh_failed',
+        details:             { source: 'uat_refresh_check', error: refreshErr.message, expires_at: uat.expires_at, days_remaining: daysLeft },
+      }).catch(() => {});
     }
 
     await delay(1000); // Rate-limit between refresh attempts
@@ -279,6 +342,14 @@ async function runUATRefreshCheck() {
         },
         resolved: false,
       });
+
+      await supabase.from('token_lifecycle_events').insert({
+        credential_id:       uat.id,
+        business_account_id: uat.business_account_id,
+        event_type:          'data_access_expiry_warning',
+        details:             { source: 'uat_refresh_check', data_access_expires_at: uat.data_access_expires_at, days_remaining: daysLeft },
+      }).catch(() => {});
+
       console.log(`[UATRefresh] data_access_expiry_warning created for account ${uat.business_account_id} (${daysLeft} days left)`);
     }
   }

@@ -9,6 +9,8 @@
 
 const {
   delay,
+  generateRunId,
+  writeSyncRunLog,
   isAccountRateLimited,
   handleFetchError,
   getActiveAccounts,
@@ -33,23 +35,39 @@ const INTER_ACCOUNT_DELAY_MS =
  *   2. Fetch media for each monitored hashtag
  */
 async function proactiveUgcSync() {
-  const runId    = Date.now();
-  const startTime = runId;
-  console.log(`[Sync:ugc] Starting run #${runId}`);
-
-  // Lifecycle start marker
-  await logSyncAudit('ugc', null, { run_id: runId, status: 'started' });
+  const runId    = generateRunId();
+  const startTime = Date.now();
+  const startMem = process.memoryUsage().heapUsed;
+  const startCpu = process.cpuUsage();
+  console.log(`[Sync:ugc] Starting run ${runId}`);
 
   const accounts = await getActiveAccounts();
+
+  await writeSyncRunLog({
+    domain: 'ugc', run_id: runId, status: 'run_started',
+    total_accounts: accounts.length,
+    cron_expr: process.env.PROACTIVE_UGC_CRON || '0 */3 * * *',
+    node_env: process.env.NODE_ENV,
+    started_at: new Date().toISOString(),
+  });
+
   if (accounts.length === 0) {
     console.log('[Sync:ugc] No active accounts, skipping');
     return;
   }
 
+  let successCount = 0;
+  let errorCount   = 0;
+  let skippedCount = 0;
+  let itemsFetched = 0;
+  let lastErrorMessage    = null;
+  let lastErrorAccountId  = null;
+
   for (const account of accounts) {
     // Rate-limit circuit breaker
     if (isAccountRateLimited(account.id)) {
       console.log(`[Sync:ugc] Account ${account.id} rate-limited, skipping`);
+      skippedCount++;
       await logSyncAudit('ugc', account.id, {
         run_id:       runId,
         duration_ms:  Date.now() - startTime,
@@ -79,10 +97,14 @@ async function proactiveUgcSync() {
       });
 
       if (tagSkip || tagBrk) {
+        errorCount++;
+        lastErrorMessage   = tagResult.error || 'tag_fetch_failed';
+        lastErrorAccountId = account.id;
         await delay(INTER_ACCOUNT_DELAY_MS);
         continue;
       }
 
+      itemsFetched += tagResult.count || 0;
       await delay(INTER_ITEM_DELAY_MS);
 
       // ── Hashtag media ────────────────────────────────────────────────────
@@ -102,6 +124,9 @@ async function proactiveUgcSync() {
         await delay(INTER_ITEM_DELAY_MS);
       }
 
+      itemsFetched += totalHashtagMedia;
+      if (hashAuthFailed) { errorCount++; } else { successCount++; }
+
       await logSyncAudit('ugc_hashtags', account.id, {
         run_id:           runId,
         duration_ms:      Date.now() - startTime,
@@ -117,6 +142,9 @@ async function proactiveUgcSync() {
 
     } catch (accountError) {
       console.error(`[Sync:ugc] Account ${account.id} failed:`, accountError.message);
+      errorCount++;
+      lastErrorMessage   = accountError.message;
+      lastErrorAccountId = account.id;
       await logSyncAudit('ugc', account.id, {
         run_id:          runId,
         duration_ms:     Date.now() - startTime,
@@ -130,7 +158,20 @@ async function proactiveUgcSync() {
     }
   }
 
-  console.log(`[Sync:ugc] Run #${runId} complete`);
+  await writeSyncRunLog({
+    domain: 'ugc', run_id: runId, status: 'run_completed',
+    total_accounts: accounts.length,
+    success_count: successCount, error_count: errorCount, skipped_count: skippedCount,
+    items_fetched: itemsFetched,
+    duration_ms: Date.now() - startTime,
+    memory_delta_kb: Math.round((process.memoryUsage().heapUsed - startMem) / 1024),
+    cpu_delta_ms: Math.round(process.cpuUsage(startCpu).user / 1000),
+    error_message: lastErrorMessage,
+    last_error_account: lastErrorAccountId,
+    completed_at: new Date().toISOString(),
+  });
+
+  console.log(`[Sync:ugc] Run ${runId} complete — ok:${successCount} err:${errorCount} skip:${skippedCount}`);
 }
 
 module.exports = { proactiveUgcSync };

@@ -133,13 +133,22 @@ async function fetchAndStoreMediaInsights(businessAccountId, since, until) {
           const { error: mediaErr } = await supabase
             .from('instagram_media')
             .upsert(mediaRecords, { onConflict: 'instagram_media_id', ignoreDuplicates: false });
-          if (mediaErr) console.warn('[media] instagram_media insights upsert failed:', mediaErr.message);
+          if (mediaErr) {
+            await logWithDomain('media', {
+              endpoint: '/media-insights/upsert', method: 'SYSTEM', success: false,
+              business_account_id: businessAccountId,
+              error: mediaErr.message,
+              details: { action: 'db_upsert_failed', table: 'instagram_media', count_attempted: mediaRecords.length },
+            });
+            throw mediaErr;
+          }
 
           const captions = mediaList.map(m => m.caption).filter(Boolean);
           await syncHashtagsFromCaptions(supabase, businessAccountId, captions);
         }
       } catch (wtErr) {
         console.warn('[media] Media insights write-through error:', wtErr.message);
+        throw wtErr;
       }
     }
 
@@ -148,6 +157,7 @@ async function fetchAndStoreMediaInsights(businessAccountId, since, until) {
   } catch (error) {
     const latency = Date.now() - startTime;
     const errorMessage = error.response?.data?.error?.message || error.message;
+    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
 
     await logWithDomain('media', {
       endpoint: '/media-insights',
@@ -155,10 +165,11 @@ async function fetchAndStoreMediaInsights(businessAccountId, since, until) {
       business_account_id: businessAccountId,
       success: false,
       error: errorMessage,
-      latency
+      latency,
+      status_code: error.response?.status || null,
+      details: { action: 'proxy_failure', error_category, retryable, retry_after_seconds: retry_after_seconds || null, latency_ms: latency },
     });
 
-    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
     return {
       success: false, mediaInsights: [], count: 0, error: errorMessage,
       code: error.response?.data?.error?.code,
@@ -226,7 +237,15 @@ async function fetchAndStoreBusinessPosts(businessAccountId, limit = 50) {
           const { error: upsertErr } = await supabase
             .from('instagram_media')
             .upsert(mediaRecords, { onConflict: 'instagram_media_id', ignoreDuplicates: false });
-          if (upsertErr) console.warn('[media] Business posts upsert failed:', upsertErr.message);
+          if (upsertErr) {
+            await logWithDomain('media', {
+              endpoint: '/sync/posts/upsert', method: 'SYSTEM', success: false,
+              business_account_id: businessAccountId,
+              error: upsertErr.message,
+              details: { action: 'db_upsert_failed', table: 'instagram_media', count_attempted: mediaRecords.length },
+            });
+            throw upsertErr;
+          }
 
           // Auto-populate monitored hashtags from captions
           const captions = posts.map(p => p.caption).filter(Boolean);
@@ -234,6 +253,7 @@ async function fetchAndStoreBusinessPosts(businessAccountId, limit = 50) {
         }
       } catch (wtErr) {
         console.warn('[media] Business posts write-through error:', wtErr.message);
+        throw wtErr;
       }
     }
 
@@ -242,6 +262,7 @@ async function fetchAndStoreBusinessPosts(businessAccountId, limit = 50) {
   } catch (error) {
     const latency = Date.now() - startTime;
     const errorMessage = error.response?.data?.error?.message || error.message;
+    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
 
     await logWithDomain('media', {
       endpoint: '/sync/posts',
@@ -249,10 +270,11 @@ async function fetchAndStoreBusinessPosts(businessAccountId, limit = 50) {
       business_account_id: businessAccountId,
       success: false,
       error: errorMessage,
-      latency
+      latency,
+      status_code: error.response?.status || null,
+      details: { action: 'proxy_failure', error_category, retryable, retry_after_seconds: retry_after_seconds || null, latency_ms: latency },
     });
 
-    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
     return {
       success: false, count: 0, error: errorMessage,
       code: error.response?.data?.error?.code,

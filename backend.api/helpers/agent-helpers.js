@@ -2,9 +2,9 @@
 // Shared helper functions used across agent proxy route modules.
 // Extracted from routes/agent-proxy.js to keep route files lean.
 
-const { getSupabaseAdmin } = require('../config/supabase');
+const { getSupabaseAdmin, logApiRequest, logAudit, shouldLog } = require('../config/supabase');
 const { retrievePageToken } = require('../services/tokens/pat');
-const { clearCredentialCache, getFromCache, setInCache } = require('./credential-cache');
+const { clearCredentialCache: _clearCredentialCacheRaw, getFromCache, setInCache } = require('./credential-cache');
 
 const GRAPH_API_BASE = 'https://graph.facebook.com/v23.0';
 
@@ -68,12 +68,57 @@ function categorizeIgError(error) {
 }
 
 // ============================================
+// UNIFIED DATA BUS EVENT LOGGER
+// ============================================
+
+/**
+ * Single entry point for structured data bus events across all sync domains and fetchers.
+ * Routes through logApiRequest → api_usage table with domain tag.
+ * Prevents future console.warn drift — all bus events go through here.
+ *
+ * @param {string} domain  - e.g. 'messaging', 'ugc', 'media', 'sync', 'account'
+ * @param {string} eventType - e.g. 'proxy_failure', 'paging_truncation', 'orphan_repair'
+ * @param {object} details - any additional context (account_id, error, latency_ms, etc.)
+ */
+async function logDataBusEvent(domain, eventType, details = {}) {
+  return logApiRequest({
+    endpoint: `/${domain}/${eventType}`,
+    method: 'SYSTEM',
+    success: details.success !== false,
+    error_message: details.error || null,
+    business_account_id: details.account_id || null,
+    domain,
+    latency: details.latency_ms || 0,
+    status_code: details.status_code || (details.success !== false ? 200 : 500),
+    ...details,
+  }).catch(() => {});
+}
+
+// ============================================
 // CREDENTIAL CACHE
 // ============================================
 // Prevents redundant DB round trips (2-3 hits per call) across tight-loop callers
 // like proactive-sync, which calls resolveAccountCredentials per-account per-fetcher.
 // TTL is intentionally short (5 min) relative to 60-day token lifetime.
 // Busted explicitly on token write events (exchange-token, refresh-token routes).
+
+/**
+ * Clears the credential cache for an account.
+ * Wraps the raw cache clear with optional debug audit logging.
+ * @param {string} businessAccountId
+ * @param {string} [reason] - why the cache is being cleared (for debug logging)
+ */
+function clearCredentialCache(businessAccountId, reason = 'explicit') {
+  _clearCredentialCacheRaw(businessAccountId);
+  if (shouldLog('debug')) {
+    logAudit({
+      event_type: 'credential_cache_cleared_debug',
+      action: 'cache_clear',
+      resource_type: 'credential',
+      details: { account_id: businessAccountId, reason },
+    }).catch(() => {});
+  }
+}
 
 
 // ============================================
@@ -300,6 +345,7 @@ module.exports = {
   resolveAccountCredentials,
   clearCredentialCache,
   categorizeIgError,
+  logDataBusEvent,
   GRAPH_API_BASE,
   buildIdempotencyKey,
   insertQueueRow,

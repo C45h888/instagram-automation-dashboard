@@ -89,11 +89,28 @@ async function fetchAndStoreHashtagMedia(businessAccountId, hashtag, limit = 25)
           const { error: upsertErr } = await supabase
             .from('ugc_content')
             .upsert(ugcRecords, { onConflict: 'business_account_id,visitor_post_id', ignoreDuplicates: false });
-          if (upsertErr) console.warn('[ugc] Hashtag upsert failed:', upsertErr.message);
+          if (upsertErr) {
+            await logWithDomain('ugc', {
+              endpoint: '/search-hashtag/upsert', method: 'SYSTEM', success: false,
+              business_account_id: businessAccountId,
+              error: upsertErr.message,
+              details: { action: 'db_upsert_failed', table: 'ugc_content', count_attempted: ugcRecords.length },
+            });
+            throw upsertErr;
+          }
         }
       } catch (wtErr) {
         console.warn('[ugc] Hashtag write-through error:', wtErr.message);
+        throw wtErr;
       }
+    }
+
+    if (media.length >= searchLimit) {
+      logWithDomain('ugc', {
+        endpoint: '/search-hashtag/paging', method: 'SYSTEM', success: true,
+        business_account_id: businessAccountId,
+        details: { action: 'paging_next_detected', items_this_page: media.length, next_cursor_present: true },
+      }).catch(() => {});
     }
 
     return { success: true, media, count: media.length, hashtagId };
@@ -101,6 +118,7 @@ async function fetchAndStoreHashtagMedia(businessAccountId, hashtag, limit = 25)
   } catch (error) {
     const latency = Date.now() - startTime;
     const errorMessage = error.response?.data?.error?.message || error.message;
+    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
 
     await logWithDomain('ugc', {
       endpoint: '/search-hashtag',
@@ -108,10 +126,11 @@ async function fetchAndStoreHashtagMedia(businessAccountId, hashtag, limit = 25)
       business_account_id: businessAccountId,
       success: false,
       error: errorMessage,
-      latency
+      latency,
+      status_code: error.response?.status || null,
+      details: { action: 'proxy_failure', error_category, retryable, retry_after_seconds: retry_after_seconds || null, latency_ms: latency },
     });
 
-    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
     return {
       success: false, media: [], count: 0, error: errorMessage,
       code: error.response?.data?.error?.code,
@@ -171,10 +190,19 @@ async function fetchAndStoreTaggedMedia(businessAccountId, limit = 25) {
           const { error: upsertErr } = await supabase
             .from('ugc_content')
             .upsert(ugcRecords, { onConflict: 'business_account_id,visitor_post_id', ignoreDuplicates: false });
-          if (upsertErr) console.warn('[ugc] Tagged media upsert failed:', upsertErr.message);
+          if (upsertErr) {
+            await logWithDomain('ugc', {
+              endpoint: '/tags/upsert', method: 'SYSTEM', success: false,
+              business_account_id: businessAccountId,
+              error: upsertErr.message,
+              details: { action: 'db_upsert_failed', table: 'ugc_content', count_attempted: ugcRecords.length },
+            });
+            throw upsertErr;
+          }
         }
       } catch (wtErr) {
         console.warn('[ugc] Tagged media write-through error:', wtErr.message);
+        throw wtErr;
       }
     }
 
@@ -183,6 +211,7 @@ async function fetchAndStoreTaggedMedia(businessAccountId, limit = 25) {
   } catch (error) {
     const latency = Date.now() - startTime;
     const errorMessage = error.response?.data?.error?.message || error.message;
+    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
 
     await logWithDomain('ugc', {
       endpoint: '/tags',
@@ -190,10 +219,11 @@ async function fetchAndStoreTaggedMedia(businessAccountId, limit = 25) {
       business_account_id: businessAccountId,
       success: false,
       error: errorMessage,
-      latency
+      latency,
+      status_code: error.response?.status || null,
+      details: { action: 'proxy_failure', error_category, retryable, retry_after_seconds: retry_after_seconds || null, latency_ms: latency },
     });
 
-    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
     return {
       success: false, taggedPosts: [], count: 0, error: errorMessage,
       code: error.response?.data?.error?.code,

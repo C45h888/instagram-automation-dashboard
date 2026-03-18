@@ -16,6 +16,8 @@
 
 const {
   delay,
+  generateRunId,
+  writeSyncRunLog,
   isAccountRateLimited,
   handleFetchError,
   getActiveAccounts,
@@ -43,21 +45,38 @@ const INTER_ACCOUNT_DELAY_MS       =
  * Decoupled from DM sync so heavy Meta API calls don't block real-time DM pipeline.
  */
 async function proactiveCommentSync() {
-  const runId     = Date.now();
-  const startTime = runId;
-  console.log(`[Sync:comments] Starting run #${runId}`);
-
-  await logSyncAudit('comments', null, { run_id: runId, status: 'started' });
+  const runId    = generateRunId();
+  const startTime = Date.now();
+  const startMem = process.memoryUsage().heapUsed;
+  const startCpu = process.cpuUsage();
+  console.log(`[Sync:comments] Starting run ${runId}`);
 
   const accounts = await getActiveAccounts();
+
+  await writeSyncRunLog({
+    domain: 'comments', run_id: runId, status: 'run_started',
+    total_accounts: accounts.length,
+    cron_expr: process.env.PROACTIVE_COMMENTS_CRON || '0 */6 * * *',
+    node_env: process.env.NODE_ENV,
+    started_at: new Date().toISOString(),
+  });
+
   if (accounts.length === 0) {
     console.log('[Sync:comments] No active accounts, skipping');
     return;
   }
 
+  let successCount = 0;
+  let errorCount   = 0;
+  let skippedCount = 0;
+  let itemsFetched = 0;
+  let lastErrorMessage    = null;
+  let lastErrorAccountId  = null;
+
   for (const account of accounts) {
     if (isAccountRateLimited(account.id)) {
       console.log(`[Sync:comments] Account ${account.id} rate-limited, skipping`);
+      skippedCount++;
       await logSyncAudit('comments', account.id, {
         run_id:        runId,
         duration_ms:   Date.now() - startTime,
@@ -88,6 +107,9 @@ async function proactiveCommentSync() {
         await delay(INTER_ITEM_DELAY_MS);
       }
 
+      itemsFetched += totalComments;
+      if (commentAuthFailed) { errorCount++; } else { successCount++; }
+
       await logSyncAudit('comments', account.id, {
         run_id:         runId,
         duration_ms:    Date.now() - startTime,
@@ -103,6 +125,9 @@ async function proactiveCommentSync() {
 
     } catch (accountError) {
       console.error(`[Sync:comments] Account ${account.id} failed:`, accountError.message);
+      errorCount++;
+      lastErrorMessage   = accountError.message;
+      lastErrorAccountId = account.id;
       await logSyncAudit('comments', account.id, {
         run_id:          runId,
         duration_ms:     Date.now() - startTime,
@@ -116,7 +141,20 @@ async function proactiveCommentSync() {
     }
   }
 
-  console.log(`[Sync:comments] Run #${runId} complete`);
+  await writeSyncRunLog({
+    domain: 'comments', run_id: runId, status: 'run_completed',
+    total_accounts: accounts.length,
+    success_count: successCount, error_count: errorCount, skipped_count: skippedCount,
+    items_fetched: itemsFetched,
+    duration_ms: Date.now() - startTime,
+    memory_delta_kb: Math.round((process.memoryUsage().heapUsed - startMem) / 1024),
+    cpu_delta_ms: Math.round(process.cpuUsage(startCpu).user / 1000),
+    error_message: lastErrorMessage,
+    last_error_account: lastErrorAccountId,
+    completed_at: new Date().toISOString(),
+  });
+
+  console.log(`[Sync:comments] Run ${runId} complete — ok:${successCount} err:${errorCount} skip:${skippedCount}`);
 }
 
 // ── DM Sync (Conversations + Messages) ───────────────────────────────────────
@@ -126,21 +164,38 @@ async function proactiveCommentSync() {
  * Handles conversations and messages only. Comment fetching moved to proactiveCommentSync.
  */
 async function proactiveEngagementSync() {
-  const runId     = Date.now();
-  const startTime = runId;
-  console.log(`[Sync:engagement] Starting run #${runId}`);
-
-  await logSyncAudit('engagement', null, { run_id: runId, status: 'started' });
+  const runId    = generateRunId();
+  const startTime = Date.now();
+  const startMem = process.memoryUsage().heapUsed;
+  const startCpu = process.cpuUsage();
+  console.log(`[Sync:engagement] Starting run ${runId}`);
 
   const accounts = await getActiveAccounts();
+
+  await writeSyncRunLog({
+    domain: 'engagement', run_id: runId, status: 'run_started',
+    total_accounts: accounts.length,
+    cron_expr: process.env.PROACTIVE_DM_CRON || '*/3 * * * *',
+    node_env: process.env.NODE_ENV,
+    started_at: new Date().toISOString(),
+  });
+
   if (accounts.length === 0) {
     console.log('[Sync:engagement] No active accounts, skipping');
     return;
   }
 
+  let successCount = 0;
+  let errorCount   = 0;
+  let skippedCount = 0;
+  let itemsFetched = 0;
+  let lastErrorMessage    = null;
+  let lastErrorAccountId  = null;
+
   for (const account of accounts) {
     if (isAccountRateLimited(account.id)) {
       console.log(`[Sync:engagement] Account ${account.id} rate-limited, skipping`);
+      skippedCount++;
       await logSyncAudit('engagement', account.id, {
         run_id:        runId,
         duration_ms:   Date.now() - startTime,
@@ -170,9 +225,14 @@ async function proactiveEngagementSync() {
       });
 
       if (convSkip || convBrk) {
+        errorCount++;
+        lastErrorMessage   = convResult.error || 'conv_fetch_failed';
+        lastErrorAccountId = account.id;
         await delay(INTER_ACCOUNT_DELAY_MS);
         continue;
       }
+
+      itemsFetched += convResult.count || 0;
 
       // ── Messages for open-window conversations ───────────────────────────
       if (convResult.success && convResult.conversations) {
@@ -198,12 +258,19 @@ async function proactiveEngagementSync() {
           status:                msgAuthFailed ? 'error' : 'completed',
           conversations_checked: openConvs.length,
         });
+
+        if (msgAuthFailed) { errorCount++; } else { successCount++; }
+      } else {
+        successCount++;
       }
 
       await delay(INTER_ACCOUNT_DELAY_MS);
 
     } catch (accountError) {
       console.error(`[Sync:engagement] Account ${account.id} failed:`, accountError.message);
+      errorCount++;
+      lastErrorMessage   = accountError.message;
+      lastErrorAccountId = account.id;
       await logSyncAudit('engagement', account.id, {
         run_id:           runId,
         duration_ms:      Date.now() - startTime,
@@ -217,7 +284,20 @@ async function proactiveEngagementSync() {
     }
   }
 
-  console.log(`[Sync:engagement] Run #${runId} complete`);
+  await writeSyncRunLog({
+    domain: 'engagement', run_id: runId, status: 'run_completed',
+    total_accounts: accounts.length,
+    success_count: successCount, error_count: errorCount, skipped_count: skippedCount,
+    items_fetched: itemsFetched,
+    duration_ms: Date.now() - startTime,
+    memory_delta_kb: Math.round((process.memoryUsage().heapUsed - startMem) / 1024),
+    cpu_delta_ms: Math.round(process.cpuUsage(startCpu).user / 1000),
+    error_message: lastErrorMessage,
+    last_error_account: lastErrorAccountId,
+    completed_at: new Date().toISOString(),
+  });
+
+  console.log(`[Sync:engagement] Run ${runId} complete — ok:${successCount} err:${errorCount} skip:${skippedCount}`);
 }
 
 module.exports = { proactiveCommentSync, proactiveEngagementSync };

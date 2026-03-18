@@ -8,6 +8,8 @@
 
 const {
   delay,
+  generateRunId,
+  writeSyncRunLog,
   isAccountRateLimited,
   handleFetchError,
   getActiveAccounts,
@@ -27,22 +29,38 @@ const INTER_ACCOUNT_DELAY_MS =
  * This populates the table read by GET /media/:accountId.
  */
 async function proactiveMediaSync() {
-  const runId    = Date.now();
-  const startTime = runId;
-  console.log(`[Sync:media] Starting run #${runId}`);
-
-  // Lifecycle start marker
-  await logSyncAudit('media', null, { run_id: runId, status: 'started' });
+  const runId    = generateRunId();
+  const startTime = Date.now();
+  const startMem = process.memoryUsage().heapUsed;
+  const startCpu = process.cpuUsage();
+  console.log(`[Sync:media] Starting run ${runId}`);
 
   const accounts = await getActiveAccounts();
+
+  await writeSyncRunLog({
+    domain: 'media', run_id: runId, status: 'run_started',
+    total_accounts: accounts.length,
+    cron_expr: process.env.PROACTIVE_MEDIA_CRON || '0 */6 * * *',
+    node_env: process.env.NODE_ENV,
+    started_at: new Date().toISOString(),
+  });
+
   if (accounts.length === 0) {
     console.log('[Sync:media] No active accounts, skipping');
     return;
   }
 
+  let successCount = 0;
+  let errorCount   = 0;
+  let skippedCount = 0;
+  let itemsFetched = 0;
+  let lastErrorMessage    = null;
+  let lastErrorAccountId  = null;
+
   for (const account of accounts) {
     if (isAccountRateLimited(account.id)) {
       console.log(`[Sync:media] Account ${account.id} rate-limited, skipping`);
+      skippedCount++;
       await logSyncAudit('media', account.id, {
         run_id:       runId,
         duration_ms:  Date.now() - startTime,
@@ -53,6 +71,8 @@ async function proactiveMediaSync() {
         status:        'skipped',
         error_message: 'rate_limited',
       });
+      // Note: delay is after the if/try block — falls through to bottom
+      await delay(INTER_ACCOUNT_DELAY_MS);
       continue;
     }
 
@@ -71,10 +91,20 @@ async function proactiveMediaSync() {
         error_message: result.success ? undefined : result.error,
       });
 
-      if (skip || brk) continue;
+      if (skip || brk) {
+        errorCount++;
+        lastErrorMessage   = result.error || 'fetch_failed';
+        lastErrorAccountId = account.id;
+      } else {
+        successCount++;
+        itemsFetched += result.count || 0;
+      }
 
     } catch (accountError) {
       console.error(`[Sync:media] Account ${account.id} failed:`, accountError.message);
+      errorCount++;
+      lastErrorMessage   = accountError.message;
+      lastErrorAccountId = account.id;
       await logSyncAudit('media', account.id, {
         run_id:          runId,
         duration_ms:     Date.now() - startTime,
@@ -87,11 +117,23 @@ async function proactiveMediaSync() {
       });
     }
 
-    // Note: delay is after try/catch — runs even on skip/brk to pace between accounts
     await delay(INTER_ACCOUNT_DELAY_MS);
   }
 
-  console.log(`[Sync:media] Run #${runId} complete`);
+  await writeSyncRunLog({
+    domain: 'media', run_id: runId, status: 'run_completed',
+    total_accounts: accounts.length,
+    success_count: successCount, error_count: errorCount, skipped_count: skippedCount,
+    items_fetched: itemsFetched,
+    duration_ms: Date.now() - startTime,
+    memory_delta_kb: Math.round((process.memoryUsage().heapUsed - startMem) / 1024),
+    cpu_delta_ms: Math.round(process.cpuUsage(startCpu).user / 1000),
+    error_message: lastErrorMessage,
+    last_error_account: lastErrorAccountId,
+    completed_at: new Date().toISOString(),
+  });
+
+  console.log(`[Sync:media] Run ${runId} complete — ok:${successCount} err:${errorCount} skip:${skippedCount}`);
 }
 
 module.exports = { proactiveMediaSync };

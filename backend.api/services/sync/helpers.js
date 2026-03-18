@@ -8,8 +8,9 @@
 // Module-level Maps are singletons via Node cache — all domain files
 // and post-fallback.js share the same circuit breaker state.
 
+const { randomUUID } = require('crypto');
 const { getSupabaseAdmin, logAudit } = require('../../config/supabase');
-const { clearCredentialCache } = require('../../helpers/agent-helpers');
+const { clearCredentialCache, logDataBusEvent } = require('../../helpers/agent-helpers');
 
 // ── In-memory state ──────────────────────────────────────────────────────────
 
@@ -21,6 +22,25 @@ const AUTH_FAILURE_MAX_STRIKES = 3;
 
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/** Generates a UUID for correlating all log entries within one cron tick. */
+function generateRunId() {
+  return randomUUID();
+}
+
+/**
+ * Writes a run-level aggregate row to sync_run_log.
+ * Called twice per domain run: once at start (status='run_started'), once at end (status='run_completed').
+ * This is the authoritative source for the /sync/health endpoint and stale-domain watchdog.
+ * Do NOT use logSyncAudit for run-level markers — those go here instead.
+ */
+async function writeSyncRunLog(entry) {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) return;
+  await supabase.from('sync_run_log').insert(entry).catch((err) => {
+    console.warn('[Sync:helpers] writeSyncRunLog failed:', err.message);
+  });
 }
 
 // ── Circuit Breaker ──────────────────────────────────────────────────────────
@@ -39,6 +59,14 @@ function markAccountRateLimited(accountId, retryAfterSeconds) {
   const cooldown = (retryAfterSeconds || 3600) * 1000;
   _rateLimitedAccounts.set(accountId, Date.now() + cooldown);
   console.warn(`[Sync:helpers] Account ${accountId} rate-limited for ${retryAfterSeconds || 3600}s`);
+  logAudit({
+    event_type: 'rate_limit_triggered',
+    action: 'circuit_breaker',
+    resource_type: 'instagram_business_account',
+    resource_id: null,
+    details: { account_id: accountId, retry_after_seconds: retryAfterSeconds || 3600, source: 'proactive_sync' },
+    success: false,
+  }).catch(() => {});
 }
 
 // Async — called fire-and-forget from handleFetchError
@@ -81,9 +109,24 @@ function handleFetchError(result, accountId) {
     _authFailureStrikes.set(accountId, strikes);
     console.warn(`[Sync:helpers] Account ${accountId} auth_failure strike ${strikes}/${AUTH_FAILURE_MAX_STRIKES}`);
 
+    logAudit({
+      event_type: 'auth_failure_strike',
+      action: 'circuit_breaker',
+      resource_type: 'instagram_business_account',
+      resource_id: null,
+      details: { account_id: accountId, strike: strikes, max: AUTH_FAILURE_MAX_STRIKES },
+      success: false,
+    }).catch(() => {});
+
     if (strikes >= AUTH_FAILURE_MAX_STRIKES) {
       _authFailureStrikes.delete(accountId);
       markAccountDisconnectedOnAuthFailure(accountId, result.error || 'auth_failure').catch(() => {});
+      logDataBusEvent('sync', 'token_expired_mid_run', {
+        account_id: accountId,
+        error_code: result.code || null,
+        domain: result.domain || null,
+        success: false,
+      }).catch(() => {});
     }
     return { skip: true, break: false };
   }
@@ -198,10 +241,64 @@ async function logSyncAudit(syncType, accountId, details) {
   }
 }
 
+// ── Stale Domain Watchdog ─────────────────────────────────────────────────────
+
+/**
+ * Checks whether each sync domain has run within its expected window.
+ * Inserts a system_alert if a domain is overdue.
+ * Called from index.js every 5 min via the heartbeat failover cron.
+ */
+async function checkStaleDomains() {
+  const THRESHOLDS = {
+    engagement:   9  * 60 * 1000,          // 9 min  (runs every 3 min)
+    ugc:          9  * 60 * 60 * 1000,      // 9 h    (runs every 3 h)
+    media:        18 * 60 * 60 * 1000,      // 18 h   (runs every 6 h)
+    insights:     48 * 60 * 60 * 1000,      // 48 h   (runs daily)
+    token_health: 48 * 60 * 60 * 1000,      // 48 h   (runs daily)
+  };
+  const supabase = getSupabaseAdmin();
+  if (!supabase) return;
+
+  for (const [domain, thresholdMs] of Object.entries(THRESHOLDS)) {
+    const { data } = await supabase
+      .from('sync_run_log')
+      .select('completed_at')
+      .eq('domain', domain)
+      .eq('status', 'run_completed')
+      .order('completed_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const lastRun = data?.completed_at ? new Date(data.completed_at).getTime() : 0;
+    if (Date.now() - lastRun > thresholdMs) {
+      await supabase
+        .from('system_alerts')
+        .insert({
+          alert_type: 'sync_stale',
+          message: `${domain} sync has not completed in expected window`,
+          details: {
+            domain,
+            last_completed_at: data?.completed_at || null,
+            threshold_ms: thresholdMs,
+            source: 'stale_domain_watchdog',
+          },
+          resolved: false,
+        })
+        .catch((err) => {
+          console.warn(`[Sync:helpers] checkStaleDomains alert insert failed for ${domain}:`, err.message);
+        });
+      console.warn(`[Sync:helpers] Stale domain detected: ${domain} (last run: ${data?.completed_at || 'never'})`);
+    }
+  }
+}
+
 // ── Exports ──────────────────────────────────────────────────────────────────
 
 module.exports = {
   delay,
+  generateRunId,
+  writeSyncRunLog,
+  checkStaleDomains,
   _rateLimitedAccounts,
   _authFailureStrikes,
   isAccountRateLimited,

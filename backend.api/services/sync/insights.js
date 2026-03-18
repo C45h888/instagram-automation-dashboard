@@ -8,6 +8,8 @@
 
 const {
   delay,
+  generateRunId,
+  writeSyncRunLog,
   isAccountRateLimited,
   handleFetchError,
   getActiveAccounts,
@@ -26,22 +28,38 @@ const INTER_ACCOUNT_DELAY_MS =
  * For each active account: fetch and store media insights.
  */
 async function proactiveInsightsSync() {
-  const runId    = Date.now();
-  const startTime = runId;
-  console.log(`[Sync:insights] Starting run #${runId}`);
-
-  // Lifecycle start marker
-  await logSyncAudit('insights', null, { run_id: runId, status: 'started' });
+  const runId    = generateRunId();
+  const startTime = Date.now();
+  const startMem = process.memoryUsage().heapUsed;
+  const startCpu = process.cpuUsage();
+  console.log(`[Sync:insights] Starting run ${runId}`);
 
   const accounts = await getActiveAccounts();
+
+  await writeSyncRunLog({
+    domain: 'insights', run_id: runId, status: 'run_started',
+    total_accounts: accounts.length,
+    cron_expr: process.env.PROACTIVE_INSIGHTS_CRON || '0 2 * * *',
+    node_env: process.env.NODE_ENV,
+    started_at: new Date().toISOString(),
+  });
+
   if (accounts.length === 0) {
     console.log('[Sync:insights] No active accounts, skipping');
     return;
   }
 
+  let successCount = 0;
+  let errorCount   = 0;
+  let skippedCount = 0;
+  let itemsFetched = 0;
+  let lastErrorMessage    = null;
+  let lastErrorAccountId  = null;
+
   for (const account of accounts) {
     if (isAccountRateLimited(account.id)) {
       console.log(`[Sync:insights] Account ${account.id} rate-limited, skipping`);
+      skippedCount++;
       await logSyncAudit('insights', account.id, {
         run_id:       runId,
         duration_ms:  Date.now() - startTime,
@@ -73,12 +91,22 @@ async function proactiveInsightsSync() {
         error_message: result.success ? undefined : result.error,
       });
 
-      if (skip || brk) continue;
+      if (skip || brk) {
+        errorCount++;
+        lastErrorMessage   = result.error || 'fetch_failed';
+        lastErrorAccountId = account.id;
+        continue;
+      }
 
+      successCount++;
+      itemsFetched += result.count || 0;
       await delay(INTER_ACCOUNT_DELAY_MS);
 
     } catch (accountError) {
       console.error(`[Sync:insights] Account ${account.id} failed:`, accountError.message);
+      errorCount++;
+      lastErrorMessage   = accountError.message;
+      lastErrorAccountId = account.id;
       await logSyncAudit('insights', account.id, {
         run_id:          runId,
         duration_ms:     Date.now() - startTime,
@@ -92,7 +120,20 @@ async function proactiveInsightsSync() {
     }
   }
 
-  console.log(`[Sync:insights] Run #${runId} complete`);
+  await writeSyncRunLog({
+    domain: 'insights', run_id: runId, status: 'run_completed',
+    total_accounts: accounts.length,
+    success_count: successCount, error_count: errorCount, skipped_count: skippedCount,
+    items_fetched: itemsFetched,
+    duration_ms: Date.now() - startTime,
+    memory_delta_kb: Math.round((process.memoryUsage().heapUsed - startMem) / 1024),
+    cpu_delta_ms: Math.round(process.cpuUsage(startCpu).user / 1000),
+    error_message: lastErrorMessage,
+    last_error_account: lastErrorAccountId,
+    completed_at: new Date().toISOString(),
+  });
+
+  console.log(`[Sync:insights] Run ${runId} complete — ok:${successCount} err:${errorCount} skip:${skippedCount}`);
 }
 
 module.exports = { proactiveInsightsSync };

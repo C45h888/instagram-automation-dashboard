@@ -442,6 +442,18 @@ async function logApiRequest(userIdOrObj, endpoint, method, responseTime, status
 }
 
 // =============================================================================
+// LOG LEVEL HELPER
+// =============================================================================
+// Levels: trace=0 (most verbose) → debug=1 → standard=2 (default) → minimal=3
+// Set LOG_LEVEL env var to control verbosity without code changes.
+const _LOG_LEVELS = { trace: 0, debug: 1, standard: 2, minimal: 3 };
+const _CURRENT_LEVEL = _LOG_LEVELS[process.env.LOG_LEVEL] ?? _LOG_LEVELS.standard;
+
+function shouldLog(level) {
+  return (_LOG_LEVELS[level] ?? _LOG_LEVELS.standard) >= _CURRENT_LEVEL;
+}
+
+// =============================================================================
 // HELPER FUNCTIONS (All preserved for backward compatibility)
 // =============================================================================
 
@@ -656,10 +668,11 @@ module.exports = {
   getConnectionInfo,
   checkHealth,
   testConnection,
-  
+
   // Logging functions
   logApiRequest,
   logAudit,
+  shouldLog,
 
   // Helper functions
   supabaseHelpers,

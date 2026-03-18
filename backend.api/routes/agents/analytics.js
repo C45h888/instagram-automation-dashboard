@@ -10,12 +10,13 @@ const router = express.Router();
 const { fetchAndStoreMediaInsights } = require('../../helpers/data-fetchers/media-fetchers');
 const { fetchAndStoreAccountInsights } = require('../../helpers/data-fetchers/account-fetchers');
 const { categorizeIgError } = require('../../helpers/agent-helpers');
+const { logApiRequest } = require('../../config/supabase');
 
 // ============================================
 // SHARED HANDLER
 // ============================================
 
-async function handleInsightsRequest(req, res, _startTime, metricTypeOverride) {
+async function handleInsightsRequest(req, res, startTime, metricTypeOverride) {
   const { business_account_id, since, until, metric_type } = req.query;
 
   try {
@@ -44,13 +45,37 @@ async function handleInsightsRequest(req, res, _startTime, metricTypeOverride) {
       });
     }
 
+    logApiRequest({
+      endpoint: req.path,
+      method: req.method,
+      business_account_id,
+      user_id: req.user?.id || null,
+      response_time_ms: Date.now() - startTime,
+      status_code: 200,
+      success: true,
+      domain: 'account',
+    }).catch(() => {});
+
     res.json({ success: true, data: insightsData });
 
   } catch (error) {
     const errorMessage = error.response?.data?.error?.message || error.message;
     console.error('❌ Insights fetch failed:', errorMessage);
     const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
-    res.status(error.response?.status || 500).json({
+    const statusCode = error.response?.status || 500;
+
+    logApiRequest({
+      endpoint: req.path,
+      method: req.method,
+      business_account_id,
+      response_time_ms: Date.now() - startTime,
+      status_code: statusCode,
+      success: false,
+      error_message: errorMessage,
+      domain: 'account',
+    }).catch(() => {});
+
+    res.status(statusCode).json({
       error: errorMessage,
       code: error.response?.data?.error?.code,
       retryable,

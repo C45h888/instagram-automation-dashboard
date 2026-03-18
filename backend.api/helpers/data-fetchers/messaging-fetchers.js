@@ -83,24 +83,43 @@ async function fetchAndStoreComments(businessAccountId, mediaId, limit = 50) {
               // ignoreDuplicates: true — never overwrite existing rows (preserves agent enrichment:
               // sentiment, category, processed_by_automation set by the automation pipeline)
               .upsert(commentRecords, { onConflict: 'instagram_comment_id', ignoreDuplicates: true });
-            if (upsertErr) console.warn('[messaging] Comment upsert failed:', upsertErr.message);
+            if (upsertErr) {
+              await logWithDomain('messaging', {
+                endpoint: '/post-comments/upsert', method: 'SYSTEM', success: false,
+                business_account_id: businessAccountId,
+                error: upsertErr.message,
+                details: { action: 'db_upsert_failed', table: 'instagram_comments', count_attempted: commentRecords.length },
+              });
+              throw upsertErr;
+            }
           }
         }
       } catch (wtErr) {
         console.warn('[messaging] Comment write-through error:', wtErr.message);
+        throw wtErr;
       }
+    }
+
+    const paging = commentsRes.data.paging || {};
+    if (paging.next) {
+      logWithDomain('messaging', {
+        endpoint: '/post-comments/paging', method: 'SYSTEM', success: true,
+        business_account_id: businessAccountId,
+        details: { action: 'paging_next_detected', items_this_page: comments.length, next_cursor_present: true },
+      }).catch(() => {});
     }
 
     return {
       success: true,
       comments,
       count: comments.length,
-      paging: commentsRes.data.paging || {}
+      paging,
     };
 
   } catch (error) {
     const latency = Date.now() - startTime;
     const errorMessage = error.response?.data?.error?.message || error.message;
+    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
 
     await logWithDomain('messaging', {
       endpoint: '/post-comments',
@@ -108,10 +127,11 @@ async function fetchAndStoreComments(businessAccountId, mediaId, limit = 50) {
       business_account_id: businessAccountId,
       success: false,
       error: errorMessage,
-      latency
+      latency,
+      status_code: error.response?.status || null,
+      details: { action: 'proxy_failure', error_category, retryable, retry_after_seconds: retry_after_seconds || null, latency_ms: latency },
     });
 
-    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
     return {
       success: false, comments: [], count: 0, paging: {}, error: errorMessage,
       code: error.response?.data?.error?.code,
@@ -237,12 +257,30 @@ async function fetchAndStoreConversations(businessAccountId, limit = 20) {
             const { error: upsertErr } = await supabase
               .from('instagram_dm_conversations')
               .upsert(convRecords, { onConflict: 'instagram_thread_id', ignoreDuplicates: false });
-            if (upsertErr) console.warn('[messaging] Conversation upsert failed:', upsertErr.message);
+            if (upsertErr) {
+              await logWithDomain('messaging', {
+                endpoint: '/conversations/upsert', method: 'SYSTEM', success: false,
+                business_account_id: businessAccountId,
+                error: upsertErr.message,
+                details: { action: 'db_upsert_failed', table: 'instagram_dm_conversations', count_attempted: convRecords.length },
+              });
+              throw upsertErr;
+            }
           }
         }
       } catch (wtErr) {
         console.warn('[messaging] Conversation write-through error:', wtErr.message);
+        throw wtErr;
       }
+    }
+
+    const paging = convRes.data.paging || {};
+    if (paging.next) {
+      logWithDomain('messaging', {
+        endpoint: '/conversations/paging', method: 'SYSTEM', success: true,
+        business_account_id: businessAccountId,
+        details: { action: 'paging_next_detected', items_this_page: conversations.length, next_cursor_present: true },
+      }).catch(() => {});
     }
 
     // Return Graph API native shape — what the Python agent needs.
@@ -251,12 +289,13 @@ async function fetchAndStoreConversations(businessAccountId, limit = 20) {
       success: true,
       conversations,
       count: conversations.length,
-      paging: convRes.data.paging || {}
+      paging,
     };
 
   } catch (error) {
     const latency = Date.now() - startTime;
     const errorMessage = error.response?.data?.error?.message || error.message;
+    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
 
     await logWithDomain('messaging', {
       endpoint: '/conversations',
@@ -264,10 +303,11 @@ async function fetchAndStoreConversations(businessAccountId, limit = 20) {
       business_account_id: businessAccountId,
       success: false,
       error: errorMessage,
-      latency
+      latency,
+      status_code: error.response?.status || null,
+      details: { action: 'proxy_failure', error_category, retryable, retry_after_seconds: retry_after_seconds || null, latency_ms: latency },
     });
 
-    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
     return {
       success: false, conversations: [], count: 0, paging: {}, error: errorMessage,
       code: error.response?.data?.error?.code,
@@ -409,16 +449,31 @@ async function fetchAndStoreMessages(businessAccountId, conversationId, limit = 
               .upsert(msgRecords, { onConflict: 'instagram_message_id', ignoreDuplicates: true });
 
             if (upsertErr) {
-              console.warn('[messaging] Message upsert failed:', upsertErr.message);
+              await logWithDomain('messaging', {
+                endpoint: '/conversation-messages/upsert', method: 'SYSTEM', success: false,
+                business_account_id: businessAccountId,
+                error: upsertErr.message,
+                details: { action: 'db_upsert_failed', table: 'instagram_dm_messages', count_attempted: msgRecords.length },
+              });
+              throw upsertErr;
             } else {
               // Orphan repair: messages stored with conversation_id: null by /send-dm or /reply-dm
               // before the conversation row existed. IS NULL guard prevents touching already-linked rows.
               const messageIds = msgRecords.map(r => r.instagram_message_id);
-              await supabase
+              const { data: repaired } = await supabase
                 .from('instagram_dm_messages')
                 .update({ conversation_id: conversationUUID, business_account_id: businessAccountId })
                 .in('instagram_message_id', messageIds)
-                .is('conversation_id', null);
+                .is('conversation_id', null)
+                .select('instagram_message_id');
+
+              if (repaired?.length) {
+                logWithDomain('messaging', {
+                  endpoint: '/messaging/orphan_repair', method: 'SYSTEM', success: true,
+                  business_account_id: businessAccountId,
+                  details: { action: 'orphan_repair', messages_repaired: repaired.length, conversation_id: conversationId },
+                }).catch(() => {});
+              }
 
               // DB query-back — returns fully populated DB rows (correct shape for frontend)
               const { data: rows } = await supabase
@@ -433,6 +488,7 @@ async function fetchAndStoreMessages(businessAccountId, conversationId, limit = 
         }
       } catch (wtErr) {
         console.warn('[messaging] Message write-through error:', wtErr.message);
+        throw wtErr;
       }
     }
 
@@ -446,6 +502,7 @@ async function fetchAndStoreMessages(businessAccountId, conversationId, limit = 
   } catch (error) {
     const latency = Date.now() - startTime;
     const errorMessage = error.response?.data?.error?.message || error.message;
+    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
 
     await logWithDomain('messaging', {
       endpoint: '/conversation-messages',
@@ -453,10 +510,11 @@ async function fetchAndStoreMessages(businessAccountId, conversationId, limit = 
       business_account_id: businessAccountId,
       success: false,
       error: errorMessage,
-      latency
+      latency,
+      status_code: error.response?.status || null,
+      details: { action: 'proxy_failure', error_category, retryable, retry_after_seconds: retry_after_seconds || null, latency_ms: latency },
     });
 
-    const { retryable, error_category, retry_after_seconds } = categorizeIgError(error);
     return {
       success: false, messages: [], count: 0, paging: {}, error: errorMessage,
       code: error.response?.data?.error?.code,
