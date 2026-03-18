@@ -3,7 +3,8 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
-const { retrievePageToken, logAudit: logAuditService } = require('../../services/instagram-tokens');
+const { retrievePageToken } = require('../../services/tokens');
+const { logAudit: logAuditService } = require('../../config/supabase');
 const { resolveAccountCredentials } = require('../../helpers/agent-helpers');
 const { getSupabaseAdmin } = require('../../config/supabase');
 

@@ -2,7 +2,8 @@
 // UGC management routes: visitor-posts, feature toggle, permission requests
 const express = require('express');
 const router = express.Router();
-const { validateTokenScopes, logAudit: logAuditService } = require('../../services/instagram-tokens');
+const { validateTokenScopes } = require('../../services/tokens');
+const { logAudit: logAuditService } = require('../../config/supabase');
 const { getSupabaseAdmin } = require('../../config/supabase');
 
 const logAudit = logAuditService;

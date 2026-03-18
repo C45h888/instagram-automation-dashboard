@@ -3,7 +3,8 @@
 // Extracted from routes/agent-proxy.js to keep route files lean.
 
 const { getSupabaseAdmin } = require('../config/supabase');
-const { retrievePageToken } = require('../services/instagram-tokens');
+const { retrievePageToken } = require('../services/tokens/pat');
+const { clearCredentialCache, getFromCache, setInCache } = require('./credential-cache');
 
 const GRAPH_API_BASE = 'https://graph.facebook.com/v23.0';
 
@@ -74,17 +75,6 @@ function categorizeIgError(error) {
 // TTL is intentionally short (5 min) relative to 60-day token lifetime.
 // Busted explicitly on token write events (exchange-token, refresh-token routes).
 
-const _credentialCache = new Map();
-const CREDENTIAL_TTL_MS = 5 * 60 * 1000; // 5 minutes
-
-/**
- * Removes a cached credential entry for a given business account.
- * Call this whenever a token is stored or refreshed in the DB.
- * @param {string} businessAccountId - UUID from instagram_business_accounts
- */
-function clearCredentialCache(businessAccountId) {
-  _credentialCache.delete(businessAccountId);
-}
 
 // ============================================
 // HELPER: ENSURE MEDIA RECORD
@@ -166,10 +156,8 @@ async function syncHashtagsFromCaptions(supabase, businessAccountId, captions) {
  * @throws {Error} If account not found or token retrieval fails
  */
 async function resolveAccountCredentials(businessAccountId) {
-  const cached = _credentialCache.get(businessAccountId);
-  if (cached && (Date.now() - cached.ts) < CREDENTIAL_TTL_MS) {
-    return cached.value;
-  }
+  const cached = getFromCache(businessAccountId);
+  if (cached) return cached;
 
   try {
     const supabase = getSupabaseAdmin();
@@ -216,7 +204,7 @@ async function resolveAccountCredentials(businessAccountId) {
     }
 
     const result = { igUserId, pageToken, userId, pageId, igUsername: account.username || null };
-    _credentialCache.set(businessAccountId, { value: result, ts: Date.now() });
+    setInCache(businessAccountId, result);
     return result;
   } catch (error) {
     console.error('❌ Credential resolution failed:', error.message);

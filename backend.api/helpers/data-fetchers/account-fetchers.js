@@ -7,12 +7,18 @@
 //   SELECT * FROM api_usage WHERE domain = 'account' AND success = false ORDER BY created_at DESC
 
 const {
+  axios,
   getSupabaseAdmin,
   resolveAccountCredentials,
   categorizeIgError,
   logWithDomain,
+  GRAPH_API_BASE,
 } = require('./base');
-const { getAccountInsights } = require('../../services/instagram-tokens');
+
+// Metric arrays for account-level insights — defined inline to keep this file self-contained
+const V1_METRICS = ['reach'];
+const V2_METRICS_BASE = ['accounts_engaged', 'profile_views'];
+const V2_METRICS_WEBSITE = ['website_clicks'];
 
 // ============================================
 // ACCOUNT INSIGHTS
@@ -43,10 +49,44 @@ async function fetchAndStoreAccountInsights(businessAccountId, options = {}) {
 
     const { igUserId, pageToken } = await resolveAccountCredentials(businessAccountId);
 
-    const accountInsights = await getAccountInsights(igUserId, pageToken, {
-      ...options,
-      hasWebsite
+    // ── Account insights: inlined from getAccountInsights (instagram-tokens) ──────
+    const { period = '7d', until: untilParam } = options;
+    const periodMatch = period.match(/^(\d+)d$/);
+    if (!periodMatch) throw new Error(`Invalid period format: ${period}. Use format: '7d', '30d', '90d'`);
+
+    const periodDays = parseInt(periodMatch[1]);
+    if (periodDays < 1 || periodDays > 90) throw new Error(`Period must be between 1 and 90 days. Got: ${periodDays}`);
+
+    const until = untilParam || Math.floor(Date.now() / 1000);
+    const since = until - (periodDays * 24 * 60 * 60);
+    const v2Metrics = [...V2_METRICS_BASE, ...(hasWebsite ? V2_METRICS_WEBSITE : [])];
+
+    const v1Response = await axios.get(`${GRAPH_API_BASE}/${igUserId}/insights`, {
+      params: { metric: V1_METRICS.join(','), period: 'day', since, until, access_token: pageToken },
+      timeout: 15000
     });
+    if (v1Response.data.error) throw new Error(`Instagram API Error (v1): ${v1Response.data.error.message}`);
+
+    const v2Response = await axios.get(`${GRAPH_API_BASE}/${igUserId}/insights`, {
+      params: { metric: v2Metrics.join(','), period: 'day', metric_type: 'total_value', since, until, access_token: pageToken },
+      timeout: 15000
+    });
+    if (v2Response.data.error) throw new Error(`Instagram API Error (v2): ${v2Response.data.error.message}`);
+
+    const accountInsights = {
+      success: true,
+      data: {
+        time_series: v1Response.data.data || [],
+        totals: v2Response.data.data || []
+      },
+      period: {
+        since, until, days: periodDays,
+        start_date: new Date(since * 1000).toISOString(),
+        end_date: new Date(until * 1000).toISOString()
+      },
+      hasWebsite
+    };
+    // ── End inlined getAccountInsights ────────────────────────────────────────────
 
     const latency = Date.now() - startTime;
 

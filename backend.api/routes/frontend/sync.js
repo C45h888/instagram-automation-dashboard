@@ -10,7 +10,7 @@ const express = require('express');
 const router = express.Router();
 const { fetchAndStoreTaggedMedia } = require('../../helpers/data-fetchers/ugc-fetchers');
 const { fetchAndStoreBusinessPosts } = require('../../helpers/data-fetchers/media-fetchers');
-const { logAudit: logAuditService } = require('../../services/instagram-tokens');
+const { logAudit: logAuditService } = require('../../config/supabase');
 
 const logAudit = logAuditService;
 

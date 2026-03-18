@@ -23,8 +23,8 @@ const {
   storePageToken,
   fetchDynamicScope,
   refreshUserToken,            // promoted from lazy require inside runUATRefreshCheck
-} = require('../instagram-tokens');
-const { clearCredentialCache } = require('../../helpers/agent-helpers');
+} = require('../tokens');
+const { clearCredentialCache } = require('../../helpers/credential-cache');
 
 // Private delay — not importing from ./helpers to keep this file fully independent
 function delay(ms) {

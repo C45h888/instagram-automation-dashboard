@@ -11,11 +11,10 @@ const {
   refreshUserToken,
   detectTokenType,
   fetchDynamicScope,
-  logAudit: logAuditService,
   GRAPH_API_BASE,
-} = require('../../services/instagram-tokens');
-const { getSupabaseAdmin } = require('../../config/supabase');
-const { clearCredentialCache } = require('../../helpers/agent-helpers');
+} = require('../../services/tokens');
+const { getSupabaseAdmin, logAudit: logAuditService } = require('../../config/supabase');
+const { clearCredentialCache } = require('../../helpers/credential-cache');
 
 const logAudit = logAuditService;
 const GRAPH_API_VERSION = 'v23.0';
