@@ -4,13 +4,14 @@
 //
 // Data flow:
 //   node-cron → proactiveUgcSync()
-//     → fetchAndStoreTaggedMedia()   → ugc_content (source: 'tagged')
-//     → fetchAndStoreHashtagMedia()  → ugc_content (source: 'hashtag')
+//     → fetchAndStoreTaggedMedia()              → ugc_content (source: 'tagged')
+//     → fetchHashtagMedia() × hashtags parallel → storeUgcContentBatch() × 1
 
 const {
   delay,
   generateRunId,
   writeSyncRunLog,
+  runConcurrent,
   isAccountRateLimited,
   handleFetchError,
   getActiveAccounts,
@@ -19,12 +20,15 @@ const {
 } = require('./helpers');
 
 const {
-  fetchAndStoreHashtagMedia,
+  fetchHashtagMedia,
   fetchAndStoreTaggedMedia,
 } = require('../../helpers/data-fetchers/ugc-fetchers');
 
+const {
+  storeUgcContentBatch,
+} = require('../../helpers/data-fetchers/base');
+
 const UGC_MAX_HASHTAGS       = 5;
-const INTER_ITEM_DELAY_MS    = 1000;
 const INTER_ACCOUNT_DELAY_MS =
   parseInt(process.env.SYNC_UGC_DELAY_MS || '3000', 10);
 
@@ -105,7 +109,6 @@ async function proactiveUgcSync() {
       }
 
       itemsFetched += tagResult.count || 0;
-      await delay(INTER_ITEM_DELAY_MS);
 
       // ── Hashtag media ────────────────────────────────────────────────────
       const hashtags        = await getMonitoredHashtags(account.id);
@@ -113,15 +116,29 @@ async function proactiveUgcSync() {
       let hashAuthFailed    = false;
       const hashtagsToCheck = hashtags.slice(0, UGC_MAX_HASHTAGS);
 
-      for (const hashtag of hashtagsToCheck) {
-        const hashResult = await fetchAndStoreHashtagMedia(account.id, hashtag, 25);
-        if (hashResult.success) totalHashtagMedia += hashResult.count;
+      // PARALLEL FETCH — up to 3 hashtags in parallel per batch (each makes 2 IG API calls)
+      const hashFetchResults = await runConcurrent(
+        hashtagsToCheck,
+        (hashtag) => fetchHashtagMedia(account.id, hashtag, 25),
+        3
+      );
 
+      // Post-batch error accounting
+      for (const hashResult of hashFetchResults) {
+        if (hashResult.success) totalHashtagMedia += hashResult.count;
         const { skip, break: brk } = handleFetchError(hashResult, account.id);
         if (skip) { hashAuthFailed = true; break; }
         if (brk) break;
+      }
 
-        await delay(INTER_ITEM_DELAY_MS);
+      // BATCH WRITE — merge all hashtag results into one upsert
+      if (!hashAuthFailed) {
+        const allRecords = hashFetchResults
+          .filter(r => r.success)
+          .flatMap(r => r.records);
+        if (allRecords.length > 0) {
+          await storeUgcContentBatch(allRecords);
+        }
       }
 
       itemsFetched += totalHashtagMedia;

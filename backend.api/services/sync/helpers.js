@@ -241,6 +241,37 @@ async function logSyncAudit(syncType, accountId, details) {
   }
 }
 
+// ── Parallel Batch Runner ─────────────────────────────────────────────────────
+
+/**
+ * Runs asyncFn over items in parallel batches of `concurrency`.
+ * Uses Promise.allSettled — one failure never cancels other calls in the same batch.
+ * Results are returned in INPUT ORDER (allSettled preserves order).
+ * Rejected promises are normalised to { success: false, error: reason.message }.
+ *
+ * @param {Array}    items           - items to process
+ * @param {Function} asyncFn         - (item) => Promise<result>
+ * @param {number}   [concurrency=3] - max simultaneous calls per batch
+ * @param {number}   [batchDelayMs=200] - courtesy pause between batches
+ * @returns {Promise<Array>}         - flat result array, same order as input
+ */
+async function runConcurrent(items, asyncFn, concurrency = 3, batchDelayMs = 200) {
+  const results = [];
+  for (let i = 0; i < items.length; i += concurrency) {
+    const batch = items.slice(i, i + concurrency);
+    const settled = await Promise.allSettled(batch.map(asyncFn));
+    for (const s of settled) {
+      results.push(
+        s.status === 'fulfilled'
+          ? s.value
+          : { success: false, error: s.reason?.message || 'unknown' }
+      );
+    }
+    if (i + concurrency < items.length) await delay(batchDelayMs);
+  }
+  return results;
+}
+
 // ── Stale Domain Watchdog ─────────────────────────────────────────────────────
 
 /**
@@ -299,6 +330,7 @@ module.exports = {
   generateRunId,
   writeSyncRunLog,
   checkStaleDomains,
+  runConcurrent,
   _rateLimitedAccounts,
   _authFailureStrikes,
   isAccountRateLimited,

@@ -5,6 +5,11 @@
 //
 // All api_usage rows written with domain='ugc' for targeted debugging:
 //   SELECT * FROM api_usage WHERE domain = 'ugc' AND success = false ORDER BY created_at DESC
+//
+// Thin fetch/write split:
+//   fetchHashtagMedia()       — IG API calls only, returns shaped records (no DB write)
+//   fetchAndStoreHashtagMedia() — shim: fetchHashtagMedia + storeUgcContentBatch (route compat)
+//   fetchAndStoreTaggedMedia()  — unchanged (called once per account, no inner loop)
 
 const {
   axios,
@@ -14,22 +19,23 @@ const {
   mapRawPostToUgcContent,
   GRAPH_API_BASE,
   logWithDomain,
+  storeUgcContentBatch,
 } = require('./base');
 
 // ============================================
-// HASHTAG MEDIA (UGC)
+// HASHTAG MEDIA — THIN FETCH
 // ============================================
 
 /**
- * Searches hashtag media and upserts to ugc_content.
- * Extracted from: routes/agents/ugc.js POST /search-hashtag
+ * Searches hashtag media from the Instagram Graph API.
+ * NO DB write — shapes records via mapRawPostToUgcContent so they're ready for storeUgcContentBatch.
  *
  * @param {string} businessAccountId - UUID
  * @param {string} hashtag - Hashtag string (with or without #)
  * @param {number} [limit=25] - Max media (capped at 50)
- * @returns {Promise<{success: boolean, media: Array, count: number, hashtagId?: string, error?: string}>}
+ * @returns {Promise<{success: boolean, records: Array, count: number, hashtagId?: string, error?: string}>}
  */
-async function fetchAndStoreHashtagMedia(businessAccountId, hashtag, limit = 25) {
+async function fetchHashtagMedia(businessAccountId, hashtag, limit = 25) {
   const startTime = Date.now();
   const searchLimit = Math.min(parseInt(limit) || 25, 50);
   const cleanHashtag = String(hashtag).replace(/^#/, '');
@@ -48,7 +54,7 @@ async function fetchAndStoreHashtagMedia(businessAccountId, hashtag, limit = 25)
 
     const hashtagId = hashtagSearchRes.data?.data?.[0]?.id;
     if (!hashtagId) {
-      return { success: false, media: [], count: 0, error: `Hashtag not found: #${cleanHashtag}` };
+      return { success: false, records: [], count: 0, error: `Hashtag not found: #${cleanHashtag}` };
     }
 
     // Step 2: Get recent media for hashtag
@@ -72,48 +78,25 @@ async function fetchAndStoreHashtagMedia(businessAccountId, hashtag, limit = 25)
       latency
     });
 
-    // Flatten owner{id} → owner_id for agent compatibility
-    const media = (mediaRes.data.data || []).map(item => ({
+    // Flatten owner{id} → owner_id then shape via mapRawPostToUgcContent (DB-ready rows)
+    const rawMedia = (mediaRes.data.data || []).map(item => ({
       ...item,
       owner_id: item.owner?.id || null,
     }));
 
-    // Supabase write-through: raw UGC into unified ugc_content (agent enriches quality fields later)
-    if (media.length > 0) {
-      try {
-        const supabase = getSupabaseAdmin();
-        if (supabase) {
-          const ugcRecords = media
-            .filter(m => m.id)
-            .map(m => mapRawPostToUgcContent(m, businessAccountId, 'hashtag', cleanHashtag));
-          const { error: upsertErr } = await supabase
-            .from('ugc_content')
-            .upsert(ugcRecords, { onConflict: 'business_account_id,visitor_post_id', ignoreDuplicates: false });
-          if (upsertErr) {
-            await logWithDomain('ugc', {
-              endpoint: '/search-hashtag/upsert', method: 'SYSTEM', success: false,
-              business_account_id: businessAccountId,
-              error: upsertErr.message,
-              details: { action: 'db_upsert_failed', table: 'ugc_content', count_attempted: ugcRecords.length },
-            });
-            throw upsertErr;
-          }
-        }
-      } catch (wtErr) {
-        console.warn('[ugc] Hashtag write-through error:', wtErr.message);
-        throw wtErr;
-      }
-    }
+    const records = rawMedia
+      .filter(m => m.id)
+      .map(m => mapRawPostToUgcContent(m, businessAccountId, 'hashtag', cleanHashtag));
 
-    if (media.length >= searchLimit) {
+    if (rawMedia.length >= searchLimit) {
       logWithDomain('ugc', {
         endpoint: '/search-hashtag/paging', method: 'SYSTEM', success: true,
         business_account_id: businessAccountId,
-        details: { action: 'paging_next_detected', items_this_page: media.length, next_cursor_present: true },
+        details: { action: 'paging_next_detected', items_this_page: rawMedia.length, next_cursor_present: true },
       }).catch(() => {});
     }
 
-    return { success: true, media, count: media.length, hashtagId };
+    return { success: true, records, count: records.length, hashtagId };
 
   } catch (error) {
     const latency = Date.now() - startTime;
@@ -132,11 +115,34 @@ async function fetchAndStoreHashtagMedia(businessAccountId, hashtag, limit = 25)
     });
 
     return {
-      success: false, media: [], count: 0, error: errorMessage,
+      success: false, records: [], count: 0, error: errorMessage,
       code: error.response?.data?.error?.code,
       retryable, error_category, retry_after_seconds
     };
   }
+}
+
+// ============================================
+// HASHTAG MEDIA — SHIM (route backward-compat)
+// ============================================
+
+/**
+ * Searches hashtag media and persists to ugc_content.
+ * Shim wrapping fetchHashtagMedia + storeUgcContentBatch.
+ * Routes call this unchanged; domain loops call fetchHashtagMedia directly for batch parallelism.
+ *
+ * @param {string} businessAccountId
+ * @param {string} hashtag
+ * @param {number} [limit=25]
+ * @returns {Promise<{success: boolean, media: Array, count: number, hashtagId?: string, error?: string}>}
+ */
+async function fetchAndStoreHashtagMedia(businessAccountId, hashtag, limit = 25) {
+  const result = await fetchHashtagMedia(businessAccountId, hashtag, limit);
+  if (result.success && result.records.length > 0) {
+    await storeUgcContentBatch(result.records);
+  }
+  // backward-compat: callers expect .media, not .records
+  return { ...result, media: result.records };
 }
 
 // ============================================
@@ -233,6 +239,7 @@ async function fetchAndStoreTaggedMedia(businessAccountId, limit = 25) {
 }
 
 module.exports = {
+  fetchHashtagMedia,
   fetchAndStoreHashtagMedia,
   fetchAndStoreTaggedMedia,
 };

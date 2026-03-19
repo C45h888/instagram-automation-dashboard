@@ -8,16 +8,17 @@
 //
 // Data flow:
 //   node-cron (6h)  → proactiveCommentSync()
-//     → fetchAndStoreComments()     → instagram_comments
+//     → fetchComments() × posts in parallel  → storeCommentBatches() × 1
 //
 //   node-cron (3m)  → proactiveEngagementSync()
-//     → fetchAndStoreConversations() → instagram_dm_conversations
-//     → fetchAndStoreMessages()      → instagram_dm_messages
+//     → fetchAndStoreConversations()          → instagram_dm_conversations
+//     → fetchMessages() × convs in parallel  → storeMessageBatches() × 1
 
 const {
   delay,
   generateRunId,
   writeSyncRunLog,
+  runConcurrent,
   isAccountRateLimited,
   handleFetchError,
   getActiveAccounts,
@@ -26,14 +27,18 @@ const {
 } = require('./helpers');
 
 const {
-  fetchAndStoreComments,
+  fetchComments,
+  fetchMessages,
   fetchAndStoreConversations,
-  fetchAndStoreMessages,
 } = require('../../helpers/data-fetchers/messaging-fetchers');
+
+const {
+  storeCommentBatches,
+  storeMessageBatches,
+} = require('../../helpers/data-fetchers/base');
 
 const COMMENT_MAX_POSTS          = 5;
 const ENGAGEMENT_MAX_CONVERSATIONS = 5;
-const INTER_ITEM_DELAY_MS          = 1000;
 const INTER_ACCOUNT_DELAY_MS       =
   parseInt(process.env.SYNC_ENGAGEMENT_DELAY_MS || '3000', 10);
 
@@ -92,19 +97,34 @@ async function proactiveCommentSync() {
 
     try {
       const recentMedia = await getRecentMedia(account.id);
-      let totalComments    = 0;
+      const postsToCheck = recentMedia.slice(0, COMMENT_MAX_POSTS);
+      let totalComments   = 0;
       let commentAuthFailed = false;
-      const postsToCheck   = recentMedia.slice(0, COMMENT_MAX_POSTS);
 
-      for (const media of postsToCheck) {
-        const result = await fetchAndStoreComments(account.id, media.instagram_media_id, 50);
+      // PARALLEL FETCH — up to 3 posts in parallel per batch
+      const commentResults = await runConcurrent(
+        postsToCheck,
+        (media) => fetchComments(account.id, media.instagram_media_id, 50),
+        3
+      );
+
+      // Post-batch error accounting (results in same order as postsToCheck)
+      for (const result of commentResults) {
         if (result.success) totalComments += result.count;
-
         const { skip, break: brk } = handleFetchError(result, account.id);
         if (skip) { commentAuthFailed = true; break; }
         if (brk) break;
+      }
 
-        await delay(INTER_ITEM_DELAY_MS);
+      // BATCH WRITE — one DB call covers all posts
+      if (!commentAuthFailed) {
+        const commentBatches = postsToCheck
+          .map((media, i) => ({ mediaId: media.instagram_media_id, result: commentResults[i] }))
+          .filter(({ result }) => result.success && result.records?.length > 0)
+          .map(({ mediaId, result }) => ({ mediaId, comments: result.records }));
+        if (commentBatches.length > 0) {
+          await storeCommentBatches(account.id, commentBatches);
+        }
       }
 
       itemsFetched += totalComments;
@@ -241,12 +261,35 @@ async function proactiveEngagementSync() {
           .slice(0, ENGAGEMENT_MAX_CONVERSATIONS);
 
         let msgAuthFailed = false;
-        for (const conv of openConvs) {
-          const msgResult = await fetchAndStoreMessages(account.id, conv.id, 20);
-          const { skip, break: brk } = handleFetchError(msgResult, account.id);
+
+        // PARALLEL FETCH — up to 3 conversations in parallel per batch
+        const msgFetchResults = await runConcurrent(
+          openConvs,
+          (conv) => fetchMessages(account.id, conv.id, 20),
+          3
+        );
+
+        // Post-batch error accounting
+        for (const result of msgFetchResults) {
+          const { skip, break: brk } = handleFetchError(result, account.id);
           if (skip) { msgAuthFailed = true; break; }
           if (brk) break;
-          await delay(INTER_ITEM_DELAY_MS);
+        }
+
+        // BATCH WRITE — one DB call covers all open conversations
+        if (!msgAuthFailed) {
+          const messageBatches = openConvs
+            .map((conv, i) => ({ conversationId: conv.id, result: msgFetchResults[i] }))
+            .filter(({ result }) => result.success && result.rawMessages?.length > 0)
+            .map(({ conversationId, result }) => ({ conversationId, rawMessages: result.rawMessages }));
+
+          if (messageBatches.length > 0) {
+            // igUserId/pageId are the same for all convs (same account) — take from first success
+            const firstOk = msgFetchResults.find(r => r.success);
+            if (firstOk) {
+              await storeMessageBatches(account.id, messageBatches, firstOk.igUserId, firstOk.pageId);
+            }
+          }
         }
 
         await logSyncAudit('messages', account.id, {

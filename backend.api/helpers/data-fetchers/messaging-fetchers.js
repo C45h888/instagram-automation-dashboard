@@ -5,39 +5,52 @@
 //
 // All api_usage rows written with domain='messaging' for targeted debugging:
 //   SELECT * FROM api_usage WHERE domain = 'messaging' AND success = false ORDER BY created_at DESC
+//
+// Thin fetch/write split:
+//   fetchComments()  — IG API call only, returns raw records
+//   fetchMessages()  — IG API call only, returns raw records
+//   fetchAndStoreComments()  — shim: fetchComments + storeCommentBatches (route compat)
+//   fetchAndStoreMessages()  — shim: fetchMessages + storeMessageBatches + query-back (route compat)
+//   fetchAndStoreConversations() — unchanged (called once per account, no inner loop)
 
 const {
   axios,
   getSupabaseAdmin,
   resolveAccountCredentials,
   categorizeIgError,
-  ensureMediaRecord,
   GRAPH_API_BASE,
   logWithDomain,
+  transformMessage,
+  storeCommentBatches,
+  storeMessageBatches,
 } = require('./base');
 
 // ============================================
-// COMMENTS
+// COMMENTS — THIN FETCH
 // ============================================
 
 /**
- * Fetches comments for a media post and upserts to instagram_comments.
+ * Fetches comments for a media post from the Instagram Graph API.
+ * NO DB write — callers use storeCommentBatches for batch persistence.
  *
- * @param {string} businessAccountId - UUID from instagram_business_accounts
+ * API note: Meta caps comments at 50 per query. Fields verified against Meta docs —
+ * replies_count is NOT a valid field (only a replies edge); removed.
+ *
+ * @param {string} businessAccountId - UUID
  * @param {string} mediaId - Instagram media ID (numeric string)
- * @param {number} [limit=50] - Max comments to fetch (capped at 100)
- * @returns {Promise<{success: boolean, comments: Array, count: number, paging: Object, error?: string}>}
+ * @param {number} [limit=50] - Max comments (capped at 50 per Meta docs)
+ * @returns {Promise<{success: boolean, records: Array, count: number, paging: Object, error?: string}>}
  */
-async function fetchAndStoreComments(businessAccountId, mediaId, limit = 50) {
+async function fetchComments(businessAccountId, mediaId, limit = 50) {
   const startTime = Date.now();
-  const fetchLimit = Math.min(parseInt(limit) || 50, 100);
+  const fetchLimit = Math.min(parseInt(limit) || 50, 50); // Meta docs: max 50 per query
 
   try {
     const { pageToken, userId } = await resolveAccountCredentials(businessAccountId);
 
     const commentsRes = await axios.get(`${GRAPH_API_BASE}/${mediaId}/comments`, {
       params: {
-        fields: 'id,text,timestamp,username,like_count,replies_count',
+        fields: 'id,text,timestamp,username,like_count', // replies_count removed — not a valid field
         limit: fetchLimit,
         access_token: pageToken
       },
@@ -55,66 +68,18 @@ async function fetchAndStoreComments(businessAccountId, mediaId, limit = 50) {
       latency
     });
 
-    const comments = commentsRes.data.data || [];
-
-    // Supabase write-through: upsert comments + ensure instagram_media record exists
-    if (comments.length > 0) {
-      try {
-        const supabase = getSupabaseAdmin();
-        if (supabase) {
-          const mediaUUID = await ensureMediaRecord(supabase, mediaId, businessAccountId);
-          if (mediaUUID) {
-            const commentRecords = comments
-              .filter(c => c.id)
-              .map(c => ({
-                instagram_comment_id: c.id,
-                text: c.text || '',
-                author_username: c.username || '',
-                author_instagram_id: null,
-                media_id: mediaUUID,
-                business_account_id: businessAccountId,
-                created_at: c.timestamp,
-                like_count: c.like_count || 0,
-                reply_count: c.replies_count || 0,
-                // processed_by_automation omitted — DB DEFAULT false on insert, preserved on update
-              }));
-            const { error: upsertErr } = await supabase
-              .from('instagram_comments')
-              // ignoreDuplicates: true — never overwrite existing rows (preserves agent enrichment:
-              // sentiment, category, processed_by_automation set by the automation pipeline)
-              .upsert(commentRecords, { onConflict: 'instagram_comment_id', ignoreDuplicates: true });
-            if (upsertErr) {
-              await logWithDomain('messaging', {
-                endpoint: '/post-comments/upsert', method: 'SYSTEM', success: false,
-                business_account_id: businessAccountId,
-                error: upsertErr.message,
-                details: { action: 'db_upsert_failed', table: 'instagram_comments', count_attempted: commentRecords.length },
-              });
-              throw upsertErr;
-            }
-          }
-        }
-      } catch (wtErr) {
-        console.warn('[messaging] Comment write-through error:', wtErr.message);
-        throw wtErr;
-      }
-    }
-
+    const records = commentsRes.data.data || [];
     const paging = commentsRes.data.paging || {};
+
     if (paging.next) {
       logWithDomain('messaging', {
         endpoint: '/post-comments/paging', method: 'SYSTEM', success: true,
         business_account_id: businessAccountId,
-        details: { action: 'paging_next_detected', items_this_page: comments.length, next_cursor_present: true },
+        details: { action: 'paging_next_detected', items_this_page: records.length, next_cursor_present: true },
       }).catch(() => {});
     }
 
-    return {
-      success: true,
-      comments,
-      count: comments.length,
-      paging,
-    };
+    return { success: true, records, count: records.length, paging };
 
   } catch (error) {
     const latency = Date.now() - startTime;
@@ -133,11 +98,34 @@ async function fetchAndStoreComments(businessAccountId, mediaId, limit = 50) {
     });
 
     return {
-      success: false, comments: [], count: 0, paging: {}, error: errorMessage,
+      success: false, records: [], count: 0, paging: {}, error: errorMessage,
       code: error.response?.data?.error?.code,
       retryable, error_category, retry_after_seconds
     };
   }
+}
+
+// ============================================
+// COMMENTS — SHIM (route backward-compat)
+// ============================================
+
+/**
+ * Fetches and persists comments for a single media post.
+ * Shim wrapping fetchComments + storeCommentBatches.
+ * Routes call this unchanged; domain loops call fetchComments directly for batch parallelism.
+ *
+ * @param {string} businessAccountId
+ * @param {string} mediaId
+ * @param {number} [limit=50]
+ * @returns {Promise<{success: boolean, comments: Array, count: number, paging: Object, error?: string}>}
+ */
+async function fetchAndStoreComments(businessAccountId, mediaId, limit = 50) {
+  const result = await fetchComments(businessAccountId, mediaId, limit);
+  if (result.success && result.records.length > 0) {
+    await storeCommentBatches(businessAccountId, [{ mediaId, comments: result.records }]);
+  }
+  // backward-compat: callers expect .comments, not .records
+  return { ...result, comments: result.records };
 }
 
 // ============================================
@@ -146,6 +134,7 @@ async function fetchAndStoreComments(businessAccountId, mediaId, limit = 50) {
 
 /**
  * Fetches DM conversations with 24h window status and upserts to instagram_dm_conversations.
+ * Called once per account per tick — no inner loop, no parallelisation needed.
  *
  * @param {string} businessAccountId - UUID
  * @param {number} [limit=20] - Max conversations (capped at 50)
@@ -317,18 +306,19 @@ async function fetchAndStoreConversations(businessAccountId, limit = 20) {
 }
 
 // ============================================
-// CONVERSATION MESSAGES
+// CONVERSATION MESSAGES — THIN FETCH
 // ============================================
 
 /**
- * Fetches messages for a single DM conversation and upserts to instagram_dm_messages.
+ * Fetches messages for a single DM conversation from the Instagram Graph API.
+ * NO DB write. Returns raw messages plus igUserId/pageId needed by storeMessageBatches.
  *
  * @param {string} businessAccountId - UUID
  * @param {string} conversationId - Instagram thread ID
  * @param {number} [limit=20] - Max messages (capped at 100)
- * @returns {Promise<{success: boolean, messages: Array, count: number, paging: Object, error?: string}>}
+ * @returns {Promise<{success: boolean, rawMessages: Array, igUserId: string, pageId: string|null, count: number, paging: Object, error?: string}>}
  */
-async function fetchAndStoreMessages(businessAccountId, conversationId, limit = 20) {
+async function fetchMessages(businessAccountId, conversationId, limit = 20) {
   const startTime = Date.now();
   const fetchLimit = Math.min(parseInt(limit) || 20, 100);
 
@@ -357,145 +347,14 @@ async function fetchAndStoreMessages(businessAccountId, conversationId, limit = 
       latency
     });
 
-    const messages = msgRes.data.data || [];
-    let dbMessages = null;
-
-    // Supabase write-through: upsert messages with is_from_business flag
-    if (messages.length > 0) {
-      try {
-        const supabase = getSupabaseAdmin();
-        if (supabase) {
-          // Resolve IG thread ID → Supabase UUID + customer_instagram_id for recipient fallback
-          let conversationUUID = null;
-          let customerIgId = null;
-          const { data: conv } = await supabase
-            .from('instagram_dm_conversations')
-            .select('id, customer_instagram_id')
-            .eq('instagram_thread_id', conversationId)
-            .maybeSingle();
-          conversationUUID = conv?.id || null;
-          customerIgId = conv?.customer_instagram_id || null;
-
-          // Maps any Meta message object → DB row shape.
-          // Used for both upsert AND the no-UUID fallback — eliminates shape mismatch.
-          const transformMessage = (m) => {
-            // pageId: defensive fallback — Meta docs list IGSID for business as either igUserId or pageId
-            const fromBusiness = m.from?.id === igUserId || (pageId && m.from?.id === pageId);
-
-            // Graph API attachment sub-fields (NOT webhook payload.url format)
-            const att = m.attachments?.data?.[0] || null;
-            const imgData = att?.image_data || null;
-            const isSticker = imgData?.render_as_sticker === true;
-
-            // Media URL: priority order covers all attachment variants
-            const mediaUrl = imgData?.url
-              || imgData?.animated_gif_url       // animated GIF
-              || att?.file_url                   // PDF / file
-              || m.story?.link                   // story reply CDN URL (top-level field)
-              || null;
-
-            // message_type: mapped to DB CHECK constraint values.
-            // DB allows: text, media, story_reply, story_mention, post_share,
-            //            voice_note, reel_share, icebreaker
-            //
-            // Previous values 'sticker', 'attachment', 'share', 'unsupported' are NOT
-            // in the DB enum — they caused silent CHECK constraint failures that killed
-            // entire message batches (all messages in a conversation lost on one bad type).
-            //
-            // Meta docs confirm NO separate endpoints for non-text content — all message
-            // types come through the same /{conversation-id}/messages endpoint.
-            // Attachments[] type field is the discriminator, not a separate API call.
-            let messageType = 'text';
-            if (isSticker)                    messageType = 'media';      // sticker = image attachment
-            else if (att)                     messageType = 'media';      // image, GIF, audio, video, file
-            else if (m.story)                 messageType = 'story_reply';
-            else if (m.shares?.data?.length)  messageType = 'post_share'; // was 'share' — DB enum is 'post_share'
-            else if (m.is_unsupported)        messageType = 'text';       // unrenderable — null body, safe fallback
-
-            // media_type: coarse MIME category for frontend rendering decisions
-            const mediaType = imgData ? 'image' : att?.file_url ? 'file' : null;
-
-            return {
-              instagram_message_id: m.id,
-              message_text: m.message || null,  // null not '' — empty string is semantically wrong
-              message_type: messageType,
-              media_url: mediaUrl,
-              media_type: mediaType,
-              conversation_id: conversationUUID,
-              business_account_id: businessAccountId,
-              is_from_business: fromBusiness,
-              // Meta omits `to` when no data — derive from known IDs as fallback
-              recipient_instagram_id: m.to?.data?.[0]?.id
-                || (fromBusiness ? customerIgId : igUserId)
-                || '',
-              sender_username: m.from?.username || null,
-              sent_at: m.created_time,
-              send_status: fromBusiness ? 'sent' : 'delivered',
-            };
-          };
-
-          if (!conversationUUID) {
-            // Conversation not yet in DB (race condition or prior upsert failure).
-            // Return correctly shaped data WITHOUT persisting — prevents permanent orphan rows
-            // (ignoreDuplicates: true can never repair conversation_id: null rows).
-            console.warn(`[messaging] ${conversationId} not in DB — returning without write`);
-            dbMessages = messages.filter(m => m.id).map(transformMessage);
-          } else {
-            const msgRecords = messages.filter(m => m.id).map(transformMessage);
-
-            const { error: upsertErr } = await supabase
-              .from('instagram_dm_messages')
-              // ignoreDuplicates: true — never overwrite existing status (preserves 'read' on re-fetch)
-              .upsert(msgRecords, { onConflict: 'instagram_message_id', ignoreDuplicates: true });
-
-            if (upsertErr) {
-              await logWithDomain('messaging', {
-                endpoint: '/conversation-messages/upsert', method: 'SYSTEM', success: false,
-                business_account_id: businessAccountId,
-                error: upsertErr.message,
-                details: { action: 'db_upsert_failed', table: 'instagram_dm_messages', count_attempted: msgRecords.length },
-              });
-              throw upsertErr;
-            } else {
-              // Orphan repair: messages stored with conversation_id: null by /send-dm or /reply-dm
-              // before the conversation row existed. IS NULL guard prevents touching already-linked rows.
-              const messageIds = msgRecords.map(r => r.instagram_message_id);
-              const { data: repaired } = await supabase
-                .from('instagram_dm_messages')
-                .update({ conversation_id: conversationUUID, business_account_id: businessAccountId })
-                .in('instagram_message_id', messageIds)
-                .is('conversation_id', null)
-                .select('instagram_message_id');
-
-              if (repaired?.length) {
-                logWithDomain('messaging', {
-                  endpoint: '/messaging/orphan_repair', method: 'SYSTEM', success: true,
-                  business_account_id: businessAccountId,
-                  details: { action: 'orphan_repair', messages_repaired: repaired.length, conversation_id: conversationId },
-                }).catch(() => {});
-              }
-
-              // DB query-back — returns fully populated DB rows (correct shape for frontend)
-              const { data: rows } = await supabase
-                .from('instagram_dm_messages')
-                .select('*')
-                .eq('conversation_id', conversationUUID)
-                .order('sent_at', { ascending: true })
-                .limit(fetchLimit);
-              if (rows) dbMessages = rows;
-            }
-          }
-        }
-      } catch (wtErr) {
-        console.warn('[messaging] Message write-through error:', wtErr.message);
-        throw wtErr;
-      }
-    }
+    const rawMessages = msgRes.data.data || [];
 
     return {
       success: true,
-      messages: dbMessages || messages,
-      count: (dbMessages || messages).length,
+      rawMessages,
+      igUserId,
+      pageId,
+      count: rawMessages.length,
       paging: msgRes.data.paging || {}
     };
 
@@ -516,14 +375,73 @@ async function fetchAndStoreMessages(businessAccountId, conversationId, limit = 
     });
 
     return {
-      success: false, messages: [], count: 0, paging: {}, error: errorMessage,
+      success: false, rawMessages: [], igUserId: null, pageId: null,
+      count: 0, paging: {}, error: errorMessage,
       code: error.response?.data?.error?.code,
       retryable, error_category, retry_after_seconds
     };
   }
 }
 
+// ============================================
+// CONVERSATION MESSAGES — SHIM (route backward-compat)
+// ============================================
+
+/**
+ * Fetches and persists messages for a single DM conversation.
+ * Shim wrapping fetchMessages + storeMessageBatches + DB query-back.
+ * Routes call this unchanged; domain loops call fetchMessages directly for batch parallelism.
+ *
+ * @param {string} businessAccountId
+ * @param {string} conversationId - Instagram thread ID
+ * @param {number} [limit=20]
+ * @returns {Promise<{success: boolean, messages: Array, count: number, paging: Object, error?: string}>}
+ */
+async function fetchAndStoreMessages(businessAccountId, conversationId, limit = 20) {
+  const result = await fetchMessages(businessAccountId, conversationId, limit);
+
+  if (result.success && result.rawMessages.length > 0) {
+    const supabase = getSupabaseAdmin();
+    if (supabase) {
+      await storeMessageBatches(
+        businessAccountId,
+        [{ conversationId, rawMessages: result.rawMessages }],
+        result.igUserId,
+        result.pageId
+      );
+
+      // Route-level query-back — returns DB-shaped rows for frontend (correct shape + status fields)
+      const { data: conv } = await supabase
+        .from('instagram_dm_conversations')
+        .select('id')
+        .eq('instagram_thread_id', conversationId)
+        .maybeSingle();
+
+      if (conv?.id) {
+        const fetchLimit = Math.min(parseInt(limit) || 20, 100);
+        const { data: rows } = await supabase
+          .from('instagram_dm_messages')
+          .select('*')
+          .eq('conversation_id', conv.id)
+          .order('sent_at', { ascending: true })
+          .limit(fetchLimit);
+        if (rows) {
+          return { ...result, messages: rows, count: rows.length };
+        }
+      }
+    }
+  }
+
+  // Fallback: return raw messages shaped via transformMessage (no DB query-back)
+  const fallbackMessages = result.rawMessages
+    .filter(m => m.id)
+    .map(m => transformMessage(m, null, businessAccountId, result.igUserId, result.pageId, null));
+  return { ...result, messages: fallbackMessages, count: fallbackMessages.length };
+}
+
 module.exports = {
+  fetchComments,
+  fetchMessages,
   fetchAndStoreComments,
   fetchAndStoreConversations,
   fetchAndStoreMessages,
