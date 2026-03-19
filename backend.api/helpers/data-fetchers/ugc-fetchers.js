@@ -20,6 +20,7 @@ const {
   GRAPH_API_BASE,
   logWithDomain,
   storeUgcContentBatch,
+  parseUsageHeader,
 } = require('./base');
 
 // ============================================
@@ -96,7 +97,10 @@ async function fetchHashtagMedia(businessAccountId, hashtag, limit = 25, credent
       }).catch(() => {});
     }
 
-    return { success: true, records, count: records.length, hashtagId };
+    return {
+      success: true, records, count: records.length, hashtagId,
+      _usagePct: parseUsageHeader(mediaRes.headers?.['x-business-use-case-usage']),
+    };
 
   } catch (error) {
     const latency = Date.now() - startTime;
@@ -212,7 +216,10 @@ async function fetchAndStoreTaggedMedia(businessAccountId, limit = 25) {
       }
     }
 
-    return { success: true, taggedPosts, count: taggedPosts.length };
+    return {
+      success: true, taggedPosts, count: taggedPosts.length,
+      _usagePct: parseUsageHeader(tagsRes.headers?.['x-business-use-case-usage']),
+    };
 
   } catch (error) {
     const latency = Date.now() - startTime;

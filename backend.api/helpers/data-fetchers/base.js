@@ -14,6 +14,7 @@ const {
   GRAPH_API_BASE,
 } = require('../agent-helpers');
 const { mapRawPostToUgcContent } = require('../ugc-field-map');
+const { parseUsageHeader } = require('../../services/sync/helpers');
 
 // ============================================
 // PER-DOMAIN LOGGER
@@ -318,4 +319,5 @@ module.exports = {
   storeCommentBatches,
   storeMessageBatches,
   storeUgcContentBatch,
+  parseUsageHeader,
 };

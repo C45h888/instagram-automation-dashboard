@@ -23,6 +23,7 @@ const {
   transformMessage,
   storeCommentBatches,
   storeMessageBatches,
+  parseUsageHeader,
 } = require('./base');
 
 // ============================================
@@ -79,7 +80,10 @@ async function fetchComments(businessAccountId, mediaId, limit = 50, credentials
       }).catch(() => {});
     }
 
-    return { success: true, records, count: records.length, paging };
+    return {
+      success: true, records, count: records.length, paging,
+      _usagePct: parseUsageHeader(commentsRes.headers?.['x-business-use-case-usage']),
+    };
 
   } catch (error) {
     const latency = Date.now() - startTime;
@@ -279,6 +283,7 @@ async function fetchAndStoreConversations(businessAccountId, limit = 20) {
       conversations,
       count: conversations.length,
       paging,
+      _usagePct: parseUsageHeader(convRes.headers?.['x-business-use-case-usage']),
     };
 
   } catch (error) {
@@ -355,7 +360,8 @@ async function fetchMessages(businessAccountId, conversationId, limit = 20, cred
       igUserId,
       pageId,
       count: rawMessages.length,
-      paging: msgRes.data.paging || {}
+      paging: msgRes.data.paging || {},
+      _usagePct: parseUsageHeader(msgRes.headers?.['x-business-use-case-usage']),
     };
 
   } catch (error) {

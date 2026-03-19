@@ -71,3 +71,6 @@ trace.zip
 *.sw?
 .env.production
 
+.kilocode/system-prompt-ask
+.gitignore
+.kilocode/system-prompt-code

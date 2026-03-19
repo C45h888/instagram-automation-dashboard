@@ -4,7 +4,7 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
-const { getSupabaseAdmin, logAudit } = require('../../config/supabase');
+const { getSupabaseAdmin, logAudit, logApiRequest } = require('../../config/supabase');
 const {
   resolveAccountCredentials,
   categorizeIgError,

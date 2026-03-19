@@ -7,7 +7,7 @@
 //
 // Conflict key for all upserts: (business_account_id, visitor_post_id)
 
-const VALID_MEDIA_TYPES = new Set(['IMAGE', 'VIDEO', 'CAROUSEL_ALBUM', 'TEXT']);
+const VALID_MEDIA_TYPES = new Set(['IMAGE', 'VIDEO', 'CAROUSEL_ALBUM', 'TEXT', 'REELS']);
 
 function normaliseMediaType(raw) {
   const upper = (raw || 'IMAGE').toUpperCase();

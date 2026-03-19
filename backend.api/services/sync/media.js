@@ -14,6 +14,9 @@ const {
   handleFetchError,
   getActiveAccounts,
   logSyncAudit,
+  updateQuotaUsage,
+  getAdaptiveDelay,
+  clearRecentMediaCache,
 } = require('./helpers');
 
 const {
@@ -72,12 +75,13 @@ async function proactiveMediaSync() {
         error_message: 'rate_limited',
       });
       // Note: delay is after the if/try block — falls through to bottom
-      await delay(INTER_ACCOUNT_DELAY_MS);
+      await delay(getAdaptiveDelay(account.id, INTER_ACCOUNT_DELAY_MS));
       continue;
     }
 
     try {
       const result = await fetchAndStoreBusinessPosts(account.id, 50);
+      updateQuotaUsage(account.id, result._usagePct);
       const { skip, break: brk } = handleFetchError(result, account.id);
 
       await logSyncAudit('media_posts', account.id, {
@@ -98,6 +102,7 @@ async function proactiveMediaSync() {
       } else {
         successCount++;
         itemsFetched += result.count || 0;
+        clearRecentMediaCache(account.id); // bust cache — comment sync picks up new posts immediately
       }
 
     } catch (accountError) {
@@ -117,7 +122,7 @@ async function proactiveMediaSync() {
       });
     }
 
-    await delay(INTER_ACCOUNT_DELAY_MS);
+    await delay(getAdaptiveDelay(account.id, INTER_ACCOUNT_DELAY_MS));
   }
 
   await writeSyncRunLog({

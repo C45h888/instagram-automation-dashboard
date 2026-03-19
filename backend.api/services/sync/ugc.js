@@ -17,6 +17,8 @@ const {
   getActiveAccounts,
   getMonitoredHashtags,
   logSyncAudit,
+  updateQuotaUsage,
+  getAdaptiveDelay,
 } = require('./helpers');
 
 const {
@@ -100,13 +102,14 @@ async function proactiveUgcSync() {
         items_fetched: 0, errors_count: 1,
         success: false, status: 'error', error_message: credErr.message,
       });
-      await delay(INTER_ACCOUNT_DELAY_MS);
+      await delay(getAdaptiveDelay(account.id, INTER_ACCOUNT_DELAY_MS));
       continue;
     }
 
     try {
       // ── Tagged media ─────────────────────────────────────────────────────
       const tagResult = await fetchAndStoreTaggedMedia(account.id, 50);
+      updateQuotaUsage(account.id, tagResult._usagePct);
       const { skip: tagSkip, break: tagBrk } = handleFetchError(tagResult, account.id);
 
       await logSyncAudit('ugc_tagged', account.id, {
@@ -123,7 +126,7 @@ async function proactiveUgcSync() {
         errorCount++;
         lastErrorMessage   = tagResult.error || 'tag_fetch_failed';
         lastErrorAccountId = account.id;
-        await delay(INTER_ACCOUNT_DELAY_MS);
+        await delay(getAdaptiveDelay(account.id, INTER_ACCOUNT_DELAY_MS));
         continue;
       }
 
@@ -141,6 +144,11 @@ async function proactiveUgcSync() {
         (hashtag) => fetchHashtagMedia(account.id, hashtag, 25, credentials),
         3
       );
+
+      // Propagate quota readings from parallel results
+      for (const r of hashFetchResults) {
+        if (r._usagePct != null) updateQuotaUsage(account.id, r._usagePct);
+      }
 
       // Post-batch error accounting
       for (const hashResult of hashFetchResults) {
@@ -174,7 +182,7 @@ async function proactiveUgcSync() {
         total_media:      totalHashtagMedia,
       });
 
-      await delay(INTER_ACCOUNT_DELAY_MS);
+      await delay(getAdaptiveDelay(account.id, INTER_ACCOUNT_DELAY_MS));
 
     } catch (accountError) {
       console.error(`[Sync:ugc] Account ${account.id} failed:`, accountError.message);

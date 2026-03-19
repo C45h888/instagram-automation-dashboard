@@ -24,6 +24,8 @@ const {
   getActiveAccounts,
   getRecentMedia,
   logSyncAudit,
+  updateQuotaUsage,
+  getAdaptiveDelay,
 } = require('./helpers');
 
 const {
@@ -110,7 +112,7 @@ async function proactiveCommentSync() {
         items_fetched: 0, errors_count: 1,
         success: false, status: 'error', error_message: credErr.message,
       });
-      await delay(INTER_ACCOUNT_DELAY_MS);
+      await delay(getAdaptiveDelay(account.id, INTER_ACCOUNT_DELAY_MS));
       continue;
     }
 
@@ -126,6 +128,11 @@ async function proactiveCommentSync() {
         (media) => fetchComments(account.id, media.instagram_media_id, 50, credentials),
         3
       );
+
+      // Propagate quota readings from parallel results
+      for (const r of commentResults) {
+        if (r._usagePct != null) updateQuotaUsage(account.id, r._usagePct);
+      }
 
       // Post-batch error accounting (results in same order as postsToCheck)
       for (const result of commentResults) {
@@ -160,7 +167,7 @@ async function proactiveCommentSync() {
         total_comments: totalComments,
       });
 
-      await delay(INTER_ACCOUNT_DELAY_MS);
+      await delay(getAdaptiveDelay(account.id, INTER_ACCOUNT_DELAY_MS));
 
     } catch (accountError) {
       console.error(`[Sync:comments] Account ${account.id} failed:`, accountError.message);
@@ -262,13 +269,14 @@ async function proactiveEngagementSync() {
         items_fetched: 0, errors_count: 1,
         success: false, status: 'error', error_message: credErr.message,
       });
-      await delay(INTER_ACCOUNT_DELAY_MS);
+      await delay(getAdaptiveDelay(account.id, INTER_ACCOUNT_DELAY_MS));
       continue;
     }
 
     try {
       // ── Conversations ────────────────────────────────────────────────────
       const convResult = await fetchAndStoreConversations(account.id, 20);
+      updateQuotaUsage(account.id, convResult._usagePct);
       const { skip: convSkip, break: convBrk } = handleFetchError(convResult, account.id);
 
       await logSyncAudit('conversations', account.id, {
@@ -285,7 +293,7 @@ async function proactiveEngagementSync() {
         errorCount++;
         lastErrorMessage   = convResult.error || 'conv_fetch_failed';
         lastErrorAccountId = account.id;
-        await delay(INTER_ACCOUNT_DELAY_MS);
+        await delay(getAdaptiveDelay(account.id, INTER_ACCOUNT_DELAY_MS));
         continue;
       }
 
@@ -305,6 +313,11 @@ async function proactiveEngagementSync() {
           (conv) => fetchMessages(account.id, conv.id, 20, credentials),
           3
         );
+
+        // Propagate quota readings from parallel results
+        for (const r of msgFetchResults) {
+          if (r._usagePct != null) updateQuotaUsage(account.id, r._usagePct);
+        }
 
         // Post-batch error accounting
         for (const result of msgFetchResults) {
@@ -340,7 +353,7 @@ async function proactiveEngagementSync() {
         successCount++;
       }
 
-      await delay(INTER_ACCOUNT_DELAY_MS);
+      await delay(getAdaptiveDelay(account.id, INTER_ACCOUNT_DELAY_MS));
 
     } catch (accountError) {
       console.error(`[Sync:engagement] Account ${account.id} failed:`, accountError.message);

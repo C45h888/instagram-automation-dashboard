@@ -14,6 +14,8 @@ const {
   handleFetchError,
   getActiveAccounts,
   logSyncAudit,
+  updateQuotaUsage,
+  getAdaptiveDelay,
 } = require('./helpers');
 
 const {
@@ -78,6 +80,7 @@ async function proactiveInsightsSync() {
       const now          = Math.floor(Date.now() / 1000);
 
       const result = await fetchAndStoreMediaInsights(account.id, sevenDaysAgo, now);
+      updateQuotaUsage(account.id, result._usagePct);
       const { skip, break: brk } = handleFetchError(result, account.id);
 
       await logSyncAudit('media_insights', account.id, {
@@ -100,7 +103,7 @@ async function proactiveInsightsSync() {
 
       successCount++;
       itemsFetched += result.count || 0;
-      await delay(INTER_ACCOUNT_DELAY_MS);
+      await delay(getAdaptiveDelay(account.id, INTER_ACCOUNT_DELAY_MS));
 
     } catch (accountError) {
       console.error(`[Sync:insights] Account ${account.id} failed:`, accountError.message);

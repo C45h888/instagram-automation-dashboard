@@ -21,6 +21,13 @@ const AUTH_FAILURE_MAX_STRIKES = 3;
 let _accountsCache = { data: [], expiresAt: 0 };
 const ACCOUNTS_CACHE_TTL_MS = 30 * 1000; // 30s — covers inter-cron overlap window
 
+const _quotaUsage = new Map(); // accountId → call_count pct (0–100), from X-Business-Use-Case-Usage
+
+const RECENT_MEDIA_CACHE_TTL_MS = 60 * 1000;     // 60s — new posts visible within 1 min
+const HASHTAGS_CACHE_TTL_MS     = 5 * 60 * 1000; // 5min — hashtags changed manually, stable
+const _recentMediaCache = new Map(); // accountId → { data: [], expiresAt: 0 }
+const _hashtagsCache    = new Map(); // accountId → { data: [], expiresAt: 0 }
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function delay(ms) {
@@ -94,6 +101,9 @@ async function markAccountDisconnectedOnAuthFailure(accountId, errorMessage) {
 
     clearCredentialCache(accountId);
     clearAccountsCache(); // disconnected account must be excluded from next cron tick immediately
+    _quotaUsage.delete(accountId);
+    _recentMediaCache.delete(accountId);
+    _hashtagsCache.delete(accountId);
     console.error(`[Sync:helpers] Account ${accountId} disconnected due to auth_failure`);
   } catch (err) {
     console.warn(`[Sync:helpers] Failed to mark account ${accountId} disconnected:`, err.message);
@@ -170,7 +180,67 @@ function clearAccountsCache() {
   _accountsCache = { data: [], expiresAt: 0 };
 }
 
+// ── Meta Quota Tracking (Cluster D) ──────────────────────────────────────────
+
+/**
+ * Parses X-Business-Use-Case-Usage header → max call_count across all instagram entries.
+ * Returns null if header is absent or unparseable — callers treat null as "no data, assume healthy".
+ * Per Meta docs: call_count = "percentage of allowed calls made by your app over a rolling one-hour period."
+ * @param {string|undefined} headerValue - raw header string from axios response
+ * @returns {number|null}
+ */
+function parseUsageHeader(headerValue) {
+  if (!headerValue) return null;
+  try {
+    const parsed = typeof headerValue === 'string' ? JSON.parse(headerValue) : headerValue;
+    let max = 0;
+    for (const entries of Object.values(parsed)) {
+      for (const entry of Array.isArray(entries) ? entries : [entries]) {
+        if (entry.type === 'instagram' && typeof entry.call_count === 'number') {
+          max = Math.max(max, entry.call_count);
+        }
+      }
+    }
+    return max;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Stores latest quota reading for an account.
+ * Called by domain loops after collecting fetcher results.
+ * @param {string} accountId
+ * @param {number|null|undefined} usagePct
+ */
+function updateQuotaUsage(accountId, usagePct) {
+  if (usagePct != null) _quotaUsage.set(accountId, usagePct);
+}
+
+/**
+ * Returns the inter-account delay scaled to current Meta quota pressure.
+ * Tiers (per Meta docs: 100% = throttled; monitor proactively):
+ *   call_count < 50%  → ~500ms  (healthy — green)
+ *   call_count 50–79% → 1500ms  (moderate pressure — yellow)
+ *   call_count ≥ 80%  → maxMs   (high pressure — red, use full configured delay)
+ * Defaults to green tier when no quota data exists (new account or first run).
+ * @param {string} accountId
+ * @param {number} maxMs - INTER_ACCOUNT_DELAY_MS from domain config (default 3000)
+ * @returns {number}
+ */
+function getAdaptiveDelay(accountId, maxMs) {
+  const pct = _quotaUsage.get(accountId) ?? 0;
+  if (pct >= 80) return maxMs;
+  if (pct >= 50) return Math.round(maxMs * 0.5);
+  return Math.round(maxMs * 0.17); // ~500ms for default 3000ms config
+}
+
+// ── Per-Account TTL Caches (Cluster E) ───────────────────────────────────────
+
 async function getRecentMedia(accountId) {
+  const cached = _recentMediaCache.get(accountId);
+  if (cached && Date.now() < cached.expiresAt) return cached.data;
+
   const supabase = getSupabaseAdmin();
   if (!supabase) return [];
 
@@ -186,12 +256,18 @@ async function getRecentMedia(accountId) {
 
   if (error) {
     console.warn('[Sync:helpers] Failed to fetch recent media:', error.message);
-    return [];
+    return cached?.data || []; // serve stale on DB error
   }
-  return data || [];
+
+  const result = data || [];
+  _recentMediaCache.set(accountId, { data: result, expiresAt: Date.now() + RECENT_MEDIA_CACHE_TTL_MS });
+  return result;
 }
 
 async function getMonitoredHashtags(accountId) {
+  const cached = _hashtagsCache.get(accountId);
+  if (cached && Date.now() < cached.expiresAt) return cached.data;
+
   const supabase = getSupabaseAdmin();
   if (!supabase) return [];
 
@@ -203,9 +279,22 @@ async function getMonitoredHashtags(accountId) {
 
   if (error) {
     console.warn('[Sync:helpers] Failed to fetch hashtags:', error.message);
-    return [];
+    return cached?.data || []; // serve stale on DB error
   }
-  return (data || []).map(h => h.hashtag);
+
+  const result = (data || []).map(h => h.hashtag);
+  _hashtagsCache.set(accountId, { data: result, expiresAt: Date.now() + HASHTAGS_CACHE_TTL_MS });
+  return result;
+}
+
+function clearRecentMediaCache(accountId) {
+  if (accountId) _recentMediaCache.delete(accountId);
+  else _recentMediaCache.clear();
+}
+
+function clearHashtagsCache(accountId) {
+  if (accountId) _hashtagsCache.delete(accountId);
+  else _hashtagsCache.clear();
 }
 
 // ── Enhanced Audit Logging ───────────────────────────────────────────────────
@@ -350,7 +439,12 @@ module.exports = {
   handleFetchError,
   getActiveAccounts,
   clearAccountsCache,
+  parseUsageHeader,
+  updateQuotaUsage,
+  getAdaptiveDelay,
   getRecentMedia,
+  clearRecentMediaCache,
   getMonitoredHashtags,
+  clearHashtagsCache,
   logSyncAudit,
 };

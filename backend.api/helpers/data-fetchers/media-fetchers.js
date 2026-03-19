@@ -14,6 +14,7 @@ const {
   syncHashtagsFromCaptions,
   GRAPH_API_BASE,
   logWithDomain,
+  parseUsageHeader,
 } = require('./base');
 
 // ============================================
@@ -157,7 +158,10 @@ async function fetchAndStoreMediaInsights(businessAccountId, since, until) {
       }
     }
 
-    return { success: true, mediaInsights, count: mediaInsights.length };
+    return {
+      success: true, mediaInsights, count: mediaInsights.length,
+      _usagePct: parseUsageHeader(mediaRes.headers?.['x-business-use-case-usage']),
+    };
 
   } catch (error) {
     const latency = Date.now() - startTime;
@@ -262,7 +266,10 @@ async function fetchAndStoreBusinessPosts(businessAccountId, limit = 50) {
       }
     }
 
-    return { success: true, count: posts.length };
+    return {
+      success: true, count: posts.length,
+      _usagePct: parseUsageHeader(mediaRes.headers?.['x-business-use-case-usage']),
+    };
 
   } catch (error) {
     const latency = Date.now() - startTime;
