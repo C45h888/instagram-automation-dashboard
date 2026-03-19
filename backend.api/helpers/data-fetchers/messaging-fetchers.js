@@ -22,6 +22,7 @@ const {
   logWithDomain,
   transformMessage,
   storeCommentBatches,
+  storeConversationBatches,
   storeMessageBatches,
   parseUsageHeader,
 } = require('./base');
@@ -133,65 +134,39 @@ async function fetchAndStoreComments(businessAccountId, mediaId, limit = 50) {
 }
 
 // ============================================
-// CONVERSATIONS
+// CONVERSATIONS — THIN FETCH
 // ============================================
 
 /**
- * Fetches DM conversations with 24h window status and upserts to instagram_dm_conversations.
- * Called once per account per tick — no inner loop, no parallelisation needed.
+ * Fetches DM conversations from the Instagram Graph API.
+ * NO DB write — callers use storeConversationBatches() for persistence.
+ *
+ * Uses messages.limit(2) so storeConversationBatches can identify the customer's
+ * last message even when the business replied most recently (fixes window bug).
  *
  * @param {string} businessAccountId - UUID
  * @param {number} [limit=20] - Max conversations (capped at 50)
- * @returns {Promise<{success: boolean, conversations: Array, count: number, paging: Object, error?: string}>}
+ * @param {object} [credentials=null] - Pre-resolved credentials (avoids extra DB hit)
+ * @returns {Promise<{success: boolean, rawConversations: Array, igUserId: string, pageId: string|null, count: number, paging: Object, _usagePct: number|null, error?: string}>}
  */
-async function fetchAndStoreConversations(businessAccountId, limit = 20) {
+async function fetchConversations(businessAccountId, limit = 20, credentials = null) {
   const startTime = Date.now();
   const fetchLimit = Math.min(parseInt(limit) || 20, 50);
 
   try {
-    const { igUserId, pageToken, userId, pageId } = await resolveAccountCredentials(businessAccountId);
+    const { igUserId, pageToken, userId, pageId } = credentials || await resolveAccountCredentials(businessAccountId);
 
-    // Meta docs: GET /{page-id}/conversations?platform=INSTAGRAM
-    // pageId = Facebook Page ID (e.g. "632688196603930"), NOT igUserId (IG User ID)
+    // Meta: GET /{page-id}/conversations?platform=INSTAGRAM
+    // pageId = Facebook Page ID, NOT igUserId — required for Instagram DM conversations on business accounts
     const conversationNode = pageId || igUserId;
     const convRes = await axios.get(`${GRAPH_API_BASE}/${conversationNode}/conversations`, {
       params: {
-        fields: 'id,participants{id,username},updated_time,message_count,messages.limit(1){created_time,from{id}}',
+        fields: 'id,participants{id,username},updated_time,message_count,messages.limit(2){created_time,from{id}}',
         platform: 'INSTAGRAM',
         limit: fetchLimit,
-        access_token: pageToken
+        access_token: pageToken,
       },
-      timeout: 10000
-    });
-
-    // Transform with 24-hour window calculation
-    const now = new Date();
-    const conversations = (convRes.data.data || []).map(conv => {
-      const lastMessage = conv.messages?.data?.[0];
-      const lastMessageTime = lastMessage ? new Date(lastMessage.created_time) : null;
-      const hoursSinceLastMessage = lastMessageTime
-        ? (now - lastMessageTime) / (1000 * 60 * 60)
-        : null;
-      const isWithin24Hours = hoursSinceLastMessage !== null && hoursSinceLastMessage < 24;
-      const hoursRemaining = hoursSinceLastMessage !== null
-        ? Math.max(0, 24 - hoursSinceLastMessage)
-        : null;
-
-      return {
-        id: conv.id,
-        participants: conv.participants?.data || [],
-        last_message_at: conv.updated_time,
-        message_count: conv.message_count || 0,
-        last_message: lastMessage || null,
-        messaging_window: {
-          is_open: isWithin24Hours,
-          hours_remaining: hoursRemaining !== null ? parseFloat(hoursRemaining.toFixed(1)) : null,
-          requires_template: hoursSinceLastMessage !== null && hoursSinceLastMessage >= 24,
-          last_customer_message_at: lastMessageTime ? lastMessageTime.toISOString() : null
-        },
-        within_window: isWithin24Hours,
-        can_send_messages: isWithin24Hours
-      };
+      timeout: 10000,
     });
 
     const latency = Date.now() - startTime;
@@ -202,86 +177,26 @@ async function fetchAndStoreConversations(businessAccountId, limit = 20) {
       business_account_id: businessAccountId,
       user_id: userId,
       success: true,
-      latency
+      latency,
     });
 
-    // Supabase write-through: upsert DM conversations with 24h window status.
-    // DB is the shared source of truth — frontend/inbox.js reads its own shaped view from these tables.
-    if (conversations.length > 0) {
-      try {
-        const supabase = getSupabaseAdmin();
-        if (supabase) {
-          const convRecords = conversations
-            .filter(conv => conv.participants?.length > 0 && conv.participants[0].id)
-            .map(conv => {
-              const mw = conv.messaging_window || {};
-              const isOpen = mw.is_open || false;
-              const hr = mw.hours_remaining;
-              const windowExpiresAt = isOpen && hr != null
-                ? new Date(Date.now() + hr * 3600000).toISOString()
-                : null;
-              // participants includes both business and customer — find the non-business one
-              const customerParticipant = conv.participants.find(
-                p => p.id !== igUserId && p.id !== pageId
-              ) || conv.participants[0];
-              // last_user_message_at: only set when the last message was from the customer
-              const lastMsg = conv.last_message;
-              const lastUserMessageAt = (
-                lastMsg &&
-                lastMsg.from?.id !== igUserId &&
-                lastMsg.from?.id !== pageId
-              ) ? lastMsg.created_time : null;
-
-              return {
-                instagram_thread_id: conv.id,
-                customer_instagram_id: customerParticipant.id,
-                customer_username: customerParticipant.username || null,
-                // customer_name intentionally omitted — participants.name is Page-only, never returned for Instagram
-                business_account_id: businessAccountId,
-                within_window: isOpen,
-                window_expires_at: windowExpiresAt,
-                last_message_at: conv.last_message_at,
-                last_user_message_at: lastUserMessageAt,
-                message_count: conv.message_count || 0,
-                conversation_status: 'active',
-              };
-            });
-          if (convRecords.length > 0) {
-            const { error: upsertErr } = await supabase
-              .from('instagram_dm_conversations')
-              .upsert(convRecords, { onConflict: 'instagram_thread_id', ignoreDuplicates: false });
-            if (upsertErr) {
-              await logWithDomain('messaging', {
-                endpoint: '/conversations/upsert', method: 'SYSTEM', success: false,
-                business_account_id: businessAccountId,
-                error: upsertErr.message,
-                details: { action: 'db_upsert_failed', table: 'instagram_dm_conversations', count_attempted: convRecords.length },
-              });
-              throw upsertErr;
-            }
-          }
-        }
-      } catch (wtErr) {
-        console.warn('[messaging] Conversation write-through error:', wtErr.message);
-        throw wtErr;
-      }
-    }
-
+    const rawConversations = convRes.data.data || [];
     const paging = convRes.data.paging || {};
+
     if (paging.next) {
       logWithDomain('messaging', {
         endpoint: '/conversations/paging', method: 'SYSTEM', success: true,
         business_account_id: businessAccountId,
-        details: { action: 'paging_next_detected', items_this_page: conversations.length, next_cursor_present: true },
+        details: { action: 'paging_next_detected', items_this_page: rawConversations.length, next_cursor_present: true },
       }).catch(() => {});
     }
 
-    // Return Graph API native shape — what the Python agent needs.
-    // Frontend reads its own shaped view from DB via GET /dm-conversations (frontend/inbox.js).
     return {
       success: true,
-      conversations,
-      count: conversations.length,
+      rawConversations,
+      igUserId,
+      pageId,
+      count: rawConversations.length,
       paging,
       _usagePct: parseUsageHeader(convRes.headers?.['x-business-use-case-usage']),
     };
@@ -303,11 +218,41 @@ async function fetchAndStoreConversations(businessAccountId, limit = 20) {
     });
 
     return {
-      success: false, conversations: [], count: 0, paging: {}, error: errorMessage,
+      success: false, rawConversations: [], igUserId: null, pageId: null,
+      count: 0, paging: {}, error: errorMessage,
       code: error.response?.data?.error?.code,
-      retryable, error_category, retry_after_seconds
+      retryable, error_category, retry_after_seconds,
     };
   }
+}
+
+// ============================================
+// CONVERSATIONS — SHIM (route + sync backward-compat)
+// ============================================
+
+/**
+ * Fetches and persists DM conversations with corrected 24h window calculation.
+ * Shim wrapping fetchConversations + storeConversationBatches.
+ * Both buses (sync/engagement.js and routes/agents/engagement.js) call this unchanged.
+ *
+ * @param {string} businessAccountId
+ * @param {number} [limit=20]
+ * @returns {Promise<{success: boolean, conversations: Array, count: number, paging: Object, error?: string}>}
+ */
+async function fetchAndStoreConversations(businessAccountId, limit = 20) {
+  const result = await fetchConversations(businessAccountId, limit);
+  if (result.success && result.rawConversations.length > 0) {
+    try {
+      const stored = await storeConversationBatches(
+        businessAccountId, result.rawConversations, result.igUserId, result.pageId
+      );
+      return { ...result, conversations: stored.conversations };
+    } catch (wtErr) {
+      console.warn('[messaging] Conversation write-through error:', wtErr.message);
+      throw wtErr;
+    }
+  }
+  return { ...result, conversations: [] };
 }
 
 // ============================================
@@ -359,6 +304,7 @@ async function fetchMessages(businessAccountId, conversationId, limit = 20, cred
       rawMessages,
       igUserId,
       pageId,
+      pageToken,  // passed through so shim can forward to storeMessageBatches credentials
       count: rawMessages.length,
       paging: msgRes.data.paging || {},
       _usagePct: parseUsageHeader(msgRes.headers?.['x-business-use-case-usage']),
@@ -409,44 +355,31 @@ async function fetchAndStoreMessages(businessAccountId, conversationId, limit = 
   if (result.success && result.rawMessages.length > 0) {
     const supabase = getSupabaseAdmin();
     if (supabase) {
+      // Pass credentials so storeMessageBatches can call ensureConversationRows if needed
+      const credentials = result.pageToken
+        ? { pageToken: result.pageToken, igUserId: result.igUserId, pageId: result.pageId }
+        : null;
       await storeMessageBatches(
         businessAccountId,
         [{ conversationId, rawMessages: result.rawMessages }],
         result.igUserId,
-        result.pageId
+        result.pageId,
+        credentials
       );
-
-      // Route-level query-back — returns DB-shaped rows for frontend (correct shape + status fields)
-      const { data: conv } = await supabase
-        .from('instagram_dm_conversations')
-        .select('id')
-        .eq('instagram_thread_id', conversationId)
-        .maybeSingle();
-
-      if (conv?.id) {
-        const fetchLimit = Math.min(parseInt(limit) || 20, 100);
-        const { data: rows } = await supabase
-          .from('instagram_dm_messages')
-          .select('*')
-          .eq('conversation_id', conv.id)
-          .order('sent_at', { ascending: true })
-          .limit(fetchLimit);
-        if (rows) {
-          return { ...result, messages: rows, count: rows.length };
-        }
-      }
     }
   }
 
-  // Fallback: return raw messages shaped via transformMessage (no DB query-back)
-  const fallbackMessages = result.rawMessages
+  // Return raw messages shaped via transformMessage.
+  // The DB query-back (for frontend-shaped rows) is route-layer concern — lives in engagement.js.
+  const messages = result.rawMessages
     .filter(m => m.id)
     .map(m => transformMessage(m, null, businessAccountId, result.igUserId, result.pageId, null));
-  return { ...result, messages: fallbackMessages, count: fallbackMessages.length };
+  return { ...result, messages, count: messages.length };
 }
 
 module.exports = {
   fetchComments,
+  fetchConversations,
   fetchMessages,
   fetchAndStoreComments,
   fetchAndStoreConversations,

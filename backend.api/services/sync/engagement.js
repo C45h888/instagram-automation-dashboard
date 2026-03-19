@@ -334,7 +334,9 @@ async function proactiveEngagementSync() {
             .map(({ conversationId, result }) => ({ conversationId, rawMessages: result.rawMessages }));
 
           if (messageBatches.length > 0) {
-            await storeMessageBatches(account.id, messageBatches, credentials.igUserId, credentials.pageId);
+            // Pass credentials so storeMessageBatches can call ensureConversationRows
+            // if a new conversation arrived after the conversations fetch completed
+            await storeMessageBatches(account.id, messageBatches, credentials.igUserId, credentials.pageId, credentials);
           }
         }
 

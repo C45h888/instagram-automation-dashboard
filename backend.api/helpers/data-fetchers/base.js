@@ -10,6 +10,7 @@ const {
   resolveAccountCredentials,
   categorizeIgError,
   ensureMediaRecord,
+  ensureConversationRows,
   syncHashtagsFromCaptions,
   GRAPH_API_BASE,
 } = require('../agent-helpers');
@@ -188,13 +189,18 @@ async function storeCommentBatches(businessAccountId, batches) {
  * Batch-writes message records from multiple conversations in a single DB round-trip.
  * Replaces N×UUIDlookup + N×upsert + N×orphanRepair with 1×SELECT + 1×upsert + N×orphan (parallel).
  *
+ * Data leak fix: instead of silently dropping messages for unknown conversations,
+ * this function calls ensureConversationRows() to create the missing conversation
+ * row (via API retry → stub fallback) before proceeding. No messages are ever dropped.
+ *
  * @param {string} businessAccountId
  * @param {Array<{conversationId: string, rawMessages: Array}>} batches
  * @param {string} igUserId   - Business IG User ID (from resolveAccountCredentials)
  * @param {string|null} pageId - Facebook Page ID (defensive fallback)
+ * @param {object|null} [credentials] - { pageToken, igUserId, pageId } — enables API recovery
  * @returns {Promise<{count: number}>}
  */
-async function storeMessageBatches(businessAccountId, batches, igUserId, pageId) {
+async function storeMessageBatches(businessAccountId, batches, igUserId, pageId, credentials = null) {
   const supabase = getSupabaseAdmin();
   if (!supabase || !batches.length) return { count: 0 };
 
@@ -213,12 +219,38 @@ async function storeMessageBatches(businessAccountId, batches, igUserId, pageId)
     };
   }
 
-  // Step 2: Apply transformMessage for each message, skip unknown conversations
+  // Step 1b: Recover any missing conversations — never silently drop messages
+  const missingThreadIds = threadIds.filter(id => !convMap[id]);
+  if (missingThreadIds.length > 0) {
+    await ensureConversationRows(
+      supabase,
+      businessAccountId,
+      missingThreadIds,
+      igUserId,
+      credentials?.pageToken || null,
+      pageId
+    );
+
+    // Re-SELECT to pick up newly inserted rows (proper or stub)
+    const { data: newRows } = await supabase
+      .from('instagram_dm_conversations')
+      .select('id, instagram_thread_id, customer_instagram_id')
+      .in('instagram_thread_id', missingThreadIds);
+    for (const row of newRows || []) {
+      convMap[row.instagram_thread_id] = {
+        uuid: row.id,
+        customerIgId: row.customer_instagram_id,
+      };
+    }
+  }
+
+  // Step 2: Apply transformMessage for each message
   const allMsgRecords = [];
   for (const { conversationId, rawMessages } of batches) {
     const conv = convMap[conversationId];
     if (!conv) {
-      console.warn(`[messaging] storeMessageBatches: ${conversationId} not in DB — skipping batch`);
+      // Should not reach here after ensureConversationRows — log if it does
+      console.error(`[messaging] storeMessageBatches: ${conversationId} still missing after recovery — this is a bug`);
       continue;
     }
     for (const m of rawMessages) {
@@ -275,6 +307,99 @@ async function storeMessageBatches(businessAccountId, batches, igUserId, pageId)
 }
 
 /**
+ * Batch-writes conversation records in a single DB round-trip.
+ * Correctly calculates the 24h messaging window from the CUSTOMER's last message only
+ * (not from any last message, which could be a business reply violating Meta's window policy).
+ *
+ * Requires rawConversations to include messages.limit(2){created_time,from{id}} so we can
+ * find the customer-sent message even when the business replied most recently.
+ *
+ * @param {string} businessAccountId
+ * @param {Array} rawConversations - Raw API conversations array from fetchConversations()
+ * @param {string} igUserId - Business IG User ID (to identify business messages)
+ * @param {string|null} pageId - Facebook Page ID (defensive fallback for business ID check)
+ * @returns {Promise<{count: number, conversations: Array}>} count = rows written, conversations = shaped array
+ */
+async function storeConversationBatches(businessAccountId, rawConversations, igUserId, pageId) {
+  const supabase = getSupabaseAdmin();
+  if (!supabase || !rawConversations.length) return { count: 0, conversations: [] };
+
+  const now = new Date();
+  const convRecords = [];
+  const shapedConversations = [];
+
+  for (const conv of rawConversations) {
+    // Find the customer's last message — skip any sent by the business account
+    const customerMsg = conv.messages?.data?.find(
+      m => m.from?.id !== igUserId && m.from?.id !== pageId
+    );
+    const lastCustomerTime = customerMsg ? new Date(customerMsg.created_time) : null;
+    const hoursSince = lastCustomerTime ? (now - lastCustomerTime) / 3_600_000 : null;
+    const isOpen = hoursSince !== null && hoursSince < 24;
+    const hoursRemaining = hoursSince !== null ? Math.max(0, 24 - hoursSince) : null;
+    const windowExpiresAt = isOpen && hoursRemaining != null
+      ? new Date(Date.now() + hoursRemaining * 3_600_000).toISOString()
+      : null;
+
+    // Identify customer participant (not the business)
+    const participants = conv.participants?.data || [];
+    const customerParticipant = participants.find(
+      p => p.id !== igUserId && p.id !== pageId
+    ) || participants[0];
+
+    if (!customerParticipant?.id) continue; // skip conversations with no resolvable customer
+
+    convRecords.push({
+      instagram_thread_id: conv.id,
+      customer_instagram_id: customerParticipant.id,
+      customer_username: customerParticipant.username || null,
+      business_account_id: businessAccountId,
+      within_window: isOpen,
+      window_expires_at: windowExpiresAt,
+      last_message_at: conv.updated_time || null,
+      last_user_message_at: lastCustomerTime ? lastCustomerTime.toISOString() : null,
+      message_count: conv.message_count || 0,
+      conversation_status: 'active',
+    });
+
+    // Shaped output for callers (same contract as the old fetchAndStoreConversations return)
+    shapedConversations.push({
+      id: conv.id,
+      participants,
+      last_message_at: conv.updated_time,
+      message_count: conv.message_count || 0,
+      last_message: conv.messages?.data?.[0] || null,
+      messaging_window: {
+        is_open: isOpen,
+        hours_remaining: hoursRemaining !== null ? parseFloat(hoursRemaining.toFixed(1)) : null,
+        requires_template: hoursSince !== null && hoursSince >= 24,
+        last_customer_message_at: lastCustomerTime ? lastCustomerTime.toISOString() : null,
+      },
+      within_window: isOpen,
+      can_send_messages: isOpen,
+    });
+  }
+
+  if (convRecords.length === 0) return { count: 0, conversations: shapedConversations };
+
+  const { error: upsertErr } = await supabase
+    .from('instagram_dm_conversations')
+    .upsert(convRecords, { onConflict: 'instagram_thread_id', ignoreDuplicates: false });
+
+  if (upsertErr) {
+    await logWithDomain('messaging', {
+      endpoint: '/conversations/upsert', method: 'SYSTEM', success: false,
+      business_account_id: businessAccountId,
+      error: upsertErr.message,
+      details: { action: 'db_upsert_failed', table: 'instagram_dm_conversations', count_attempted: convRecords.length },
+    });
+    throw upsertErr;
+  }
+
+  return { count: convRecords.length, conversations: shapedConversations };
+}
+
+/**
  * Batch-writes UGC records (already shaped by mapRawPostToUgcContent) in a single upsert.
  * Replaces N×upsertUgcContent with 1×upsert across all hashtags.
  *
@@ -311,12 +436,14 @@ module.exports = {
   resolveAccountCredentials,
   categorizeIgError,
   ensureMediaRecord,
+  ensureConversationRows,
   syncHashtagsFromCaptions,
   mapRawPostToUgcContent,
   GRAPH_API_BASE,
   logWithDomain,
   transformMessage,
   storeCommentBatches,
+  storeConversationBatches,
   storeMessageBatches,
   storeUgcContentBatch,
   parseUsageHeader,

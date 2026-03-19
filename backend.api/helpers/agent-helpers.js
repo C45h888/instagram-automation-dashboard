@@ -392,8 +392,122 @@ async function pollMediaContainerStatus(creationId, pageToken, opts = {}) {
   throw new Error(`Media container ${creationId} not ready after ${maxAttempts} attempts`);
 }
 
+// ============================================
+// HELPER: ENSURE CONVERSATION ROWS
+// ============================================
+
+/**
+ * Guarantees conversation rows exist in instagram_dm_conversations for a set of thread IDs.
+ * Called by storeMessageBatches() when a conversation batch has no matching DB row,
+ * preventing silent message drop.
+ *
+ * Strategy:
+ *   1. Fetch live conversation data from Meta API (up to 2 attempts).
+ *   2. Upsert proper rows for any thread IDs found in the API response.
+ *   3. For thread IDs still not found after both attempts: upsert minimal stub rows
+ *      so messages can be stored against a valid FK. Stubs are never overwritten by
+ *      subsequent proper rows (ignoreDuplicates: true on stub upsert only).
+ *
+ * @param {Object} supabase - Supabase admin client
+ * @param {string} businessAccountId - UUID
+ * @param {string[]} missingThreadIds - Thread IDs not currently in instagram_dm_conversations
+ * @param {string} igUserId - Business IG User ID
+ * @param {string} pageToken - Page access token
+ * @param {string|null} pageId - Facebook Page ID (preferred node for conversations endpoint)
+ */
+async function ensureConversationRows(supabase, businessAccountId, missingThreadIds, igUserId, pageToken, pageId) {
+  const MAX_ATTEMPTS = 2;
+  const remaining = new Set(missingThreadIds);
+  const now = new Date();
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS && remaining.size > 0; attempt++) {
+    try {
+      const conversationNode = pageId || igUserId;
+      const convRes = await axios.get(`${GRAPH_API_BASE}/${conversationNode}/conversations`, {
+        params: {
+          fields: 'id,participants{id,username},updated_time,message_count,messages.limit(2){created_time,from{id}}',
+          platform: 'INSTAGRAM',
+          limit: 50,
+          access_token: pageToken,
+        },
+        timeout: 10000,
+      });
+
+      const apiConversations = convRes.data?.data || [];
+      const foundRecords = [];
+
+      for (const conv of apiConversations) {
+        if (!remaining.has(conv.id)) continue;
+
+        // Calculate window from customer's last message only
+        const customerMsg = conv.messages?.data?.find(
+          m => m.from?.id !== igUserId && m.from?.id !== pageId
+        );
+        const lastCustomerTime = customerMsg ? new Date(customerMsg.created_time) : null;
+        const hoursSince = lastCustomerTime ? (now - lastCustomerTime) / 3_600_000 : null;
+        const isOpen = hoursSince !== null && hoursSince < 24;
+        const hoursRemaining = hoursSince !== null ? Math.max(0, 24 - hoursSince) : null;
+
+        const participants = conv.participants?.data || [];
+        const customerParticipant = participants.find(
+          p => p.id !== igUserId && p.id !== pageId
+        ) || participants[0];
+
+        foundRecords.push({
+          instagram_thread_id: conv.id,
+          customer_instagram_id: customerParticipant?.id || null,
+          customer_username: customerParticipant?.username || null,
+          business_account_id: businessAccountId,
+          within_window: isOpen,
+          window_expires_at: isOpen && hoursRemaining != null
+            ? new Date(Date.now() + hoursRemaining * 3_600_000).toISOString()
+            : null,
+          last_message_at: conv.updated_time || null,
+          last_user_message_at: lastCustomerTime ? lastCustomerTime.toISOString() : null,
+          message_count: conv.message_count || 0,
+          conversation_status: 'active',
+        });
+
+        remaining.delete(conv.id);
+      }
+
+      if (foundRecords.length > 0) {
+        await supabase
+          .from('instagram_dm_conversations')
+          .upsert(foundRecords, { onConflict: 'instagram_thread_id', ignoreDuplicates: false });
+      }
+
+    } catch (err) {
+      console.warn(`[ensureConversationRows] API attempt ${attempt}/${MAX_ATTEMPTS} failed:`, err.message);
+    }
+  }
+
+  // Any thread IDs still not found after all API attempts → insert stub rows
+  // ignoreDuplicates: true ensures stubs never overwrite a proper row
+  if (remaining.size > 0) {
+    const stubs = [...remaining].map(threadId => ({
+      instagram_thread_id: threadId,
+      business_account_id: businessAccountId,
+      within_window: false,
+      conversation_status: 'active',
+    }));
+    const { error: stubErr } = await supabase
+      .from('instagram_dm_conversations')
+      .upsert(stubs, { onConflict: 'instagram_thread_id', ignoreDuplicates: true });
+    if (stubErr) {
+      console.warn('[ensureConversationRows] Stub upsert failed:', stubErr.message);
+    } else {
+      console.warn(
+        `[ensureConversationRows] ${stubs.length} conversation(s) not found via API — ` +
+        `stub row(s) inserted: ${[...remaining].join(', ')}`
+      );
+    }
+  }
+}
+
 module.exports = {
   ensureMediaRecord,
+  ensureConversationRows,
   syncHashtagsFromCaptions,
   resolveAccountCredentials,
   clearCredentialCache,

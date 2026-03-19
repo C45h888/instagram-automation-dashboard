@@ -150,30 +150,35 @@ async function fetchAndStoreHashtagMedia(businessAccountId, hashtag, limit = 25)
 }
 
 // ============================================
-// TAGGED MEDIA (UGC)
+// TAGGED MEDIA — THIN FETCH
 // ============================================
 
 /**
- * Fetches tagged posts and upserts to ugc_content.
- * Extracted from: routes/agents/ugc.js GET /tags
+ * Fetches posts where the business account is tagged by other users.
+ * NO DB write — callers use storeUgcContentBatch() for persistence.
+ *
+ * Field fix: owner{id} added — previously missing, causing author_instagram_id to
+ * always be null in ugc_content, breaking UGC creator DM permission flows.
  *
  * @param {string} businessAccountId - UUID
  * @param {number} [limit=25] - Max tagged posts (capped at 50)
- * @returns {Promise<{success: boolean, taggedPosts: Array, count: number, error?: string}>}
+ * @param {object} [credentials=null] - Pre-resolved credentials
+ * @returns {Promise<{success: boolean, records: Array, count: number, paging: Object, _usagePct: number|null, error?: string}>}
  */
-async function fetchAndStoreTaggedMedia(businessAccountId, limit = 25) {
+async function fetchTaggedMedia(businessAccountId, limit = 25, credentials = null) {
   const startTime = Date.now();
   const fetchLimit = Math.min(parseInt(limit) || 25, 50);
 
   try {
-    const { igUserId, pageToken } = await resolveAccountCredentials(businessAccountId);
+    const { igUserId, pageToken } = credentials || await resolveAccountCredentials(businessAccountId);
 
     const tagsRes = await axios.get(`${GRAPH_API_BASE}/${igUserId}/tags`, {
       params: {
-        fields: 'id,media_type,media_url,thumbnail_url,caption,permalink,timestamp,username,like_count,comments_count',
+        // owner{id} added: was missing, causing author_instagram_id=null for all tagged UGC
+        fields: 'id,media_type,media_url,thumbnail_url,caption,permalink,timestamp,username,like_count,comments_count,owner{id}',
         limit: fetchLimit,
-        access_token: pageToken
-      }
+        access_token: pageToken,
+      },
     });
 
     const latency = Date.now() - startTime;
@@ -184,40 +189,27 @@ async function fetchAndStoreTaggedMedia(businessAccountId, limit = 25) {
       business_account_id: businessAccountId,
       user_id: igUserId,
       success: true,
-      latency
+      latency,
     });
 
-    const taggedPosts = tagsRes.data.data || [];
+    const rawPosts = tagsRes.data.data || [];
+    const paging = tagsRes.data.paging || {};
 
-    // Supabase write-through: raw tagged UGC into unified ugc_content (agent enriches quality fields later)
-    if (taggedPosts.length > 0) {
-      try {
-        const supabase = getSupabaseAdmin();
-        if (supabase) {
-          const ugcRecords = taggedPosts
-            .filter(p => p.id)
-            .map(p => mapRawPostToUgcContent(p, businessAccountId, 'tagged', null));
-          const { error: upsertErr } = await supabase
-            .from('ugc_content')
-            .upsert(ugcRecords, { onConflict: 'business_account_id,visitor_post_id', ignoreDuplicates: false });
-          if (upsertErr) {
-            await logWithDomain('ugc', {
-              endpoint: '/tags/upsert', method: 'SYSTEM', success: false,
-              business_account_id: businessAccountId,
-              error: upsertErr.message,
-              details: { action: 'db_upsert_failed', table: 'ugc_content', count_attempted: ugcRecords.length },
-            });
-            throw upsertErr;
-          }
-        }
-      } catch (wtErr) {
-        console.warn('[ugc] Tagged media write-through error:', wtErr.message);
-        throw wtErr;
-      }
-    }
+    // Flatten owner{id} → owner_id then shape via mapRawPostToUgcContent (DB-ready rows)
+    const records = rawPosts
+      .filter(p => p.id)
+      .map(p => mapRawPostToUgcContent(
+        { ...p, owner_id: p.owner?.id || null },
+        businessAccountId,
+        'tagged',
+        null
+      ));
 
     return {
-      success: true, taggedPosts, count: taggedPosts.length,
+      success: true,
+      records,
+      count: records.length,
+      paging,
       _usagePct: parseUsageHeader(tagsRes.headers?.['x-business-use-case-usage']),
     };
 
@@ -238,15 +230,38 @@ async function fetchAndStoreTaggedMedia(businessAccountId, limit = 25) {
     });
 
     return {
-      success: false, taggedPosts: [], count: 0, error: errorMessage,
+      success: false, records: [], count: 0, paging: {}, error: errorMessage,
       code: error.response?.data?.error?.code,
-      retryable, error_category, retry_after_seconds
+      retryable, error_category, retry_after_seconds,
     };
   }
 }
 
+// ============================================
+// TAGGED MEDIA — SHIM (route + sync backward-compat)
+// ============================================
+
+/**
+ * Fetches tagged posts and persists to ugc_content.
+ * Shim wrapping fetchTaggedMedia + storeUgcContentBatch.
+ * All callers (sync/ugc.js, routes /tags, /sync-ugc) keep using this unchanged.
+ *
+ * @param {string} businessAccountId
+ * @param {number} [limit=25]
+ * @returns {Promise<{success: boolean, taggedPosts: Array, count: number, error?: string}>}
+ */
+async function fetchAndStoreTaggedMedia(businessAccountId, limit = 25) {
+  const result = await fetchTaggedMedia(businessAccountId, limit);
+  if (result.success && result.records.length > 0) {
+    await storeUgcContentBatch(result.records);
+  }
+  // backward-compat: callers expect .taggedPosts; sync uses .count and .success only
+  return { ...result, taggedPosts: result.records };
+}
+
 module.exports = {
   fetchHashtagMedia,
+  fetchTaggedMedia,
   fetchAndStoreHashtagMedia,
   fetchAndStoreTaggedMedia,
 };

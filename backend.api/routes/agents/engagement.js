@@ -439,6 +439,41 @@ router.get('/conversation-messages', async (req, res) => {
     });
   }
 
+  // Query-back: return DB-shaped rows so the frontend/agent gets status fields
+  // (send_status, message_type, is_from_business, etc.). This is route-layer concern —
+  // the shim only transforms raw messages; shaped rows live in DB after storeMessageBatches.
+  try {
+    const supabase = getSupabaseAdmin();
+    if (supabase) {
+      const fetchLimit = Math.min(parseInt(limit) || 20, 100);
+      const { data: conv } = await supabase
+        .from('instagram_dm_conversations')
+        .select('id')
+        .eq('instagram_thread_id', conversation_id)
+        .maybeSingle();
+      if (conv?.id) {
+        const { data: rows } = await supabase
+          .from('instagram_dm_messages')
+          .select('*')
+          .eq('conversation_id', conv.id)
+          .order('sent_at', { ascending: true })
+          .limit(fetchLimit);
+        if (rows) {
+          return res.json({
+            success: true,
+            data: rows,
+            paging: result.paging,
+            meta: { count: rows.length }
+          });
+        }
+      }
+    }
+  } catch (qbErr) {
+    // Query-back failure is non-fatal — fall through to shim-transformed messages
+    console.warn('[engagement] conversation-messages query-back failed:', qbErr.message);
+  }
+
+  // Fallback: return shim-transformed messages (correct shape, no DB status fields)
   res.json({
     success: true,
     data: result.messages,
