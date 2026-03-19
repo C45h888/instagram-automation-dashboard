@@ -6,7 +6,7 @@ const { getSupabaseAdmin, logApiRequest, logAudit, shouldLog } = require('../con
 const { retrievePageToken } = require('../services/tokens/pat');
 const { clearCredentialCache: _clearCredentialCacheRaw, getFromCache, setInCache } = require('./credential-cache');
 
-const GRAPH_API_BASE = 'https://graph.facebook.com/v23.0';
+const GRAPH_API_BASE = 'https://graph.facebook.com/v25.0';
 
 // ============================================
 // HELPER: CATEGORIZE INSTAGRAM API ERROR
@@ -339,6 +339,59 @@ async function updateQueueRow(supabase, id, fields) {
   }
 }
 
+// ============================================
+// MEDIA CONTAINER STATUS POLL (VIDEO / REELS)
+// ============================================
+
+const axios = require('axios');
+
+/**
+ * Polls GET /{creationId}?fields=status_code,status until the container reaches
+ * FINISHED or a terminal error, before calling media_publish.
+ *
+ * Required by Meta for VIDEO and REELS; not needed for IMAGE.
+ * Meta docs: https://developers.facebook.com/docs/instagram-api/reference/ig-media
+ *
+ * Status codes returned by Meta:
+ *   EXPIRED     — container not published within 24h (non-retryable)
+ *   ERROR       — container processing failed (non-retryable)
+ *   FINISHED    — ready to publish
+ *   IN_PROGRESS — still processing (keep polling)
+ *   PUBLISHED   — already published (idempotent — treat as ready)
+ *
+ * @param {string} creationId   - Media container ID from POST /{igUserId}/media
+ * @param {string} pageToken    - Page access token
+ * @param {object} [opts]
+ * @param {number} [opts.maxAttempts=12]    - Max poll iterations (default: 2 min at 10s interval)
+ * @param {number} [opts.intervalMs=10000]  - Poll interval in ms
+ * @throws {Error} if status is ERROR/EXPIRED or max attempts exceeded
+ */
+async function pollMediaContainerStatus(creationId, pageToken, opts = {}) {
+  const { maxAttempts = 12, intervalMs = 10000 } = opts;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const { data } = await axios.get(`${GRAPH_API_BASE}/${creationId}`, {
+      params: { fields: 'status_code,status', access_token: pageToken },
+      timeout: 10000,
+    });
+
+    const statusCode = data.status_code;
+
+    if (statusCode === 'FINISHED' || statusCode === 'PUBLISHED') return;
+
+    if (statusCode === 'ERROR' || statusCode === 'EXPIRED') {
+      throw new Error(`Media container ${creationId} failed with status: ${statusCode}`);
+    }
+
+    // IN_PROGRESS — wait before next attempt (skip wait on last attempt)
+    if (attempt < maxAttempts) {
+      await new Promise(resolve => setTimeout(resolve, intervalMs));
+    }
+  }
+
+  throw new Error(`Media container ${creationId} not ready after ${maxAttempts} attempts`);
+}
+
 module.exports = {
   ensureMediaRecord,
   syncHashtagsFromCaptions,
@@ -350,4 +403,5 @@ module.exports = {
   buildIdempotencyKey,
   insertQueueRow,
   updateQueueRow,
+  pollMediaContainerStatus,
 };

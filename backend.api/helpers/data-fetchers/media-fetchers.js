@@ -52,9 +52,14 @@ async function fetchAndStoreMediaInsights(businessAccountId, since, until) {
 
     const fetchInsightsForMedia = async (media) => {
       try {
+        // Meta docs: `saved` is not a valid metric for STORY media — only for feed posts.
+        // Story valid metrics: exits, impressions, reach, replies, taps_forward, taps_back.
+        const isStory = media.media_type === 'STORY';
+        const metricParam = isStory ? 'reach,impressions' : 'reach,impressions,saved';
+
         const insightsRes = await axios.get(`${GRAPH_API_BASE}/${media.id}/insights`, {
           params: {
-            metric: 'reach,impressions,saved',
+            metric: metricParam,
             access_token: pageToken
           }
         });

@@ -13,6 +13,7 @@ const {
   resolveAccountCredentials,
   categorizeIgError,
   GRAPH_API_BASE,
+  pollMediaContainerStatus,
 } = require('../helpers/agent-helpers');
 const {
   isAccountRateLimited,
@@ -58,7 +59,7 @@ async function dispatchAction(supabase, row) {
     .eq('id', id);
 
   try {
-    const { igUserId, pageToken } = await resolveAccountCredentials(business_account_id);
+    const { igUserId, pageToken, pageId } = await resolveAccountCredentials(business_account_id);
     let instagram_id;
 
     switch (action_type) {
@@ -93,8 +94,10 @@ async function dispatchAction(supabase, row) {
 
       // ------------------------------------------
       case 'send_dm': {
+        // Meta requires Facebook Page ID node for Instagram DM send; fall back to igUserId
+        const dmNode = pageId || igUserId;
         const res = await axios.post(
-          `${GRAPH_API_BASE}/${igUserId}/messages`,
+          `${GRAPH_API_BASE}/${dmNode}/messages`,
           {
             recipient: { id: String(payload.recipient_id) },
             message: { text: payload.message_text.trim() }
@@ -137,6 +140,12 @@ async function dispatchAction(supabase, row) {
             .eq('id', id);
         }
 
+        // For VIDEO/REELS: poll until FINISHED before publishing
+        const publishType = (payload.media_type || 'IMAGE').toUpperCase();
+        if (publishType === 'VIDEO' || publishType === 'REELS') {
+          await pollMediaContainerStatus(creationId, pageToken);
+        }
+
         // Step 2: publish
         const publishRes = await axios.post(
           `${GRAPH_API_BASE}/${igUserId}/media_publish`,
@@ -167,10 +176,10 @@ async function dispatchAction(supabase, row) {
         let creationId = payload.creation_id;
 
         if (!creationId) {
-          // Re-fetch media URL via ugc_permissions → ugc_discovered
+          // Re-fetch media URL via ugc_permissions → ugc_content (unified schema, Feb 2026)
           const { data: perm, error: permErr } = await supabase
             .from('ugc_permissions')
-            .select('ugc_discovered_id')
+            .select('ugc_content_id')
             .eq('id', payload.permission_id)
             .single();
 
@@ -179,34 +188,47 @@ async function dispatchAction(supabase, row) {
           }
 
           const { data: ugc, error: ugcErr } = await supabase
-            .from('ugc_discovered')
-            .select('media_url, caption, username')
-            .eq('id', perm.ugc_discovered_id)
+            .from('ugc_content')
+            .select('media_url, message, author_username, media_type')
+            .eq('id', perm.ugc_content_id)
             .single();
 
           if (ugcErr || !ugc || !ugc.media_url) {
             throw new Error('UGC media not found for repost_ugc retry');
           }
 
-          const caption = ugc.caption
-            ? `📸 @${ugc.username}: ${ugc.caption}\n\n#repost`
-            : `📸 @${ugc.username}\n\n#repost`;
+          const caption = ugc.message
+            ? `📸 @${ugc.author_username}: ${ugc.message}\n\n#repost`
+            : `📸 @${ugc.author_username}\n\n#repost`;
+
+          const ugcMediaType = (ugc.media_type || 'IMAGE').toUpperCase();
+          const ugcCreateParams = { caption, access_token: pageToken };
+          if (ugcMediaType === 'VIDEO' || ugcMediaType === 'REELS') {
+            ugcCreateParams.video_url = ugc.media_url;
+            ugcCreateParams.media_type = ugcMediaType;
+          } else {
+            ugcCreateParams.image_url = ugc.media_url;
+          }
 
           const createRes = await axios.post(
             `${GRAPH_API_BASE}/${igUserId}/media`,
             null,
-            {
-              params: { image_url: ugc.media_url, caption, access_token: pageToken },
-              timeout: 15000
-            }
+            { params: ugcCreateParams, timeout: 15000 }
           );
           creationId = createRes.data.id;
 
-          // Persist creation_id so next retry skips Step 1
+          // Persist creation_id + ugc_media_type so retry can poll and branch correctly
           await supabase
             .from('post_queue')
-            .update({ payload: { ...payload, creation_id: creationId } })
+            .update({ payload: { ...payload, creation_id: creationId, ugc_media_type: ugcMediaType } })
             .eq('id', id);
+        }
+
+        // For VIDEO/REELS: poll until FINISHED before publishing.
+        // ugc_media_type is persisted in payload so retries (where creation_id is already set) can check.
+        const repostMediaType = payload.ugc_media_type || 'IMAGE';
+        if (repostMediaType === 'VIDEO' || repostMediaType === 'REELS') {
+          await pollMediaContainerStatus(creationId, pageToken);
         }
 
         // Step 2: publish

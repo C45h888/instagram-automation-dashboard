@@ -152,7 +152,7 @@ async function fetchAndStoreConversations(businessAccountId, limit = 20) {
     const conversationNode = pageId || igUserId;
     const convRes = await axios.get(`${GRAPH_API_BASE}/${conversationNode}/conversations`, {
       params: {
-        fields: 'id,participants{id,username},updated_time,message_count,messages{created_time,from{id}}',
+        fields: 'id,participants{id,username},updated_time,message_count,messages.limit(1){created_time,from{id}}',
         platform: 'INSTAGRAM',
         limit: fetchLimit,
         access_token: pageToken

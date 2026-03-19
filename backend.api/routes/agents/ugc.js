@@ -12,6 +12,7 @@ const {
   buildIdempotencyKey,
   insertQueueRow,
   updateQueueRow,
+  pollMediaContainerStatus,
 } = require('../../helpers/agent-helpers');
 const {
   fetchAndStoreHashtagMedia,
@@ -170,8 +171,17 @@ router.post('/repost-ugc', async (req, res) => {
       ? `📸 @${ugcContent.author_username}: ${ugcContent.message}\n\n#repost`
       : `📸 @${ugcContent.author_username}\n\n#repost`;
 
+    const ugcMediaType = (ugcContent.media_type || 'IMAGE').toUpperCase();
+    const createParams = { caption, access_token: pageToken };
+    if (ugcMediaType === 'VIDEO' || ugcMediaType === 'REELS') {
+      createParams.video_url = mediaUrl;
+      createParams.media_type = ugcMediaType;
+    } else {
+      createParams.image_url = mediaUrl;
+    }
+
     const createRes = await axios.post(`${GRAPH_API_BASE}/${igUserId}/media`, null, {
-      params: { image_url: mediaUrl, caption, access_token: pageToken },
+      params: createParams,
       timeout: 15000
     });
 
@@ -183,6 +193,11 @@ router.post('/repost-ugc', async (req, res) => {
       await updateQueueRow(supabase, queueId, {
         payload: { permission_id, creation_id: creationId }
       });
+    }
+
+    // For VIDEO/REELS: poll until container status is FINISHED before publishing.
+    if (ugcMediaType === 'VIDEO' || ugcMediaType === 'REELS') {
+      await pollMediaContainerStatus(creationId, pageToken);
     }
 
     const publishRes = await axios.post(`${GRAPH_API_BASE}/${igUserId}/media_publish`, null, {

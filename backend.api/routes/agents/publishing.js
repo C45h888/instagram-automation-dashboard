@@ -12,6 +12,7 @@ const {
   buildIdempotencyKey,
   insertQueueRow,
   updateQueueRow,
+  pollMediaContainerStatus,
 } = require('../../helpers/agent-helpers');
 
 // ============================================
@@ -84,6 +85,12 @@ router.post('/publish-post', async (req, res) => {
       await updateQueueRow(getSupabaseAdmin(), queueId, {
         payload: { image_url, caption, media_type: type, scheduled_post_id: scheduled_post_id || null, creation_id: creationId }
       });
+    }
+
+    // For VIDEO/REELS: poll until container status is FINISHED before publishing.
+    // Meta requires this — calling media_publish before FINISHED returns (#9007).
+    if (type === 'VIDEO' || type === 'REELS') {
+      await pollMediaContainerStatus(creationId, pageToken);
     }
 
     // Step 2: Publish media container
