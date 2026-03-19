@@ -26,6 +26,7 @@ const {
 
 const {
   storeUgcContentBatch,
+  resolveAccountCredentials,
 } = require('../../helpers/data-fetchers/base');
 
 const UGC_MAX_HASHTAGS       = 5;
@@ -85,6 +86,24 @@ async function proactiveUgcSync() {
       continue;
     }
 
+    // Pre-resolve credentials once — prevents N parallel cache-miss races inside runConcurrent
+    let credentials;
+    try {
+      credentials = await resolveAccountCredentials(account.id);
+    } catch (credErr) {
+      console.warn(`[Sync:ugc] Account ${account.id} credential resolution failed: ${credErr.message}`);
+      errorCount++;
+      lastErrorMessage   = credErr.message;
+      lastErrorAccountId = account.id;
+      await logSyncAudit('ugc', account.id, {
+        run_id: runId, duration_ms: Date.now() - startTime,
+        items_fetched: 0, errors_count: 1,
+        success: false, status: 'error', error_message: credErr.message,
+      });
+      await delay(INTER_ACCOUNT_DELAY_MS);
+      continue;
+    }
+
     try {
       // ── Tagged media ─────────────────────────────────────────────────────
       const tagResult = await fetchAndStoreTaggedMedia(account.id, 50);
@@ -119,7 +138,7 @@ async function proactiveUgcSync() {
       // PARALLEL FETCH — up to 3 hashtags in parallel per batch (each makes 2 IG API calls)
       const hashFetchResults = await runConcurrent(
         hashtagsToCheck,
-        (hashtag) => fetchHashtagMedia(account.id, hashtag, 25),
+        (hashtag) => fetchHashtagMedia(account.id, hashtag, 25, credentials),
         3
       );
 

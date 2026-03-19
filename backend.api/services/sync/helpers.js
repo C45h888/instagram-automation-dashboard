@@ -18,6 +18,9 @@ const _rateLimitedAccounts = new Map(); // accountId → unblocked_at ms
 const _authFailureStrikes  = new Map(); // accountId → strike count
 const AUTH_FAILURE_MAX_STRIKES = 3;
 
+let _accountsCache = { data: [], expiresAt: 0 };
+const ACCOUNTS_CACHE_TTL_MS = 30 * 1000; // 30s — covers inter-cron overlap window
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function delay(ms) {
@@ -90,6 +93,7 @@ async function markAccountDisconnectedOnAuthFailure(accountId, errorMessage) {
       });
 
     clearCredentialCache(accountId);
+    clearAccountsCache(); // disconnected account must be excluded from next cron tick immediately
     console.error(`[Sync:helpers] Account ${accountId} disconnected due to auth_failure`);
   } catch (err) {
     console.warn(`[Sync:helpers] Failed to mark account ${accountId} disconnected:`, err.message);
@@ -142,6 +146,8 @@ function handleFetchError(result, accountId) {
 // ── DB Query Helpers ─────────────────────────────────────────────────────────
 
 async function getActiveAccounts() {
+  if (Date.now() < _accountsCache.expiresAt) return _accountsCache.data;
+
   const supabase = getSupabaseAdmin();
   if (!supabase) return [];
 
@@ -153,9 +159,15 @@ async function getActiveAccounts() {
 
   if (error) {
     console.error('[Sync:helpers] Failed to fetch active accounts:', error.message);
-    return [];
+    return _accountsCache.data; // serve stale on DB error — blip shouldn't halt all cron processing
   }
-  return data || [];
+
+  _accountsCache = { data: data || [], expiresAt: Date.now() + ACCOUNTS_CACHE_TTL_MS };
+  return _accountsCache.data;
+}
+
+function clearAccountsCache() {
+  _accountsCache = { data: [], expiresAt: 0 };
 }
 
 async function getRecentMedia(accountId) {
@@ -337,6 +349,7 @@ module.exports = {
   markAccountRateLimited,
   handleFetchError,
   getActiveAccounts,
+  clearAccountsCache,
   getRecentMedia,
   getMonitoredHashtags,
   logSyncAudit,

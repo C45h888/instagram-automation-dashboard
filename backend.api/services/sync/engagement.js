@@ -35,6 +35,7 @@ const {
 const {
   storeCommentBatches,
   storeMessageBatches,
+  resolveAccountCredentials,
 } = require('../../helpers/data-fetchers/base');
 
 const COMMENT_MAX_POSTS          = 5;
@@ -95,6 +96,24 @@ async function proactiveCommentSync() {
       continue;
     }
 
+    // Pre-resolve credentials once — prevents N parallel cache-miss races inside runConcurrent
+    let credentials;
+    try {
+      credentials = await resolveAccountCredentials(account.id);
+    } catch (credErr) {
+      console.warn(`[Sync:comments] Account ${account.id} credential resolution failed: ${credErr.message}`);
+      errorCount++;
+      lastErrorMessage   = credErr.message;
+      lastErrorAccountId = account.id;
+      await logSyncAudit('comments', account.id, {
+        run_id: runId, duration_ms: Date.now() - startTime,
+        items_fetched: 0, errors_count: 1,
+        success: false, status: 'error', error_message: credErr.message,
+      });
+      await delay(INTER_ACCOUNT_DELAY_MS);
+      continue;
+    }
+
     try {
       const recentMedia = await getRecentMedia(account.id);
       const postsToCheck = recentMedia.slice(0, COMMENT_MAX_POSTS);
@@ -104,7 +123,7 @@ async function proactiveCommentSync() {
       // PARALLEL FETCH — up to 3 posts in parallel per batch
       const commentResults = await runConcurrent(
         postsToCheck,
-        (media) => fetchComments(account.id, media.instagram_media_id, 50),
+        (media) => fetchComments(account.id, media.instagram_media_id, 50, credentials),
         3
       );
 
@@ -229,6 +248,24 @@ async function proactiveEngagementSync() {
       continue;
     }
 
+    // Pre-resolve credentials once — prevents N parallel cache-miss races inside runConcurrent
+    let credentials;
+    try {
+      credentials = await resolveAccountCredentials(account.id);
+    } catch (credErr) {
+      console.warn(`[Sync:engagement] Account ${account.id} credential resolution failed: ${credErr.message}`);
+      errorCount++;
+      lastErrorMessage   = credErr.message;
+      lastErrorAccountId = account.id;
+      await logSyncAudit('engagement', account.id, {
+        run_id: runId, duration_ms: Date.now() - startTime,
+        items_fetched: 0, errors_count: 1,
+        success: false, status: 'error', error_message: credErr.message,
+      });
+      await delay(INTER_ACCOUNT_DELAY_MS);
+      continue;
+    }
+
     try {
       // ── Conversations ────────────────────────────────────────────────────
       const convResult = await fetchAndStoreConversations(account.id, 20);
@@ -265,7 +302,7 @@ async function proactiveEngagementSync() {
         // PARALLEL FETCH — up to 3 conversations in parallel per batch
         const msgFetchResults = await runConcurrent(
           openConvs,
-          (conv) => fetchMessages(account.id, conv.id, 20),
+          (conv) => fetchMessages(account.id, conv.id, 20, credentials),
           3
         );
 
@@ -284,11 +321,7 @@ async function proactiveEngagementSync() {
             .map(({ conversationId, result }) => ({ conversationId, rawMessages: result.rawMessages }));
 
           if (messageBatches.length > 0) {
-            // igUserId/pageId are the same for all convs (same account) — take from first success
-            const firstOk = msgFetchResults.find(r => r.success);
-            if (firstOk) {
-              await storeMessageBatches(account.id, messageBatches, firstOk.igUserId, firstOk.pageId);
-            }
+            await storeMessageBatches(account.id, messageBatches, credentials.igUserId, credentials.pageId);
           }
         }
 

@@ -35,13 +35,13 @@ const {
  * @param {number} [limit=25] - Max media (capped at 50)
  * @returns {Promise<{success: boolean, records: Array, count: number, hashtagId?: string, error?: string}>}
  */
-async function fetchHashtagMedia(businessAccountId, hashtag, limit = 25) {
+async function fetchHashtagMedia(businessAccountId, hashtag, limit = 25, credentials = null) {
   const startTime = Date.now();
   const searchLimit = Math.min(parseInt(limit) || 25, 50);
   const cleanHashtag = String(hashtag).replace(/^#/, '');
 
   try {
-    const { igUserId, pageToken } = await resolveAccountCredentials(businessAccountId);
+    const { igUserId, pageToken } = credentials || await resolveAccountCredentials(businessAccountId);
 
     // Step 1: Search for hashtag ID
     const hashtagSearchRes = await axios.get(`${GRAPH_API_BASE}/ig_hashtag_search`, {

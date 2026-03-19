@@ -41,12 +41,12 @@ const {
  * @param {number} [limit=50] - Max comments (capped at 50 per Meta docs)
  * @returns {Promise<{success: boolean, records: Array, count: number, paging: Object, error?: string}>}
  */
-async function fetchComments(businessAccountId, mediaId, limit = 50) {
+async function fetchComments(businessAccountId, mediaId, limit = 50, credentials = null) {
   const startTime = Date.now();
   const fetchLimit = Math.min(parseInt(limit) || 50, 50); // Meta docs: max 50 per query
 
   try {
-    const { pageToken, userId } = await resolveAccountCredentials(businessAccountId);
+    const { pageToken, userId } = credentials || await resolveAccountCredentials(businessAccountId);
 
     const commentsRes = await axios.get(`${GRAPH_API_BASE}/${mediaId}/comments`, {
       params: {
@@ -318,12 +318,12 @@ async function fetchAndStoreConversations(businessAccountId, limit = 20) {
  * @param {number} [limit=20] - Max messages (capped at 100)
  * @returns {Promise<{success: boolean, rawMessages: Array, igUserId: string, pageId: string|null, count: number, paging: Object, error?: string}>}
  */
-async function fetchMessages(businessAccountId, conversationId, limit = 20) {
+async function fetchMessages(businessAccountId, conversationId, limit = 20, credentials = null) {
   const startTime = Date.now();
   const fetchLimit = Math.min(parseInt(limit) || 20, 100);
 
   try {
-    const { igUserId, pageToken, userId, pageId } = await resolveAccountCredentials(businessAccountId);
+    const { igUserId, pageToken, userId, pageId } = credentials || await resolveAccountCredentials(businessAccountId);
 
     const msgRes = await axios.get(`${GRAPH_API_BASE}/${conversationId}/messages`, {
       params: {
