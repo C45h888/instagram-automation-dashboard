@@ -120,7 +120,7 @@ async function proactiveCommentSync() {
       const recentMedia = await getRecentMedia(account.id);
       const postsToCheck = recentMedia.slice(0, COMMENT_MAX_POSTS);
       let totalComments   = 0;
-      let commentAuthFailed = false;
+      commentAuthFailed = false;
 
       // PARALLEL FETCH — up to 3 posts in parallel per batch
       const commentResults = await runConcurrent(
@@ -134,8 +134,33 @@ async function proactiveCommentSync() {
         if (r._usagePct != null) updateQuotaUsage(account.id, r._usagePct);
       }
 
+      // Check for transient errors — retry entire batch once if any item was transient
+      const transientResults = commentResults.filter(r => {
+        const { retryable } = handleFetchError(r, account.id);
+        return retryable;
+      });
+
+      let finalCommentResults = commentResults;
+      if (transientResults.length > 0) {
+        const retryMs = transientResults[0].retry_after_seconds
+          ? Math.min(transientResults[0].retry_after_seconds, 300) * 1000
+          : 30000;
+        console.warn(`[Sync:comments] Account ${account.id} ${transientResults.length} transient error(s), retrying batch in ${retryMs}ms`);
+        await delay(retryMs);
+        finalCommentResults = await runConcurrent(
+          postsToCheck,
+          (media) => fetchComments(account.id, media.instagram_media_id, 50, credentials),
+          3
+        );
+        // Propagate quota from retry results too
+        for (const r of finalCommentResults) {
+          if (r._usagePct != null) updateQuotaUsage(account.id, r._usagePct);
+        }
+      }
+
       // Post-batch error accounting (results in same order as postsToCheck)
-      for (const result of commentResults) {
+      let commentAuthFailed = false;
+      for (const result of finalCommentResults) {
         if (result.success) totalComments += result.count;
         const { skip, break: brk } = handleFetchError(result, account.id);
         if (skip) { commentAuthFailed = true; break; }
@@ -277,30 +302,43 @@ async function proactiveEngagementSync() {
       // ── Conversations ────────────────────────────────────────────────────
       const convResult = await fetchAndStoreConversations(account.id, 20);
       updateQuotaUsage(account.id, convResult._usagePct);
-      const { skip: convSkip, break: convBrk } = handleFetchError(convResult, account.id);
+      const { skip: convSkip, break: convBrk, retryable: convRetryable, retryAfterMs: convRetryMs } = handleFetchError(convResult, account.id);
+
+      // Retry once for transient errors on conversation fetch
+      let finalConvResult = convResult;
+      if (convRetryable) {
+        console.warn(`[Sync:engagement] Account ${account.id} conversations transient error, retrying in ${convRetryMs}ms: ${convResult.error}`);
+        await delay(convRetryMs);
+        finalConvResult = await fetchAndStoreConversations(account.id, 20);
+        updateQuotaUsage(account.id, finalConvResult._usagePct);
+        const retryErr = handleFetchError(finalConvResult, account.id);
+        if (retryErr.skip || retryErr.break) {
+          console.error(`[Sync:engagement] Account ${account.id} conversations retry also failed: ${finalConvResult.error}`);
+        }
+      }
 
       await logSyncAudit('conversations', account.id, {
         run_id:        runId,
         duration_ms:   Date.now() - startTime,
-        items_fetched: convResult.count || 0,
+        items_fetched: finalConvResult.count || 0,
         errors_count:  (convSkip || convBrk) ? 1 : 0,
-        success:       convResult.success && !convSkip,
+        success:       finalConvResult.success && !convSkip,
         status:        (convSkip || convBrk) ? 'error' : 'completed',
-        count:         convResult.count,
+        count:         finalConvResult.count,
       });
 
       if (convSkip || convBrk) {
         errorCount++;
-        lastErrorMessage   = convResult.error || 'conv_fetch_failed';
+        lastErrorMessage   = finalConvResult.error || 'conv_fetch_failed';
         lastErrorAccountId = account.id;
         await delay(getAdaptiveDelay(account.id, INTER_ACCOUNT_DELAY_MS));
         continue;
       }
 
-      itemsFetched += convResult.count || 0;
+      itemsFetched += finalConvResult.count || 0;
 
       // ── Messages for open-window conversations ───────────────────────────
-      if (convResult.success && convResult.conversations) {
+      if (finalConvResult.success && finalConvResult.conversations) {
         const openConvs = convResult.conversations
           .filter(c => c.within_window || c.messaging_window?.is_open)
           .slice(0, ENGAGEMENT_MAX_CONVERSATIONS);
@@ -308,7 +346,7 @@ async function proactiveEngagementSync() {
         let msgAuthFailed = false;
 
         // PARALLEL FETCH — up to 3 conversations in parallel per batch
-        const msgFetchResults = await runConcurrent(
+        let msgFetchResults = await runConcurrent(
           openConvs,
           (conv) => fetchMessages(account.id, conv.id, 20, credentials),
           3
@@ -317,6 +355,28 @@ async function proactiveEngagementSync() {
         // Propagate quota readings from parallel results
         for (const r of msgFetchResults) {
           if (r._usagePct != null) updateQuotaUsage(account.id, r._usagePct);
+        }
+
+        // Check for transient errors — retry entire message batch once if any item was transient
+        const msgTransientResults = msgFetchResults.filter(r => {
+          const { retryable } = handleFetchError(r, account.id);
+          return retryable;
+        });
+
+        if (msgTransientResults.length > 0) {
+          const retryMs = msgTransientResults[0].retry_after_seconds
+            ? Math.min(msgTransientResults[0].retry_after_seconds, 300) * 1000
+            : 30000;
+          console.warn(`[Sync:engagement] Account ${account.id} ${msgTransientResults.length} message(s) transient error(s), retrying batch in ${retryMs}ms`);
+          await delay(retryMs);
+          msgFetchResults = await runConcurrent(
+            openConvs,
+            (conv) => fetchMessages(account.id, conv.id, 20, credentials),
+            3
+          );
+          for (const r of msgFetchResults) {
+            if (r._usagePct != null) updateQuotaUsage(account.id, r._usagePct);
+          }
         }
 
         // Post-batch error accounting

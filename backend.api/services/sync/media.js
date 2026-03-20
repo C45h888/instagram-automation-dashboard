@@ -82,26 +82,39 @@ async function proactiveMediaSync() {
     try {
       const result = await fetchAndStoreBusinessPosts(account.id, 50);
       updateQuotaUsage(account.id, result._usagePct);
-      const { skip, break: brk } = handleFetchError(result, account.id);
+      const { skip, break: brk, retryable, retryAfterMs } = handleFetchError(result, account.id);
+
+      // Retry once for transient errors using server-suggested delay
+      let finalResult = result;
+      if (retryable) {
+        console.warn(`[Sync:media] Account ${account.id} transient error, retrying in ${retryAfterMs}ms: ${result.error}`);
+        await delay(retryAfterMs);
+        finalResult = await fetchAndStoreBusinessPosts(account.id, 50);
+        updateQuotaUsage(account.id, finalResult._usagePct);
+        const retryErr = handleFetchError(finalResult, account.id);
+        if (retryErr.skip || retryErr.break) {
+          console.error(`[Sync:media] Account ${account.id} retry also failed: ${finalResult.error}`);
+        }
+      }
 
       await logSyncAudit('media_posts', account.id, {
         run_id:        runId,
         duration_ms:   Date.now() - startTime,
-        items_fetched: result.count || 0,
+        items_fetched: finalResult.count || 0,
         errors_count:  (skip || brk) ? 1 : 0,
-        success:       result.success && !skip,
+        success:       finalResult.success && !skip,
         status:        (skip || brk) ? 'error' : 'completed',
-        count:         result.count,
-        error_message: result.success ? undefined : result.error,
+        count:         finalResult.count,
+        error_message: finalResult.success ? undefined : finalResult.error,
       });
 
       if (skip || brk) {
         errorCount++;
-        lastErrorMessage   = result.error || 'fetch_failed';
+        lastErrorMessage   = finalResult.error || 'fetch_failed';
         lastErrorAccountId = account.id;
       } else {
         successCount++;
-        itemsFetched += result.count || 0;
+        itemsFetched += finalResult.count || 0;
         clearRecentMediaCache(account.id); // bust cache — comment sync picks up new posts immediately
       }
 

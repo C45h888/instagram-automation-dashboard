@@ -110,27 +110,40 @@ async function proactiveUgcSync() {
       // ── Tagged media ─────────────────────────────────────────────────────
       const tagResult = await fetchAndStoreTaggedMedia(account.id, 50);
       updateQuotaUsage(account.id, tagResult._usagePct);
-      const { skip: tagSkip, break: tagBrk } = handleFetchError(tagResult, account.id);
+      const { skip: tagSkip, break: tagBrk, retryable: tagRetryable, retryAfterMs: tagRetryMs } = handleFetchError(tagResult, account.id);
+
+      // Retry once for transient errors on tagged media fetch
+      let finalTagResult = tagResult;
+      if (tagRetryable) {
+        console.warn(`[Sync:ugc] Account ${account.id} tagged media transient error, retrying in ${tagRetryMs}ms: ${tagResult.error}`);
+        await delay(tagRetryMs);
+        finalTagResult = await fetchAndStoreTaggedMedia(account.id, 50);
+        updateQuotaUsage(account.id, finalTagResult._usagePct);
+        const retryErr = handleFetchError(finalTagResult, account.id);
+        if (retryErr.skip || retryErr.break) {
+          console.error(`[Sync:ugc] Account ${account.id} tagged media retry also failed: ${finalTagResult.error}`);
+        }
+      }
 
       await logSyncAudit('ugc_tagged', account.id, {
         run_id:        runId,
         duration_ms:   Date.now() - startTime,
-        items_fetched: tagResult.count || 0,
+        items_fetched: finalTagResult.count || 0,
         errors_count:  (tagSkip || tagBrk) ? 1 : 0,
-        success:       tagResult.success && !tagSkip,
+        success:       finalTagResult.success && !tagSkip,
         status:        (tagSkip || tagBrk) ? 'error' : 'completed',
-        count:         tagResult.count,
+        count:         finalTagResult.count,
       });
 
       if (tagSkip || tagBrk) {
         errorCount++;
-        lastErrorMessage   = tagResult.error || 'tag_fetch_failed';
+        lastErrorMessage   = finalTagResult.error || 'tag_fetch_failed';
         lastErrorAccountId = account.id;
         await delay(getAdaptiveDelay(account.id, INTER_ACCOUNT_DELAY_MS));
         continue;
       }
 
-      itemsFetched += tagResult.count || 0;
+      itemsFetched += finalTagResult.count || 0;
 
       // ── Hashtag media ────────────────────────────────────────────────────
       const hashtags        = await getMonitoredHashtags(account.id);
@@ -139,7 +152,7 @@ async function proactiveUgcSync() {
       const hashtagsToCheck = hashtags.slice(0, UGC_MAX_HASHTAGS);
 
       // PARALLEL FETCH — up to 3 hashtags in parallel per batch (each makes 2 IG API calls)
-      const hashFetchResults = await runConcurrent(
+      let hashFetchResults = await runConcurrent(
         hashtagsToCheck,
         (hashtag) => fetchHashtagMedia(account.id, hashtag, 25, credentials),
         3
@@ -148,6 +161,28 @@ async function proactiveUgcSync() {
       // Propagate quota readings from parallel results
       for (const r of hashFetchResults) {
         if (r._usagePct != null) updateQuotaUsage(account.id, r._usagePct);
+      }
+
+      // Check for transient errors — retry entire hashtag batch once if any item was transient
+      const hashTransientResults = hashFetchResults.filter(r => {
+        const { retryable } = handleFetchError(r, account.id);
+        return retryable;
+      });
+
+      if (hashTransientResults.length > 0) {
+        const retryMs = hashTransientResults[0].retry_after_seconds
+          ? Math.min(hashTransientResults[0].retry_after_seconds, 300) * 1000
+          : 30000;
+        console.warn(`[Sync:ugc] Account ${account.id} ${hashTransientResults.length} hashtag(s) transient error(s), retrying batch in ${retryMs}ms`);
+        await delay(retryMs);
+        hashFetchResults = await runConcurrent(
+          hashtagsToCheck,
+          (hashtag) => fetchHashtagMedia(account.id, hashtag, 25, credentials),
+          3
+        );
+        for (const r of hashFetchResults) {
+          if (r._usagePct != null) updateQuotaUsage(account.id, r._usagePct);
+        }
       }
 
       // Post-batch error accounting

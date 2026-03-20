@@ -52,6 +52,18 @@ async function writeSyncRunLog(entry) {
   await supabase.from('sync_run_log').insert(entry).catch((err) => {
     console.warn('[Sync:helpers] writeSyncRunLog failed:', err.message);
   });
+  // Part B: auto-resolve stale-domain alert when a domain recovers (run completes successfully)
+  if (entry.status === 'run_completed' && entry.domain) {
+    supabase
+      .from('system_alerts')
+      .update({ resolved: true, resolved_at: new Date().toISOString() })
+      .eq('alert_type', 'sync_stale')
+      .eq('details->>domain', entry.domain)
+      .eq('resolved', false)
+      .catch((err) => {
+        console.warn(`[Sync:helpers] Failed to resolve stale alert for domain ${entry.domain}:`, err.message);
+      });
+  }
 }
 
 // ── Circuit Breaker ──────────────────────────────────────────────────────────
@@ -122,12 +134,16 @@ async function markAccountDisconnectedOnAuthFailure(accountId, errorMessage) {
   }
 }
 
-// Sync — callers use return value for flow control
-// Returns { skip: boolean, break: boolean }
+// Sync — callers use return value for flow control.
+// Returns { skip, break, retryable, retryAfterMs }:
+//   skip        → caller should skip this account (auth failure)
+//   break       → caller should break loop (rate limit — circuit breaker set)
+//   retryable   → transient error that can be retried once
+//   retryAfterMs → server-suggested wait before retry (null = use default)
 function handleFetchError(result, accountId) {
   if (!result || result.success) {
     _authFailureStrikes.delete(accountId);
-    return { skip: false, break: false };
+    return { skip: false, break: false, retryable: false, retryAfterMs: null };
   }
 
   if (result.error_category === 'auth_failure') {
@@ -154,15 +170,22 @@ function handleFetchError(result, accountId) {
         success: false,
       }).catch(() => {});
     }
-    return { skip: true, break: false };
+    return { skip: true, break: false, retryable: false, retryAfterMs: null };
   }
 
   if (result.error_category === 'rate_limit') {
     markAccountRateLimited(accountId, result.retry_after_seconds);
-    return { skip: false, break: true };
+    return { skip: false, break: true, retryable: false, retryAfterMs: null };
   }
 
-  return { skip: false, break: false };
+  // Transient error (5xx, timeout) — retryable with server-suggested or default delay
+  if (result.error_category === 'transient') {
+    const retryAfterSec = result.retry_after_seconds || 30;
+    const cappedSec = Math.min(retryAfterSec, 300); // cap at 5 min to avoid runaway backoff
+    return { skip: false, break: false, retryable: true, retryAfterMs: cappedSec * 1000 };
+  }
+
+  return { skip: false, break: false, retryable: false, retryAfterMs: null };
 }
 
 // ── DB Query Helpers ─────────────────────────────────────────────────────────
@@ -420,23 +443,42 @@ async function checkStaleDomains() {
 
     const lastRun = data?.completed_at ? new Date(data.completed_at).getTime() : 0;
     if (Date.now() - lastRun > thresholdMs) {
-      await supabase
-        .from('system_alerts')
-        .insert({
-          alert_type: 'sync_stale',
-          message: `${domain} sync has not completed in expected window`,
-          details: {
-            domain,
-            last_completed_at: data?.completed_at || null,
-            threshold_ms: thresholdMs,
-            source: 'stale_domain_watchdog',
-          },
-          resolved: false,
-        })
-        .catch((err) => {
-          console.warn(`[Sync:helpers] checkStaleDomains alert insert failed for ${domain}:`, err.message);
-        });
-      console.warn(`[Sync:helpers] Stale domain detected: ${domain} (last run: ${data?.completed_at || 'never'})`);
+      // Part A: dedup — skip insert if an unresolved stale alert already exists for this domain
+      let skipAlert = false;
+      try {
+        const { data: existingAlert } = await supabase
+          .from('system_alerts')
+          .select('id')
+          .eq('alert_type', 'sync_stale')
+          .eq('details->>domain', domain)
+          .eq('resolved', false)
+          .maybeSingle();
+        skipAlert = !!existingAlert;
+      } catch (dedupErr) {
+        console.warn(`[Sync:helpers] checkStaleDomains dedup query failed for ${domain}:`, dedupErr.message);
+      }
+
+      if (!skipAlert) {
+        await supabase
+          .from('system_alerts')
+          .insert({
+            alert_type: 'sync_stale',
+            message: `${domain} sync has not completed in expected window`,
+            details: {
+              domain,
+              last_completed_at: data?.completed_at || null,
+              threshold_ms: thresholdMs,
+              source: 'stale_domain_watchdog',
+            },
+            resolved: false,
+          })
+          .catch((err) => {
+            console.warn(`[Sync:helpers] checkStaleDomains alert insert failed for ${domain}:`, err.message);
+          });
+        console.warn(`[Sync:helpers] Stale domain detected: ${domain} (last run: ${data?.completed_at || 'never'})`);
+      } else {
+        console.warn(`[Sync:helpers] Stale domain ${domain} already has an unresolved alert, skipping duplicate`);
+      }
     }
   }
 }
