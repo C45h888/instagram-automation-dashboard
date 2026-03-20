@@ -240,6 +240,15 @@ router.post('/exchange-token', async (req, res) => {
     console.log('✅ PAT stored successfully (token_type=page)');
     clearCredentialCache(storeResult.businessAccountId);
 
+    // Resolve any outstanding auth_failure alerts — account is now reconnected
+    await supabaseAdmin
+      .from('system_alerts')
+      .update({ resolved: true, resolved_at: new Date().toISOString() })
+      .eq('business_account_id', storeResult.businessAccountId)
+      .eq('alert_type', 'auth_failure')
+      .eq('resolved', false)
+      .catch((err) => console.warn('[Token] Failed to resolve auth_failure alerts:', err.message));
+
     // ===== STEP 7: Store UAT in split vault =====
     if (uatDetected && finalUAT) {
       // Re-detect after potential extension to get data_access_expires_at

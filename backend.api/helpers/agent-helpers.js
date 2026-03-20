@@ -472,6 +472,19 @@ async function ensureConversationRows(supabase, businessAccountId, missingThread
       }
 
       if (foundRecords.length > 0) {
+        // Batch-resolve customer_user_id for platform accounts (same logic as storeConversationBatches)
+        const igIds = foundRecords.map(r => r.customer_instagram_id).filter(Boolean);
+        if (igIds.length > 0) {
+          const { data: knownAccounts } = await supabase
+            .from('instagram_business_accounts')
+            .select('instagram_business_id, user_id')
+            .in('instagram_business_id', igIds);
+          const igIdToUserId = {};
+          for (const a of knownAccounts || []) igIdToUserId[a.instagram_business_id] = a.user_id;
+          for (const r of foundRecords) {
+            if (r.customer_instagram_id) r.customer_user_id = igIdToUserId[r.customer_instagram_id] || null;
+          }
+        }
         await supabase
           .from('instagram_dm_conversations')
           .upsert(foundRecords, { onConflict: 'instagram_thread_id', ignoreDuplicates: false });

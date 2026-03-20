@@ -98,6 +98,7 @@ async function proactiveInsightsSync() {
         errorCount++;
         lastErrorMessage   = result.error || 'fetch_failed';
         lastErrorAccountId = account.id;
+        await delay(getAdaptiveDelay(account.id, INTER_ACCOUNT_DELAY_MS));
         continue;
       }
 

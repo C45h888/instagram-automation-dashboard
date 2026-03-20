@@ -70,7 +70,24 @@ trace.zip
 *.sln
 *.sw?
 .env.production
-
 .kilocode/system-prompt-ask
 .gitignore
+.gitignore
+.kilocode/rules-orchestrator/rules.md
+
+# Agent Skills (locally installed, not for repo)
+.continue/
+.agents/skills/supabase-postgres-best-practices/
+.env.mcp
+.gitignore
+.gitignore
+.kilocode/system-prompt-orchestrator
 .kilocode/system-prompt-code
+.gitignore
+package/LICENSE
+package/README.md
+package/package.json
+skills-lock.json
+package.json
+.kilocode/skills/supabase-postgres-best-practices
+supabase-mcp-1.5.0.tgz

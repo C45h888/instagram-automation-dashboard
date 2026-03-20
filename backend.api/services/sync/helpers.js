@@ -25,6 +25,7 @@ const _quotaUsage = new Map(); // accountId → call_count pct (0–100), from X
 
 const RECENT_MEDIA_CACHE_TTL_MS = 60 * 1000;     // 60s — new posts visible within 1 min
 const HASHTAGS_CACHE_TTL_MS     = 5 * 60 * 1000; // 5min — hashtags changed manually, stable
+const QUOTA_USAGE_TTL_MS        = 60 * 60 * 1000; // 1h  — Meta call_count rolls over 1h window
 const _recentMediaCache = new Map(); // accountId → { data: [], expiresAt: 0 }
 const _hashtagsCache    = new Map(); // accountId → { data: [], expiresAt: 0 }
 
@@ -89,15 +90,26 @@ async function markAccountDisconnectedOnAuthFailure(accountId, errorMessage) {
       .update({ is_connected: false, connection_status: 'disconnected' })
       .eq('id', accountId);
 
-    await supabase
+    // Dedup: only insert if no unresolved auth_failure alert already exists for this account
+    const { data: existingAlert } = await supabase
       .from('system_alerts')
-      .insert({
-        alert_type: 'auth_failure',
-        business_account_id: accountId,
-        message: `Proactive sync auth failure: ${errorMessage}`,
-        details: { source: 'proactive_sync', error: errorMessage, occurred_at: new Date().toISOString() },
-        resolved: false,
-      });
+      .select('id')
+      .eq('business_account_id', accountId)
+      .eq('alert_type', 'auth_failure')
+      .eq('resolved', false)
+      .maybeSingle();
+
+    if (!existingAlert) {
+      await supabase
+        .from('system_alerts')
+        .insert({
+          alert_type: 'auth_failure',
+          business_account_id: accountId,
+          message: `Proactive sync auth failure: ${errorMessage}`,
+          details: { source: 'proactive_sync', error: errorMessage, occurred_at: new Date().toISOString() },
+          resolved: false,
+        });
+    }
 
     clearCredentialCache(accountId);
     clearAccountsCache(); // disconnected account must be excluded from next cron tick immediately
@@ -214,7 +226,7 @@ function parseUsageHeader(headerValue) {
  * @param {number|null|undefined} usagePct
  */
 function updateQuotaUsage(accountId, usagePct) {
-  if (usagePct != null) _quotaUsage.set(accountId, usagePct);
+  if (usagePct != null) _quotaUsage.set(accountId, { pct: usagePct, recordedAt: Date.now() });
 }
 
 /**
@@ -223,13 +235,15 @@ function updateQuotaUsage(accountId, usagePct) {
  *   call_count < 50%  → ~500ms  (healthy — green)
  *   call_count 50–79% → 1500ms  (moderate pressure — yellow)
  *   call_count ≥ 80%  → maxMs   (high pressure — red, use full configured delay)
- * Defaults to green tier when no quota data exists (new account or first run).
+ * Defaults to green tier when no quota data exists, or when the reading is
+ * older than QUOTA_USAGE_TTL_MS (1h — Meta's rolling call_count window).
  * @param {string} accountId
  * @param {number} maxMs - INTER_ACCOUNT_DELAY_MS from domain config (default 3000)
  * @returns {number}
  */
 function getAdaptiveDelay(accountId, maxMs) {
-  const pct = _quotaUsage.get(accountId) ?? 0;
+  const entry = _quotaUsage.get(accountId);
+  const pct = (entry && Date.now() - entry.recordedAt < QUOTA_USAGE_TTL_MS) ? entry.pct : 0;
   if (pct >= 80) return maxMs;
   if (pct >= 50) return Math.round(maxMs * 0.5);
   return Math.round(maxMs * 0.17); // ~500ms for default 3000ms config
@@ -338,7 +352,10 @@ async function logSyncAudit(syncType, accountId, details) {
       success: details.success !== false,
     });
   } catch (err) {
-    console.warn(`[Sync:${syncType}] Audit log failed:`, err.message);
+    console.warn(
+      `[Sync:${syncType}] Audit log failed for account ${accountId}: ${err.message}`,
+      { run_id: details?.run_id, status: details?.status }
+    );
   }
 }
 
