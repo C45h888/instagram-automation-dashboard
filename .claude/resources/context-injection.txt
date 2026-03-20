@@ -1,135 +1,281 @@
-DATA DUMP: Missing Components for Audience Demographics
-WHAT DOES NOT EXIST (Must Be Implemented)
-1. BACKEND - Missing API Routes
-File to modify: backend.api/routes/instagram-api.js
+cat .env.production
+# =====================================
+# ENVIRONMENT
+# =====================================
+NODE_ENV=production
+PORT=3001
 
-Route	Method	Purpose	Not Implemented
-/audience/:accountId	GET	Fetch follower demographics	❌ MISSING
-/audience/insights/:accountId	GET	Fetch lifetime audience insights	❌ MISSING
-2. BACKEND - Missing Service Functions
-File to modify: backend.api/services/instagram-tokens.js
+# =====================================
+# TUNNEL CONFIGURATION
+# =====================================
+# DISABLE tunnel for production reliability
+USE_DB_TUNNEL=false
 
-Function	Purpose	Not Implemented
-getFollowerDemographics(igBusinessAccountId, pageToken)	Fetch follower_demographics from Meta Graph API	❌ MISSING
-getOnlineFollowers(igBusinessAccountId, pageToken)	Fetch online_followers hourly data	❌ MISSING
-Required Meta Graph API Call:
+# Only API tunnel needed in production
+CLOUDFLARE_TUNNEL_TOKEN=eyJhIjoiYzFhOGFmOGQ5NmQ3Y2JiM2RiMDgwN2Q0MDMyZjkzY2EiLCJ0IjoiNGFhNjNiYjgtMzdhMS00Mjc3LTg3ZTAtNDQ1NDgxMGIwNGE2IiwicyI6Ill6WXpORGcxT0RjdFpHVTNNeTAwTmpVeExXRTBNRFl0TjJNM016a3hZemcwT1RSaiJ9
+# Note: No CLOUDFLARE_SUPABASE_TUNNEL_TOKEN in production
 
-GET https://graph.facebook.com/v23.0/{ig-business-account-id}/insights
-Parameters:
-  - metric: follower_demographics
-  - period: lifetime
-  - access_token: {page_token}
-3. DATABASE - Missing Tables/Fields
-File to modify: Database schema (requires migration)
+# =====================================
+# SUPABASE CONFIGURATION
+# =====================================
+# Direct connection only in production
+SUPABASE_URL=https://uromexjprcrjfmhkmgxa.supabase.co
+SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVyb21leGpwcmNyamZtaGttZ3hhIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NTc1ODE5NSwiZXhwIjoyMDcxMzM0MTk1fQ.M_XwXITf1cYqT1-exKCpVzQTeY3gJb5qSprG1H-mWnM
+SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVyb21leGpwcmNyamZtaGttZ3hhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU3NTgxOTUsImV4cCI6MjA3MTMzNDE5NX0.4iMC2ktj2nDlOYy-4NfNVHnV4i-tfCVFvgqR835cAOI
+META_APP_ID=1449604936071207
+META_APP_SECRET=c9107cf010ca5bcf82236c71455fdc21
 
-Table	Fields Needed	Not Implemented
-New table: audience_demographics	id, business_account_id, gender_distribution (JSONB), age_distribution (JSONB), location_distribution (JSONB), fetched_at	❌ MISSING
-OR add to: instagram_business_accounts	audience_demographics (JSONB)	❌ MISSING
-New table: follower_locations	id, business_account_id, country, city, percentage, fetched_at	❌ MISSING
-4. FRONTEND - Missing Hooks
-File to create: src/hooks/useAudienceDemographics.ts
+# =====================================
+# INSTAGRAM APP CREDENTIALS (v3)
+# =====================================
+# Instagram-specific credentials for Graph API v23.0
+INSTAGRAM_APP_ID=1595100661870639
+INSTAGRAM_APP_SECRET=16c39820a855b2056b5ddc6c12d18b61
 
-Hook	Purpose	Not Implemented
-useAudienceDemographics()	Fetch & cache audience demographics from new API	❌ MISSING
-useAudienceInsights()	Combined hook for all audience data	❌ MISSING
-Required Types (create in src/types/):
+# Legacy compatibility - keep for /refresh-token endpoint (lines 2557-2558)
+# Can remove after confirming INSTAGRAM_APP_* vars work in production
+FACEBOOK_APP_ID=1595100661870639
+FACEBOOK_APP_SECRET=16c39820a855b2056b5ddc6c12d18b61
 
-// src/types/audience.ts - NEW FILE NEEDED
-interface AudienceDemographics {
-  gender: { male: number; female: number; unknown: number };
-  ageGroups: { [key: string]: number };  // "13-17": 100, "18-24": 500, etc.
-  topCountries: { [key: string]: number };
-  topCities: { [key: string]: number };
-  fetchedAt: string;
-}
+# No SUPABASE_TUNNEL_URL in production
 
-interface UseAudienceResult {
-  demographics: AudienceDemographics | null;
-  isLoading: boolean;
-  error: string | null;
-  refetch: () => void;
-}
-5. FRONTEND - Page Component Changes Needed
-File to modify: src/App.tsx (lines 193-226)
+##admin login
+VITE_SHOW_ADMIN_LINK=true
 
-Current	Needed
-Inline mock <Audience> component	Import and use new useAudienceDemographics hook
-Hardcoded values	Real data from hook
-6. FRONTEND - Types File Addition
-File to create: src/types/audience.ts
-
-// This entire file needs to be created
-export interface GenderDistribution {
-  male: number;
-  female: number;
-  unknown: number;
-}
-
-export interface AgeDistribution {
-  '13-17'?: number;
-  '18-24': number;
-  '25-34': number;
-  '35-44': number;
-  '45-54': number;
-  '55-64'?: number;
-  '65+'?: number;
-}
-
-export interface LocationDistribution {
-  country: string;
-  city: string;
-  percentage: number;
-}
-
-export interface AudienceDemographics {
-  gender: GenderDistribution;
-  age: AgeDistribution;
-  locations: LocationDistribution[];
-  onlineFollowers?: { [hour: string]: number };
-  fetchedAt: string;
-}
-
-export interface UseAudienceDemographicsResult {
-  demographics: AudienceDemographics | null;
-  isLoading: boolean;
-  error: string | null;
-  refetch: () => Promise<void>;
-}
-7. BACKEND - Proactive Sync (Optional Enhancement)
-File to modify: backend.api/services/proactive-sync.js
-
-Cron Job	Purpose	Not Implemented
-proactiveAudienceSync()	Daily fetch of audience demographics	❌ MISSING
-SUMMARY: Files to Create/Modify
-Action	File Path
-CREATE	src/types/audience.ts
-CREATE	src/hooks/useAudienceDemographics.ts
-MODIFY	src/App.tsx (Audience component)
-MODIFY	backend.api/services/instagram-tokens.js
-MODIFY	backend.api/routes/instagram-api.js
-CREATE	Database migration for new table(s)
-METRIC: follower_demographics
-Meta Graph API Response Structure:
-
-{
-  "name": "follower_demographics",
-  "period": "lifetime",
-  "values": [{
-    "value": {
-      "gender": { "male": 30, "female": 65, "unknown": 5 },
-      "age_country": {
-        "13-17": { "US": 100, "GB": 50 },
-        "18-24": { "US": 500, "GB": 200 },
-        "25-34": { "US": 800, "GB": 300 },
-        "35-44": { "US": 400, "GB": 150 },
-        "45-54": { "US": 200, "GB": 80 },
-        "55-64": { "US": 100, "GB": 40 },
-        "65+": { "US": 50, "GB": 20 }
-      }
-    }
-  }]
-}
-Required Permission: instagram_manage_insights (must be requested during OAuth)
+# ============================================
+# AUTHENTICATION MODE - PRODUCTION
+# ============================================
+# ⚠️ CRITICAL: Set to 'facebook' for Meta compliance
+# Only change to 'both' after Meta approval if needed
+#
+# Production Recommendation: 'facebook'
+# - Ensures Meta Platform Terms compliance
+# - Provides best user experience for Instagram Business
+# - Required for Meta app review approval
+#
+# Available Options:
+#   'facebook'  - RECOMMENDED for production (Meta compliant)
+#   'instagram' - Legacy mode (not recommended for new deployments)
+#   'both'      - Use only after Meta approval for user choice
+VITE_AUTH_MODE=both
 
 
 
+# ============================================
+# META/FACEBOOK APP - PRODUCTION
+# ============================================
+# ⚠️ SECURITY: Use production app credentials only
+# Never use development/test credentials in production
+#
+# Obtain from: https://developers.facebook.com/apps (Production App)
+#
+# Before deploying:
+#   1. Ensure Meta app is approved for production use
+#   2. Verify all Instagram Business permissions are granted
+#   3. Configure Valid OAuth Redirect URIs in Meta Console
+#   4. Add production domain to App Domains
+#   5. Set Privacy Policy and Terms of Service URLs
+
+# Production Meta App credentials (real values set below in FRONTEND section)
+# See lines ~132-133 for VITE_META_APP_ID / VITE_META_APP_SECRET
+
+# ============================================
+# OAUTH CONFIGURATION - PRODUCTION
+# ============================================
+# Production callback URL (MUST match Meta Developer Console)
+# Example: https://instagram-backend.888intelligenceautomation.in/auth/callback
+#
+# Uncomment and configure:
+VITE_OAUTH_REDIRECT_URI=https://app.888intelligenceautomation.in/auth/callback
+
+# ============================================
+# DEPLOYMENT CHECKLIST
+# ============================================
+# Before deploying to production:
+#   ✅ Replace ALL placeholder values above
+#   ✅ Verify Meta Developer Console settings match
+#   ✅ Test authentication flow in staging first
+#   ✅ Enable Meta app for production use
+#   ✅ Record screencast for Meta review (if required)
+#
+# Meta Developer Console Configuration:
+#   ✅ Valid OAuth Redirect URIs: Must include callback URL
+#   ✅ App Domains: Must include your production domain
+#   ✅ Privacy Policy URL: Must be publicly accessible
+#   ✅ Terms of Service URL: Must be publicly accessible
+#   ✅ Data Deletion URL: Must be configured
+#
+# Post-Deployment Verification:
+#   ✅ Test Facebook login flow end-to-end
+#   ✅ Verify all permissions requested correctly
+#   ✅ Check browser console for any errors
+#   ✅ Validate OAuth callback handling works
+#   ✅ Monitor authentication success/failure rates
+# =====================================
+# FRONTEND ENVIRONMENT VARIABLES
+# =====================================
+# Production uses direct Supabase connection
+VITE_SUPABASE_URL=https://uromexjprcrjfmhkmgxa.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVyb21leGpwcmNyamZtaGttZ3hhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU3NTgxOTUsImV4cCI6MjA3MTMzNDE5NX0.4iMC2ktj2nDlOYy-4NfNVHnV4i-tfCVFvgqR835cAOI
+VITE_API_URL=https://api.888intelligenceautomation.in
+# Frontend Environment Variables (VITE_)
+VITE_WEBHOOK_URL=https://api.888intelligenceautomation.in
+VITE_API_BASE_URL=https://api.888intelligenceautomation.in
+VITE_AGENT_URL=https://agent.888intelligenceautomation.in
+VITE_WEBHOOK_VERIFY_TOKEN=instagram_automation_cf_token_2024
+VITE_META_APP_ID=1449604936071207
+VITE_META_APP_SECRET=c9107cf010ca5bcf82236c71455fdc21
+
+# Instagram App ID for frontend (NO SECRET - public safe)
+VITE_INSTAGRAM_APP_ID=1595100661870639
+
+# Frontend URL for backend redirects
+FRONTEND_URL=https://app.888intelligenceautomation.in
+
+
+# =====================================
+# STATIC IP (CRITICAL FOR PRODUCTION)
+# =====================================
+BACKEND_STATIC_IP=162.55.57.52
+
+# =====================================
+# INSTAGRAM API (Production)
+# =====================================
+INSTAGRAM_CLIENT_ID=1595100661870639
+INSTAGRAM_CLIENT_SECRET=16c39820a855b2056b5ddc6c12d18b61
+INSTAGRAM_REDIRECT_URI=https://instagram-backend.888intelligenceautomation.in/auth/instagram/callback
+
+# =====================================
+# ENCRYPTION & SECURITY (DIFFERENT FROM DEV!)
+# =====================================
+JWT_SECRET=cF+FAdbiB3kE1SsFqtiCLWsL13hGiurxRd6Sz6tlDv9qRYphYIps7syKgnLTgHNVb3v7/NBWY9R7WrMksqyJTw==
+JWT_EXPIRES_IN=15m
+JWT_REFRESH_EXPIRES_IN=7d
+
+# =====================================
+# N8N WEBHOOKS
+# =====================================
+N8N_BASE_URL=n8n.888intelligenceautomation.in
+N8N_WEBHOOK_SECRET=your_webhook_secret
+    
+# =====================================
+# ADMIN CREDENTIALS (Consider changing for production)
+# =====================================
+ADMIN_EMAIL=admin@888intelligence.com
+ADMIN_PASSWORD=ProductionSecurePassword2024!
+
+# ============================================
+# FIXIE STATIC IP PROXY CONFIGURATION
+# ============================================
+# Enable proxy (set to true after successful testing)
+USE_FIXIE_PROXY=false
+
+# Fixie HTTP Proxy (for general HTTP requests)
+# Format: http://fixie:TOKEN@subdomain.usefixie.com:80
+FIXIE_URL=http://fixie:4uw0DeBh6Cpn37W@ventoux.usefixie.com:80
+
+# Fixie SOCKS5 Proxy (for database connections)
+# Format: username:password@criterium.usefixie.com:1080
+FIXIE_SOCKS_HOST=fixie:7kdXlctJx7yMwM1@galibier.usefixie.com:1080
+
+# Static IP addresses (comma-separated, from Fixie dashboard)
+FIXIE_STATIC_IPS=34.247.192.99,3.255.12.30,54.217.142.99,54.195.3.54
+
+
+# Proxy timeout (milliseconds)
+PROXY_TIMEOUT=30000
+
+# Proxy retry attempts on failure
+PROXY_RETRY_ATTEMPTS=3
+
+# =====================================
+# AGENT CONFIGURATION (LangChain Oversight Brain)
+# =====================================
+# Required for POST /api/instagram/oversight/chat
+AGENT_URL=http://langchain-agent:3002
+AGENT_API_KEY=dqoSRrL3FJkXoUnI8B1HQ1Zpc2pEO3EsoMveDm0XB80
+
+# =====================================
+# PROACTIVE SYNC (Bus 1: Backend-driven cron)
+# =====================================
+# Enabled in production — backend autonomously syncs Instagram data to Supabase
+PROACTIVE_SYNC_ENABLED=true
+PROACTIVE_COMMENTS_CRON=*/3 * * * *
+PROACTIVE_UGC_CRON=0 */3 * * *
+PROACTIVE_INSIGHTS_CRON=0 2 * * *
+
+# Post Queue Fallback (Bus 2: outgoing IG write retry)
+POST_FALLBACK_ENABLED=true
+POST_FALLBACK_CRON=*/5 * * * *
+
+# Heartbeat failover
+HEARTBEAT_STALE_MINUTES=30
+
+# =====================================
+# AGENT VARS (LangChain Oversight Brain — docker-compose.unified.yml)
+# NOTE: OLLAMA_HOST, REDIS_HOST, REDIS_PORT, BACKEND_API_URL are
+# hard-set in compose environment: blocks — do NOT add them here.
+# =====================================
+
+# Supabase alias — agent reads SUPABASE_KEY, backend reads SUPABASE_SERVICE_KEY.
+# Both must be set to the same service-role key value.
+SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVyb21leGpwcmNyamZtaGttZ3hhIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NTc1ODE5NSwiZXhwIjoyMDcxMzM0MTk1fQ.M_XwXITf1cYqT1-exKCpVzQTeY3gJb5qSprG1H-mWnM
+
+# Webhook HMAC secret for order webhooks
+ORDER_WEBHOOK_SECRET=769660f6be0743e6d2e9a36d22a1dec0320f66b24c99b5e89c00406f027f529d
+
+# Agent identity
+AGENT_USER_ID=agent-service
+# Stable UUID — generate once: python3 -c "import uuid; print(uuid.uuid4())"
+HEARTBEAT_AGENT_ID=08408f8d-68ae-40b8-a32a-607c0a03dea0
+HEARTBEAT_ENABLED=true
+HEARTBEAT_INTERVAL_MINUTES=20
+
+# Ollama model
+OLLAMA_MODEL=hf.co/MaziyarPanahi/Nemotron-Orchestrator-8B-GGUF:Q4_K_M
+MAX_CONCURRENT_LLM=4
+
+# Engagement monitor
+ENGAGEMENT_MONITOR_ENABLED=true
+ENGAGEMENT_MONITOR_INTERVAL_MINUTES=5
+ENGAGEMENT_MONITOR_MAX_COMMENTS_PER_RUN=50
+ENGAGEMENT_MONITOR_AUTO_REPLY_ENABLED=true
+ENGAGEMENT_MONITOR_CONFIDENCE_THRESHOLD=0.75
+ENGAGEMENT_MONITOR_HOURS_BACK=24
+
+# Content scheduler
+CONTENT_SCHEDULER_ENABLED=true
+AUTO_PUBLISH=false
+POST_APPROVAL_THRESHOLD=0.6
+
+# UGC collection
+UGC_COLLECTION_ENABLED=true
+UGC_COLLECTION_AUTO_SEND_DM=false
+UGC_COLLECTION_AUTO_REPOST=false
+
+# Analytics
+ANALYTICS_REPORTS_ENABLED=true
+ANALYTICS_LLM_INSIGHTS_ENABLED=false
+SALES_ATTRIBUTION_ENABLED=true
+WEEKLY_LEARNING_ENABLED=true
+
+# Oversight / chat stream
+OVERSIGHT_STREAM_ENABLED=true
+OVERSIGHT_AUTO_CONTEXT_LIMIT=12
+OVERSIGHT_LLM_TIMEOUT_SECONDS=15
+
+# Outbound queue (Redis-backed IG API rate limiter)
+OUTBOUND_QUEUE_ENABLED=true
+<<<<<<< Updated upstream
+LOG_LEVEL=standard
+=======
+# ─── Missing vars (added from agent local env) ───
+ENCRYPTION_KEY=c38f5ccb05b576a28bbf69e4619007fc0e54df93948ad3b14f047256fa2cbd06
+CORS_ALLOW_ORIGINS=https://app.888intelligenceautomation.in,https://api.888intelligenceautomation.in,https://agent.888intelligenceautomation.in
+FLASK_PORT=3002
+OAUTH_REDIRECT_URI=https://app.888intelligenceautomation.in/auth/callback
+ALLOWED_ORIGIN_1=https://app.888intelligenceautomation.in
+ALLOWED_ORIGIN_2=https://api.888intelligenceautomation.in
+ALLOWED_ORIGIN_3=https://agent.888intelligenceautomation.in
+HEARTBEAT_AGENT_ID=$(python3 -c "import uuid; print(uuid.uuid4())")
+>>>>>>> Stashed changes
