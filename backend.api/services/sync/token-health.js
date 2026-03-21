@@ -14,7 +14,7 @@
 //
 // NO import from ./helpers — this file is intentionally isolated.
 
-const { getSupabaseAdmin, logAudit } = require('../../config/supabase');
+const { getSupabaseAdmin, logAudit, fireAndForgetInsert } = require('../../config/supabase');
 const {
   retrievePageToken,
   detectTokenType,
@@ -126,13 +126,14 @@ async function runTokenHealthCheck() {
             }
           } catch (recoveryErr) {
             console.warn(`[TokenHealthCheck] UAT recovery failed for cred ${cred.id}:`, recoveryErr.message);
-            await supabase.from('token_lifecycle_events').insert({
+            const { error: err1 } = await fireAndForgetInsert(supabase.from('token_lifecycle_events').insert({
               credential_id:       cred.id,
               business_account_id: cred.business_account_id,
               event_type:          'pat_invalid',
               token_age_days:      cred.issued_at ? Math.floor((Date.now() - new Date(cred.issued_at).getTime()) / 86400000) : null,
               details:             { source: 'daily_health_check', error: recoveryErr.message },
-            }).catch(() => {});
+            }));
+            if (err1) console.warn('[TokenHealthCheck] pat_invalid insert failed:', err1.message);
           }
 
           if (!recovered) {
@@ -150,24 +151,26 @@ async function runTokenHealthCheck() {
               resolved:            false,
             });
 
-            await supabase.from('token_lifecycle_events').insert({
+            const { error: err2 } = await fireAndForgetInsert(supabase.from('token_lifecycle_events').insert({
               credential_id:       cred.id,
               business_account_id: cred.business_account_id,
               event_type:          'pat_recovery_failed',
               token_age_days:      cred.issued_at ? Math.floor((Date.now() - new Date(cred.issued_at).getTime()) / 86400000) : null,
               details:             { source: 'daily_health_check', error: 'uat_unavailable_or_exchange_failed' },
-            }).catch(() => {});
+            }));
+            if (err2) console.warn('[TokenHealthCheck] pat_recovery_failed insert failed:', err2.message);
 
             console.warn(`[TokenHealthCheck] Token invalid for cred ${cred.id} (user ${cred.user_id}), marked inactive`);
             invalid++;
           } else {
-            await supabase.from('token_lifecycle_events').insert({
+            const { error: err3 } = await fireAndForgetInsert(supabase.from('token_lifecycle_events').insert({
               credential_id:       cred.id,
               business_account_id: cred.business_account_id,
               event_type:          'pat_auto_recovered',
               token_age_days:      cred.issued_at ? Math.floor((Date.now() - new Date(cred.issued_at).getTime()) / 86400000) : null,
               details:             { source: 'daily_health_check' },
-            }).catch(() => {});
+            }));
+            if (err3) console.warn('[TokenHealthCheck] pat_auto_recovered insert failed:', err3.message);
             valid++;
           }
         } else {
@@ -177,13 +180,14 @@ async function runTokenHealthCheck() {
             .update({ debug_token_checked_at: new Date().toISOString() })
             .eq('id', cred.id);
 
-          await supabase.from('token_lifecycle_events').insert({
+          const { error: err4 } = await fireAndForgetInsert(supabase.from('token_lifecycle_events').insert({
             credential_id:       cred.id,
             business_account_id: cred.business_account_id,
             event_type:          'pat_validated',
             token_age_days:      cred.issued_at ? Math.floor((Date.now() - new Date(cred.issued_at).getTime()) / 86400000) : null,
             details:             { source: 'daily_health_check' },
-          }).catch(() => {});
+          }));
+          if (err4) console.warn('[TokenHealthCheck] pat_validated insert failed:', err4.message);
           valid++;
         }
       } catch (apiErr) {
@@ -272,12 +276,13 @@ async function runUATRefreshCheck() {
         resolved: true,
       });
 
-      await supabase.from('token_lifecycle_events').insert({
+      const { error: err5 } = await fireAndForgetInsert(supabase.from('token_lifecycle_events').insert({
         credential_id:       uat.id,
         business_account_id: uat.business_account_id,
         event_type:          'uat_refreshed',
         details:             { source: 'uat_refresh_check', old_expires_at: uat.expires_at, new_expires_at: result.expiresAt, days_remaining: daysLeft },
-      }).catch(() => {});
+      }));
+      if (err5) console.warn('[UATRefresh] uat_refreshed insert failed:', err5.message);
     } catch (refreshErr) {
       console.error(`[UATRefresh] UAT refresh failed: ${refreshErr.message}`);
 
@@ -293,12 +298,13 @@ async function runUATRefreshCheck() {
         resolved: false,
       });
 
-      await supabase.from('token_lifecycle_events').insert({
+      const { error: err6 } = await fireAndForgetInsert(supabase.from('token_lifecycle_events').insert({
         credential_id:       uat.id,
         business_account_id: uat.business_account_id,
         event_type:          'uat_refresh_failed',
         details:             { source: 'uat_refresh_check', error: refreshErr.message, expires_at: uat.expires_at, days_remaining: daysLeft },
-      }).catch(() => {});
+      }));
+      if (err6) console.warn('[UATRefresh] uat_refresh_failed insert failed:', err6.message);
     }
 
     await delay(1000); // Rate-limit between refresh attempts
@@ -343,12 +349,13 @@ async function runUATRefreshCheck() {
         resolved: false,
       });
 
-      await supabase.from('token_lifecycle_events').insert({
+      const { error: err7 } = await fireAndForgetInsert(supabase.from('token_lifecycle_events').insert({
         credential_id:       uat.id,
         business_account_id: uat.business_account_id,
         event_type:          'data_access_expiry_warning',
         details:             { source: 'uat_refresh_check', data_access_expires_at: uat.data_access_expires_at, days_remaining: daysLeft },
-      }).catch(() => {});
+      }));
+      if (err7) console.warn('[UATRefresh] data_access_expiry_warning insert failed:', err7.message);
 
       console.log(`[UATRefresh] data_access_expiry_warning created for account ${uat.business_account_id} (${daysLeft} days left)`);
     }

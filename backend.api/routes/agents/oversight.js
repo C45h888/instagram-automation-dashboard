@@ -13,7 +13,7 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
-const { logApiRequest, logAudit, shouldLog, getSupabaseAdmin } = require('../../config/supabase');
+const { logApiRequest, logAudit, shouldLog, getSupabaseAdmin, fireAndForgetInsert } = require('../../config/supabase');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -246,12 +246,15 @@ router.post('/oversight/chat', async (req, res) => {
       });
 
       if (supabase) {
-        supabase.from('oversight_chat_sessions').upsert({
-          business_account_id,
-          last_question: question,
-          last_latency_ms: latency,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'business_account_id' }).catch(() => {});
+        const { error: upsertErr } = await fireAndForgetInsert(
+          supabase.from('oversight_chat_sessions').upsert({
+            business_account_id,
+            last_question: question,
+            last_latency_ms: latency,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'business_account_id' })
+        );
+        if (upsertErr) console.warn('[Oversight] session upsert failed:', upsertErr.message);
       }
 
       cleanup('stream ended');

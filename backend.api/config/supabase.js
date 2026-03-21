@@ -457,6 +457,32 @@ function shouldLog(level) {
 // HELPER FUNCTIONS (All preserved for backward compatibility)
 // =============================================================================
 
+/**
+ * Wraps a PostgrestBuilder (PromiseLike) in a real Promise so that error
+ * handling works as expected. Without this, `await query.catch()` throws
+ * because PostgrestBuilder resolves to a plain object {error, data, count}.
+ *
+ * Use for insert/update/upsert calls where failure is non-fatal and should
+ * be logged but not thrown.
+ *
+ * @param {PostgrestBuilder} builder — any supabase chain (insert/update/upsert)
+ * @returns {Promise<{error: object|null, data: any}>}
+ */
+function fireAndForgetInsert(builder) {
+  return new Promise((resolve) => {
+    builder
+      .then(({ error, data }) => {
+        if (error) console.warn('[fireAndForgetInsert] DB error:', error.message);
+        resolve({ error, data });
+      })
+      .catch((err) => {
+        // Network-level failure (very rare — DNS, connection refused, etc.)
+        console.error('[fireAndForgetInsert] Promise rejected:', err);
+        resolve({ error: err, data: null });
+      });
+  });
+}
+
 const supabaseHelpers = {
   async testConnection() {
     const health = await checkHealth();
@@ -668,6 +694,9 @@ module.exports = {
   getConnectionInfo,
   checkHealth,
   testConnection,
+
+  // Fire-and-forget query wrapper
+  fireAndForgetInsert,
 
   // Logging functions
   logApiRequest,

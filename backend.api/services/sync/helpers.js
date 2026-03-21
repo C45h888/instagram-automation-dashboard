@@ -9,7 +9,7 @@
 // and post-fallback.js share the same circuit breaker state.
 
 const { randomUUID } = require('crypto');
-const { getSupabaseAdmin, logAudit } = require('../../config/supabase');
+const { getSupabaseAdmin, logAudit, fireAndForgetInsert } = require('../../config/supabase');
 const { clearCredentialCache, logDataBusEvent } = require('../../helpers/agent-helpers');
 
 // ── In-memory state ──────────────────────────────────────────────────────────
@@ -49,20 +49,19 @@ function generateRunId() {
 async function writeSyncRunLog(entry) {
   const supabase = getSupabaseAdmin();
   if (!supabase) return;
-  await supabase.from('sync_run_log').insert(entry).catch((err) => {
-    console.warn('[Sync:helpers] writeSyncRunLog failed:', err.message);
-  });
+  const { error } = await fireAndForgetInsert(supabase.from('sync_run_log').insert(entry));
+  if (error) console.warn('[Sync:helpers] writeSyncRunLog failed:', error.message);
   // Part B: auto-resolve stale-domain alert when a domain recovers (run completes successfully)
   if (entry.status === 'run_completed' && entry.domain) {
-    supabase
-      .from('system_alerts')
-      .update({ resolved: true, resolved_at: new Date().toISOString() })
-      .eq('alert_type', 'sync_stale')
-      .eq('details->>domain', entry.domain)
-      .eq('resolved', false)
-      .catch((err) => {
-        console.warn(`[Sync:helpers] Failed to resolve stale alert for domain ${entry.domain}:`, err.message);
-      });
+    const { error: resolveErr } = await fireAndForgetInsert(
+      supabase
+        .from('system_alerts')
+        .update({ resolved: true, resolved_at: new Date().toISOString() })
+        .eq('alert_type', 'sync_stale')
+        .eq('details->>domain', entry.domain)
+        .eq('resolved', false)
+    );
+    if (resolveErr) console.warn(`[Sync:helpers] Failed to resolve stale alert for domain ${entry.domain}:`, resolveErr.message);
   }
 }
 
@@ -459,22 +458,22 @@ async function checkStaleDomains() {
       }
 
       if (!skipAlert) {
-        await supabase
-          .from('system_alerts')
-          .insert({
-            alert_type: 'sync_stale',
-            message: `${domain} sync has not completed in expected window`,
-            details: {
-              domain,
-              last_completed_at: data?.completed_at || null,
-              threshold_ms: thresholdMs,
-              source: 'stale_domain_watchdog',
-            },
-            resolved: false,
-          })
-          .catch((err) => {
-            console.warn(`[Sync:helpers] checkStaleDomains alert insert failed for ${domain}:`, err.message);
-          });
+        const { error: alertErr } = await fireAndForgetInsert(
+          supabase
+            .from('system_alerts')
+            .insert({
+              alert_type: 'sync_stale',
+              message: `${domain} sync has not completed in expected window`,
+              details: {
+                domain,
+                last_completed_at: data?.completed_at || null,
+                threshold_ms: thresholdMs,
+                source: 'stale_domain_watchdog',
+              },
+              resolved: false,
+            })
+        );
+        if (alertErr) console.warn(`[Sync:helpers] checkStaleDomains alert insert failed for ${domain}:`, alertErr.message);
         console.warn(`[Sync:helpers] Stale domain detected: ${domain} (last run: ${data?.completed_at || 'never'})`);
       } else {
         console.warn(`[Sync:helpers] Stale domain ${domain} already has an unresolved alert, skipping duplicate`);
