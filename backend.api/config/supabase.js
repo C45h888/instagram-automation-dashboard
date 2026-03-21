@@ -1,4 +1,5 @@
-// backend/config/supabase.js - Optimized Direct Connection (No Tunnel B)
+// backend/config/
+//  - Optimized Direct Connection (No Tunnel B)
 const { createClient } = require('@supabase/supabase-js');
 const crypto = require('crypto');
 const dotenv = require('dotenv');

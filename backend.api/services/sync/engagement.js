@@ -120,7 +120,6 @@ async function proactiveCommentSync() {
       const recentMedia = await getRecentMedia(account.id);
       const postsToCheck = recentMedia.slice(0, COMMENT_MAX_POSTS);
       let totalComments   = 0;
-      commentAuthFailed = false;
 
       // PARALLEL FETCH — up to 3 posts in parallel per batch
       const commentResults = await runConcurrent(

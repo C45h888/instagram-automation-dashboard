@@ -1,3 +1,8 @@
+4m35h@ubuntu-8gb-nbg-888-iga:~/projects/instagram-automation-agent$ docker compose -f docker-compose.unified.yml logs -f backend
+WARN[0000] The "N8N_COMMENT_WEBHOOK" variable is not set. Defaulting to a blank string. 
+WARN[0000] The "N8N_BASE_URL" variable is not set. Defaulting to a blank string. 
+WARN[0000] The "N8N_DM_WEBHOOK" variable is not set. Defaulting to a blank string. 
+WARN[0000] The "N8N_ORDER_WEBHOOK" variable is not set. Defaulting to a blank string. 
 instagram-backend  | ⚠️  Node.js 18 and below are deprecated and will no longer be supported in future versions of @supabase/supabase-js. Please upgrade to Node.js 20 or later. For more information, visit: https://github.com/orgs/supabase/discussions/37217
 instagram-backend  | 🔒 CORS Allowed Origins: [
 instagram-backend  |   'https://app.888intelligenceautomation.in',
@@ -52,7 +57,7 @@ instagram-backend  |    Verified: 2 user profiles accessible
 instagram-backend  | 
 instagram-backend  | ✅ Database connection established
 instagram-backend  |    Connected to: https://uromexjprcrjfmhkmgxa.supabase.co
-instagram-backend  |    Connection established at: 2026-03-20T15:28:44.688Z
+instagram-backend  |    Connection established at: 2026-03-21T12:28:38.150Z
 instagram-backend  |    Database verified: 2 user profiles
 instagram-backend  | [TokenHealth] Token health check scheduled: 0 3 * * *
 instagram-backend  | [ProactiveSync] Initializing scheduled jobs:
@@ -85,128 +90,29 @@ instagram-backend  |    Encryption: Vault-based (Supabase pgsodium)
 instagram-backend  | 
 instagram-backend  | ============================================================
 instagram-backend  | 
-instagram-backend  | [Sync:comments] Starting run 9ce7c794-b62b-4353-9258-2b9eff23f149
-instagram-backend  | [Sync:engagement] Starting run 3d7b2468-69f3-4b3c-8793-c613bba1c49a
-instagram-backend  | [Sync:engagement] Unhandled error: supabase.from(...).insert(...).catch is not a function
-instagram-backend  | [Sync:comments] Unhandled error: supabase.from(...).insert(...).catch is not a function
-instagram-backend  | [Failover] checkStaleDomains error: supabase.from(...).insert(...).catch is not a function
-instagram-backend  | 📥 2026-03-20T15:32:22.426Z [642f6c63-5794-4c60-b456-68d3b46bd1a5] GET /api/instagram/token-status?userId=7e631172-2287-4d95-994c-53a5c61a3af8&businessAccountId=0882b710-4258-47cf-85c8-1fa82a3de763
-instagram-backend  |    CF-Ray: 9df5c4e559c3fd16-SIN
+instagram-backend  | [Sync:comments] Starting run 9c00ca27-9d67-4646-ac87-67858b61e631
+instagram-backend  | [Sync:engagement] Starting run 48f589f7-9587-4cba-8189-f7247258e982
+instagram-backend  | [Sync:helpers] Stale domain detected: engagement (last run: never)
+instagram-backend  | [Sync:helpers] Stale domain detected: ugc (last run: never)
+instagram-backend  | [Sync:comments] Account 0882b710-4258-47cf-85c8-1fa82a3de763 failed: Cannot access 'commentAuthFailed' before initialization
+instagram-backend  | [Sync:helpers] Stale domain detected: media (last run: never)
+instagram-backend  | [Sync:comments] Run 9c00ca27-9d67-4646-ac87-67858b61e631 complete — ok:0 err:1 skip:0
+instagram-backend  | [Sync:helpers] Stale domain detected: insights (last run: never)
+instagram-backend  | [Sync:helpers] Stale domain detected: token_health (last run: never)
+instagram-backend  | [logApiRequest] Non-retryable error (42883): operator does not exist: double precision % bigint
+instagram-backend  | [Sync:engagement] Run 48f589f7-9587-4cba-8189-f7247258e982 complete — ok:1 err:0 skip:0
+instagram-backend  | 📥 2026-03-21T12:32:45.343Z [dd5ed269-b9d4-4aa3-ad3d-c77ab397ed62] GET /api/instagram/token-status?userId=7e631172-2287-4d95-994c-53a5c61a3af8&business_account_id=0882b710-4258-47cf-85c8-1fa82a3de763
+instagram-backend  |    CF-Ray: 9dfcfb28bce991c6-SIN
 instagram-backend  |    CF-Country: IN
 instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | 📥 2026-03-20T15:32:23.072Z [128563bb-074c-4962-92d9-ad8cbb840967] POST /api/instagram/validate-token
-instagram-backend  |    CF-Ray: 9df5c4e95b9dfe1d-SIN
+instagram-backend  | 📥 2026-03-21T12:32:45.917Z [55c1edff-21cb-400b-a3ee-91e913ffe813] GET /api/instagram/profile/17841475450533073?userId=7e631172-2287-4d95-994c-53a5c61a3af8&business_account_id=0882b710-4258-47cf-85c8-1fa82a3de763
+instagram-backend  |    CF-Ray: 9dfcfb2c6d2291c6-SIN
 instagram-backend  |    CF-Country: IN
 instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | [Token Validation] Validating token for user: 7e631172-2287-4d95-994c-53a5c61a3af8
-instagram-backend  | 📥 2026-03-20T15:32:23.081Z [e7b53b81-e851-486c-8591-6986491f748b] GET /api/instagram/profile/17841475450533073?userId=7e631172-2287-4d95-994c-53a5c61a3af8&businessAccountId=0882b710-4258-47cf-85c8-1fa82a3de763
-instagram-backend  |    CF-Ray: 9df5c4e97bb6fe1d-SIN
-instagram-backend  |    CF-Country: IN
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
+instagram-backend  | ❌ Missing required query parameters for profile fetch
 instagram-backend  | 👤 Fetching profile for IG account: 17841475450533073
-instagram-backend  | 📥 2026-03-20T15:32:23.090Z [2618723a-5a9b-4538-97ab-64ad82f15419] GET /webhook/realtime-updates
-instagram-backend  |    CF-Ray: 9df5c4e96ba9fe1d-SIN
-instagram-backend  |    CF-Country: IN
-instagram-backend  | [Token Validation] ✅ Token decrypted successfully
-instagram-backend  | [Token Validation] 🔍 Calling Meta API: {
-instagram-backend  |   url: 'https://graph.facebook.com/v23.0/17841475450533073',
-instagram-backend  |   instagramBusinessId: '17841475450533073',
-instagram-backend  |   tokenLength: 224,
-instagram-backend  |   hasToken: true
-instagram-backend  | }
-instagram-backend  | [Token Validation] ✅ Token is active (1169ms)
-instagram-backend  | 📥 2026-03-20T15:32:25.730Z [c01b1b19-dd1a-4951-aeb1-7fa4949662a6] GET /webhook/realtime-updates
-instagram-backend  |    CF-Ray: 9df5c4fc3ed6fe1d-SIN
-instagram-backend  |    CF-Country: IN
-instagram-backend  | API logging error: duplicate key value violates unique constraint "api_usage_unique_bucket" Key (COALESCE(user_id::text, ''::text), COALESCE(business_account_id::text, ''::text), endpoint, method, hour_bucket)=(, , /webhook/realtime-updates, GET, 2026-03-20 15:00:00+00) already exists.
-instagram-backend  | 📥 2026-03-20T15:32:27.645Z [f06cb00e-4b11-4890-83b6-b850b4799c3f] GET /api/instagram/media/17841475450533073?userId=7e631172-2287-4d95-994c-53a5c61a3af8&businessAccountId=0882b710-4258-47cf-85c8-1fa82a3de763&limit=50
-instagram-backend  |    CF-Ray: 9df5c5084eddfe1d-SIN
-instagram-backend  |    CF-Country: IN
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | 🖼️  Fetching media from database for account: 17841475450533073
-instagram-backend  | [Media] ✅ Returned 3 posts from database (cached, 174ms)
-instagram-backend  | 📥 2026-03-20T15:32:51.956Z [57841703-1cb2-4d62-85bd-6115718fd246] GET /api/instagram/dm-conversations?business_account_id=0882b710-4258-47cf-85c8-1fa82a3de763
-instagram-backend  |    CF-Ray: 9df5c5a02be8fe1d-SIN
-instagram-backend  |    CF-Country: IN
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | 📥 2026-03-20T15:32:52.766Z [444dc17d-7398-4d69-9e5d-7877980d45a4] GET /api/instagram/dm-conversations?business_account_id=0882b710-4258-47cf-85c8-1fa82a3de763
-instagram-backend  |    CF-Ray: 9df5c5a54eccfe1d-SIN
-instagram-backend  |    CF-Country: IN
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | 📥 2026-03-20T15:32:53.057Z [cbc50ad8-45db-403b-b3d7-5554160fab35] GET /api/instagram/dm-messages?business_account_id=0882b710-4258-47cf-85c8-1fa82a3de763&conversation_id=aWdfZAG06MTpJR01lc3NhZA2VUaHJlYWQ6MTc4NDE0NzU0NTA1MzMwNzM6MzQwMjgyMzY2ODQxNzEwMzAxMjQ0Mjc2MDUxOTU2NjIzNjAxOTk0
-instagram-backend  |    CF-Ray: 9df5c5a71ffefe1d-SIN
-instagram-backend  |    CF-Country: IN
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | 📥 2026-03-20T15:32:58.611Z [e07eee10-4ea1-4232-9ad5-e5b4c9daf4a2] GET /api/instagram/dm-conversations?business_account_id=0882b710-4258-47cf-85c8-1fa82a3de763
-instagram-backend  |    CF-Ray: 9df5c5c9ccebfe1d-SIN
-instagram-backend  |    CF-Country: IN
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | 📥 2026-03-20T15:32:59.136Z [6ee6ed9f-6a32-48b5-b939-b34807d12aec] GET /api/instagram/dm-conversations?business_account_id=0882b710-4258-47cf-85c8-1fa82a3de763
-instagram-backend  |    CF-Ray: 9df5c5cd1ebcfe1d-SIN
-instagram-backend  |    CF-Country: IN
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | 📥 2026-03-20T15:32:59.425Z [b037cf71-ddb7-473c-991b-101cfb05b839] GET /api/instagram/dm-messages?business_account_id=0882b710-4258-47cf-85c8-1fa82a3de763&conversation_id=aWdfZAG06MTpJR01lc3NhZA2VUaHJlYWQ6MTc4NDE0NzU0NTA1MzMwNzM6MzQwMjgyMzY2ODQxNzEwMzAxMjQ0Mjc2MDUxOTU2NjIzNjAxOTk0
-instagram-backend  |    CF-Ray: 9df5c5ceefd8fe1d-SIN
-instagram-backend  |    CF-Country: IN
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | [Sync:comments] Starting run 8b4ee04f-d36c-4cb9-a978-507f3ed3905c
-instagram-backend  | [Sync:engagement] Starting run 3155b213-d006-4239-9736-7ed0c3f4c794
-instagram-backend  | [Sync:engagement] Unhandled error: supabase.from(...).insert(...).catch is not a function
-instagram-backend  | [Sync:comments] Unhandled error: supabase.from(...).insert(...).catch is not a function
-instagram-backend  | 📥 2026-03-20T15:33:03.425Z [905026c8-c803-4ce2-8082-c7e0b8722233] GET /api/instagram/visitor-posts?userId=7e631172-2287-4d95-994c-53a5c61a3af8&businessAccountId=0882b710-4258-47cf-85c8-1fa82a3de763&limit=50
-instagram-backend  |    CF-Ray: 9df5c5e7dd4bfe1d-SIN
-instagram-backend  |    CF-Country: IN
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | [UGC] Fetching visitor posts from database
-instagram-backend  |    User ID: 7e631172-2287-4d95-994c-53a5c61a3af8
-instagram-backend  |    Business Account ID: 0882b710-4258-47cf-85c8-1fa82a3de763
-instagram-backend  | 📥 2026-03-20T15:33:03.521Z [b3cdcf69-ac4d-4b41-b851-8893489f285a] POST /api/instagram/sync/ugc
-instagram-backend  |    CF-Ray: 9df5c5e87dadfe1d-SIN
-instagram-backend  |    CF-Country: IN
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | [UGC] ✅ Returned 0 posts from database (cached, 524ms)
-instagram-backend  | API logging error: invalid input syntax for type uuid: "17841475450533073" null
-instagram-backend  | 📥 2026-03-20T15:33:11.151Z [9f1a4f72-3a62-4237-85c7-a48af4d16dec] GET /api/instagram/account-insights?business_account_id=0882b710-4258-47cf-85c8-1fa82a3de763
-instagram-backend  |    CF-Ray: 9df5c6182873fe1d-SIN
-instagram-backend  |    CF-Country: IN
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | API logging error: invalid input syntax for type uuid: "17841475450533073" null
-instagram-backend  | 📥 2026-03-20T15:33:13.847Z [ced1a5b4-b1df-4c6d-a2c3-639cf1130d58] GET /api/instagram/account-insights?business_account_id=0882b710-4258-47cf-85c8-1fa82a3de763&until=1773415993
-instagram-backend  |    CF-Ray: 9df5c62908defe1d-SIN
-instagram-backend  |    CF-Country: IN
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | API logging error: invalid input syntax for type uuid: "17841475450533073" null
-instagram-backend  | API logging error: duplicate key value violates unique constraint "api_usage_unique_bucket" Key (COALESCE(user_id::text, ''::text), COALESCE(business_account_id::text, ''::text), endpoint, method, hour_bucket)=(, 0882b710-4258-47cf-85c8-1fa82a3de763, /account-insights, GET, 2026-03-20 15:00:00+00) already exists.
-instagram-backend  | 📥 2026-03-20T15:33:22.224Z [1b0cb58d-e864-4eac-b2bb-605c72abcd86] POST /api/instagram/sync/ugc
-instagram-backend  |    CF-Ray: 9df5c65d5a55fe1d-SIN
-instagram-backend  |    CF-Country: IN
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | 📥 2026-03-20T15:33:22.248Z [0b26185c-76ce-40dc-bd0f-bf7234c42e0b] GET /api/instagram/visitor-posts?userId=7e631172-2287-4d95-994c-53a5c61a3af8&businessAccountId=0882b710-4258-47cf-85c8-1fa82a3de763&limit=50
-instagram-backend  |    CF-Ray: 9df5c65d8a6dfe1d-SIN
-instagram-backend  |    CF-Country: IN
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | [UGC] Fetching visitor posts from database
-instagram-backend  |    User ID: 7e631172-2287-4d95-994c-53a5c61a3af8
-instagram-backend  |    Business Account ID: 0882b710-4258-47cf-85c8-1fa82a3de763
-instagram-backend  | API logging error: invalid input syntax for type uuid: "17841475450533073" null
-instagram-backend  | [UGC] ✅ Returned 0 posts from database (cached, 475ms)
-instagram-backend  | 📥 2026-03-20T15:33:23.040Z [bb5af8b7-6733-4bf2-9a8e-7458a0d528a7] GET /api/instagram/media/17841475450533073?userId=7e631172-2287-4d95-994c-53a5c61a3af8&businessAccountId=0882b710-4258-47cf-85c8-1fa82a3de763&limit=50
-instagram-backend  |    CF-Ray: 9df5c6627c6afe1d-SIN
-instagram-backend  |    CF-Country: IN
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | 🖼️  Fetching media from database for account: 17841475450533073
-instagram-backend  | [Media] ✅ Returned 3 posts from database (cached, 150ms)
-instagram-backend  | 📥 2026-03-20T15:33:23.690Z [c49c6be7-97bb-4764-a0e1-e725b14480ce] GET /api/instagram/token-status?userId=7e631172-2287-4d95-994c-53a5c61a3af8&businessAccountId=0882b710-4258-47cf-85c8-1fa82a3de763
-instagram-backend  |    CF-Ray: 9df5c6668ed3fe1d-SIN
-instagram-backend  |    CF-Country: IN
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | 📥 2026-03-20T15:33:23.967Z [0b392db2-91b7-4125-a2dc-c415752d7d28] GET /api/instagram/profile/17841475450533073?userId=7e631172-2287-4d95-994c-53a5c61a3af8&businessAccountId=0882b710-4258-47cf-85c8-1fa82a3de763
-instagram-backend  |    CF-Ray: 9df5c6684fd0fe1d-SIN
-instagram-backend  |    CF-Country: IN
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | 👤 Fetching profile for IG account: 17841475450533073
-instagram-backend  | 📥 2026-03-20T15:33:23.996Z [ab2ddcef-c618-4c26-8fdb-996cce221269] POST /api/instagram/validate-token
-instagram-backend  |    CF-Ray: 9df5c6687ffcfe1d-SIN
+instagram-backend  | 📥 2026-03-21T12:32:46.047Z [83a41f36-7a6d-4199-a3b3-628b46e94ff4] POST /api/instagram/validate-token
+instagram-backend  |    CF-Ray: 9dfcfb2cdd2991c6-SIN
 instagram-backend  |    CF-Country: IN
 instagram-backend  | ℹ️  No user ID found - skipping rate limit check
 instagram-backend  | [Token Validation] Validating token for user: 7e631172-2287-4d95-994c-53a5c61a3af8
@@ -217,132 +123,25 @@ instagram-backend  |   instagramBusinessId: '17841475450533073',
 instagram-backend  |   tokenLength: 224,
 instagram-backend  |   hasToken: true
 instagram-backend  | }
-instagram-backend  | [Token Validation] ✅ Token is active (665ms)
-instagram-backend  | 📥 2026-03-20T15:33:26.701Z [94613ccc-d72e-4942-8c0c-85d647dfb4db] GET /webhook/realtime-updates
-instagram-backend  |    CF-Ray: 9df5c6795914fe1d-SIN
-instagram-backend  |    CF-Country: IN
-instagram-backend  | API logging error: duplicate key value violates unique constraint "api_usage_unique_bucket" Key (COALESCE(user_id::text, ''::text), COALESCE(business_account_id::text, ''::text), endpoint, method, hour_bucket)=(, , /webhook/realtime-updates, GET, 2026-03-20 15:00:00+00) already exists.
-instagram-backend  | 📥 2026-03-20T15:33:28.842Z [5fbc26a5-60ab-424f-ae93-83d9c12046a8] GET /api/instagram/media/17841475450533073?userId=7e631172-2287-4d95-994c-53a5c61a3af8&businessAccountId=0882b710-4258-47cf-85c8-1fa82a3de763&limit=50
-instagram-backend  |    CF-Ray: 9df5c686b844fe1d-SIN
-instagram-backend  |    CF-Country: IN
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | 🖼️  Fetching media from database for account: 17841475450533073
-instagram-backend  | [Media] ✅ Returned 3 posts from database (cached, 148ms)
-instagram-backend  | 📥 2026-03-20T15:33:56.251Z [164a0e20-d506-4991-ba6a-a59c078a6892] GET /api/instagram/post-comments?business_account_id=0882b710-4258-47cf-85c8-1fa82a3de763&media_id=18119332864451803&limit=50
-instagram-backend  |    CF-Ray: 9df5c7326ea2dbea-FRA
+instagram-backend  | [Token Validation] ✅ Token is active (735ms)
+instagram-backend  | [Sync:comments] Starting run be896861-c4b4-435c-ab36-32ad7888b0f0
+instagram-backend  | [Sync:engagement] Starting run c59318b6-9612-4d34-9a09-4873bb9c348b
+instagram-backend  | [Sync:comments] Account 0882b710-4258-47cf-85c8-1fa82a3de763 failed: Cannot access 'commentAuthFailed' before initialization
+instagram-backend  | [Sync:comments] Run be896861-c4b4-435c-ab36-32ad7888b0f0 complete — ok:0 err:1 skip:0
+instagram-backend  | [logApiRequest] Non-retryable error (42883): operator does not exist: double precision % bigint
+instagram-backend  | [Sync:engagement] Run c59318b6-9612-4d34-9a09-4873bb9c348b complete — ok:1 err:0 skip:0
+instagram-backend  | 📥 2026-03-21T12:33:49.626Z [85317c45-2ba2-45cf-a287-00e1ea8b8d18] GET /api/instagram/post-comments?business_account_id=0882b710-4258-47cf-85c8-1fa82a3de763&media_id=18119332864451803&limit=50
+instagram-backend  |    CF-Ray: 9dfcfcbcfba49963-FRA
 instagram-backend  |    CF-Country: DE
 instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | API logging error: duplicate key value violates unique constraint "api_usage_unique_bucket" Key (COALESCE(user_id::text, ''::text), COALESCE(business_account_id::text, ''::text), endpoint, method, hour_bucket)=(7e631172-2287-4d95-994c-53a5c61a3af8, 0882b710-4258-47cf-85c8-1fa82a3de763, /post-comments, GET, 2026-03-20 15:00:00+00) already exists.
-instagram-backend  | 📥 2026-03-20T15:33:57.658Z [f0b44d5f-467c-4ed3-874e-c65a7e171be4] GET /api/instagram/post-comments?business_account_id=0882b710-4258-47cf-85c8-1fa82a3de763&media_id=18114826447521018&limit=50
-instagram-backend  |    CF-Ray: 9df5c73b2c5c5d90-FRA
+instagram-backend  | [logApiRequest] Non-retryable error (42883): operator does not exist: double precision % bigint
+instagram-backend  | 📥 2026-03-21T12:33:50.648Z [943344c4-c7f6-4014-a2b5-116dd1a21256] GET /api/instagram/post-comments?business_account_id=0882b710-4258-47cf-85c8-1fa82a3de763&media_id=18114826447521018&limit=50
+instagram-backend  |    CF-Ray: 9dfcfcc36db0d360-FRA
 instagram-backend  |    CF-Country: DE
 instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | API logging error: duplicate key value violates unique constraint "api_usage_unique_bucket" Key (COALESCE(user_id::text, ''::text), COALESCE(business_account_id::text, ''::text), endpoint, method, hour_bucket)=(7e631172-2287-4d95-994c-53a5c61a3af8, 0882b710-4258-47cf-85c8-1fa82a3de763, /post-comments, GET, 2026-03-20 15:00:00+00) already exists.
-instagram-backend  | 📥 2026-03-20T15:33:58.147Z [6645514f-7d8f-4919-847d-cb68248212e2] GET /api/instagram/post-comments?business_account_id=0882b710-4258-47cf-85c8-1fa82a3de763&media_id=17991698096696570&limit=50
-instagram-backend  |    CF-Ray: 9df5c73e3a545c32-FRA
+instagram-backend  | [logApiRequest] Non-retryable error (42883): operator does not exist: double precision % bigint
+instagram-backend  | 📥 2026-03-21T12:33:51.101Z [1bf1b40b-d5a7-4dfc-8f01-f57ae5791777] GET /api/instagram/post-comments?business_account_id=0882b710-4258-47cf-85c8-1fa82a3de763&media_id=17991698096696570&limit=50
+instagram-backend  |    CF-Ray: 9dfcfcc65e97d39e-FRA
 instagram-backend  |    CF-Country: DE
 instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | API logging error: duplicate key value violates unique constraint "api_usage_unique_bucket" Key (COALESCE(user_id::text, ''::text), COALESCE(business_account_id::text, ''::text), endpoint, method, hour_bucket)=(7e631172-2287-4d95-994c-53a5c61a3af8, 0882b710-4258-47cf-85c8-1fa82a3de763, /post-comments, GET, 2026-03-20 15:00:00+00) already exists.
-instagram-backend  | [Failover] Agent(s) down: f47ac10b-58cc-4372-a567-0e02b2c3d479
-instagram-backend  | [Failover] ⚠️ Agent f47ac10b-58cc-4372-a567-0e02b2c3d479 missed 6 heartbeats
-instagram-backend  | [Failover] checkStaleDomains error: supabase.from(...).insert(...).catch is not a function
-instagram-backend  | [Sync:comments] Starting run 1b45bacc-5367-48ef-a89d-57a4745da87b
-instagram-backend  | [Sync:engagement] Starting run e9b12cc3-2d34-4959-aa57-939bfffffd94
-instagram-backend  | [Sync:comments] Unhandled error: supabase.from(...).insert(...).catch is not a function
-instagram-backend  | [Sync:engagement] Unhandled error: supabase.from(...).insert(...).catch is not a function
-instagram-backend  | 🧹 Cleaned 1 expired IP throttle entries (Map size: 0)
-instagram-backend  | [Sync:comments] Starting run 1661f8f3-0146-41e2-822d-85acc5e83fab
-instagram-backend  | [Sync:engagement] Starting run a80ee913-723f-4529-9211-dfe1832fef0f
-instagram-backend  | [Sync:engagement] Unhandled error: supabase.from(...).insert(...).catch is not a function
-instagram-backend  | [Sync:comments] Unhandled error: supabase.from(...).insert(...).catch is not a function
-instagram-backend  | [Failover] checkStaleDomains error: supabase.from(...).insert(...).catch is not a function
-instagram-backend  | 📥 2026-03-20T15:41:39.352Z [32804bd8-483f-4b4c-8053-95bea0cfdef5] GET /api/instagram/post-comments?business_account_id=0882b710-4258-47cf-85c8-1fa82a3de763&media_id=18114826447521018&limit=50
-instagram-backend  |    CF-Ray: 9df5d27f0d9cb4a3-ATL
-instagram-backend  |    CF-Country: US
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | 📥 2026-03-20T15:41:40.529Z [d671febe-392e-45f0-8aec-f96fe7233c82] GET /api/instagram/post-comments?business_account_id=0882b710-4258-47cf-85c8-1fa82a3de763&media_id=17991698096696570&limit=50
-instagram-backend  |    CF-Ray: 9df5d2855ddaa34b-SEA
-instagram-backend  |    CF-Country: US
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | 📥 2026-03-20T15:41:40.897Z [b235fdc9-aaa8-4c78-a981-41c013b23545] GET /api/instagram/post-comments?business_account_id=0882b710-4258-47cf-85c8-1fa82a3de763&media_id=18114826447521018&limit=50
-instagram-backend  |    CF-Ray: 9df5d287daac5580-SEA
-instagram-backend  |    CF-Country: US
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | 📥 2026-03-20T15:41:41.466Z [8115b151-3f84-4f6b-a1ba-58ff777e70b2] GET /api/instagram/post-comments?business_account_id=0882b710-4258-47cf-85c8-1fa82a3de763&media_id=17991698096696570&limit=50
-instagram-backend  |    CF-Ray: 9df5d28d9db4bf5b-WAW
-instagram-backend  |    CF-Country: PL
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | 📥 2026-03-20T15:41:41.850Z [13a6746d-9b12-428c-9e93-7e6a7b48d275] GET /api/instagram/post-comments?business_account_id=0882b710-4258-47cf-85c8-1fa82a3de763&media_id=18114826447521018&limit=50
-instagram-backend  |    CF-Ray: 9df5d28edea7b560-IAD
-instagram-backend  |    CF-Country: US
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | 📥 2026-03-20T15:41:43.222Z [917bbc00-38bb-4357-9468-c5a17b5dae66] GET /api/instagram/post-comments?business_account_id=0882b710-4258-47cf-85c8-1fa82a3de763&media_id=17991698096696570&limit=50
-instagram-backend  |    CF-Ray: 9df5d296e883c639-DEN
-instagram-backend  |    CF-Country: US
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | [Sync:comments] Starting run 25e21c4c-57ce-450a-8d65-223229048111
-instagram-backend  | [Sync:engagement] Starting run de84117c-a5f9-488a-ba36-d5682ec1021d
-instagram-backend  | [Sync:comments] Unhandled error: supabase.from(...).insert(...).catch is not a function
-instagram-backend  | [Sync:engagement] Unhandled error: supabase.from(...).insert(...).catch is not a function
-instagram-backend  | 📥 2026-03-20T15:42:14.865Z [57be6e52-5786-456b-8390-8418d983034e] GET /api/instagram/post-comments?business_account_id=0882b710-4258-47cf-85c8-1fa82a3de763&media_id=18114826447521018&limit=50
-instagram-backend  |    CF-Ray: 9df5d35acae8a605-NRT
-instagram-backend  |    CF-Country: JP
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | 📥 2026-03-20T15:42:18.550Z [7b657fc9-f517-40bc-b877-ad6343e140bc] GET /api/instagram/post-comments?business_account_id=0882b710-4258-47cf-85c8-1fa82a3de763&media_id=17991698096696570&limit=50
-instagram-backend  |    CF-Ray: 9df5d3742d9425d8-EWR
-instagram-backend  |    CF-Country: US
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | 🧹 Cleaned 1 expired IP throttle entries (Map size: 0)
-instagram-backend  | 📥 2026-03-20T15:43:55.944Z [3dc486af-a40d-4ea2-819a-eba541a354a5] GET /api/instagram/post-comments?business_account_id=0882b710-4258-47cf-85c8-1fa82a3de763&media_id=18119332864451803&limit=50
-instagram-backend  |    CF-Ray: 9df5d5d679b73727-FRA
-instagram-backend  |    CF-Country: DE
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | API logging error: duplicate key value violates unique constraint "api_usage_unique_bucket" Key (COALESCE(user_id::text, ''::text), COALESCE(business_account_id::text, ''::text), endpoint, method, hour_bucket)=(7e631172-2287-4d95-994c-53a5c61a3af8, 0882b710-4258-47cf-85c8-1fa82a3de763, /post-comments, GET, 2026-03-20 15:00:00+00) already exists.
-instagram-backend  | 📥 2026-03-20T15:43:57.979Z [76a2067c-09b8-45b3-8037-a2667ad89fc4] GET /api/instagram/post-comments?business_account_id=0882b710-4258-47cf-85c8-1fa82a3de763&media_id=18114826447521018&limit=50
-instagram-backend  |    CF-Ray: 9df5d5e33eac8e9a-FRA
-instagram-backend  |    CF-Country: DE
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | API logging error: duplicate key value violates unique constraint "api_usage_unique_bucket" Key (COALESCE(user_id::text, ''::text), COALESCE(business_account_id::text, ''::text), endpoint, method, hour_bucket)=(7e631172-2287-4d95-994c-53a5c61a3af8, 0882b710-4258-47cf-85c8-1fa82a3de763, /post-comments, GET, 2026-03-20 15:00:00+00) already exists.
-instagram-backend  | 📥 2026-03-20T15:43:58.459Z [12834d02-ee52-47eb-a451-a086551083cb] GET /api/instagram/post-comments?business_account_id=0882b710-4258-47cf-85c8-1fa82a3de763&media_id=17991698096696570&limit=50
-instagram-backend  |    CF-Ray: 9df5d5e63bdad26a-FRA
-instagram-backend  |    CF-Country: DE
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | API logging error: duplicate key value violates unique constraint "api_usage_unique_bucket" Key (COALESCE(user_id::text, ''::text), COALESCE(business_account_id::text, ''::text), endpoint, method, hour_bucket)=(7e631172-2287-4d95-994c-53a5c61a3af8, 0882b710-4258-47cf-85c8-1fa82a3de763, /post-comments, GET, 2026-03-20 15:00:00+00) already exists.
-instagram-backend  | [Sync:comments] Starting run 70dbb7eb-c846-412c-89a1-cc2c7d4755b8
-instagram-backend  | [Sync:engagement] Starting run ee3f5bf8-2721-4f94-960a-70fcb0af6486
-instagram-backend  | [Sync:engagement] Unhandled error: supabase.from(...).insert(...).catch is not a function
-instagram-backend  | [Sync:comments] Unhandled error: supabase.from(...).insert(...).catch is not a function
-instagram-backend  | [Failover] checkStaleDomains error: supabase.from(...).insert(...).catch is not a function
-instagram-backend  | 📥 2026-03-20T15:46:58.405Z [b0cbc88b-344e-4596-bd1a-4bc02daf6cdd] GET /api/instagram/post-comments?business_account_id=0882b710-4258-47cf-85c8-1fa82a3de763&media_id=17991698096696570&limit=50
-instagram-backend  |    CF-Ray: 9df5da494d92a577-ORD
-instagram-backend  |    CF-Country: US
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | 📥 2026-03-20T15:46:59.466Z [c178405d-73d4-40b3-aedb-d6ca328418e0] GET /api/instagram/post-comments?business_account_id=0882b710-4258-47cf-85c8-1fa82a3de763&media_id=17991698096696570&limit=50
-instagram-backend  |    CF-Ray: 9df5da4fff363b96-IAD
-instagram-backend  |    CF-Country: US
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | 📥 2026-03-20T15:47:01.494Z [8a513f04-8abc-4070-bb22-4749615c1742] GET /api/instagram/post-comments?business_account_id=0882b710-4258-47cf-85c8-1fa82a3de763&media_id=17991698096696570&limit=50
-instagram-backend  |    CF-Ray: 9df5da5c3cb7585f-MCI
-instagram-backend  |    CF-Country: US
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | 📥 2026-03-20T15:47:39.448Z [d1142125-f86b-4a44-b6b5-3110a1405a5e] GET /
-instagram-backend  |    CF-Ray: 9df5db49db5cd15b-EWR
-instagram-backend  |    CF-Country: US
-instagram-backend  | 📥 2026-03-20T15:47:47.064Z [8c82246c-57ab-48a5-80ca-2e07fd937aa9] GET /
-instagram-backend  |    CF-Ray: 9df5db784f12c782-SJC
-instagram-backend  |    CF-Country: US
-instagram-backend  | API logging error: duplicate key value violates unique constraint "api_usage_unique_bucket" Key (COALESCE(user_id::text, ''::text), COALESCE(business_account_id::text, ''::text), endpoint, method, hour_bucket)=(, , /, GET, 2026-03-20 15:00:00+00) already exists.
-instagram-backend  | [Sync:comments] Starting run 560869f8-0bab-48bf-9112-f8f998e0e0fb
-instagram-backend  | [Sync:engagement] Starting run 1dd639f9-b34b-47b8-af7b-ef59176f4e81
-instagram-backend  | [Sync:comments] Unhandled error: supabase.from(...).insert(...).catch is not a function
-instagram-backend  | [Sync:engagement] Unhandled error: supabase.from(...).insert(...).catch is not a function
-instagram-backend  | 🧹 Cleaned 1 expired IP throttle entries (Map size: 0)
-instagram-backend  | 📥 2026-03-20T15:48:56.305Z [7f69012f-1602-49e1-b35f-49d47be0dd76] POST /api/instagram/agent/heartbeat
-instagram-backend  |    CF-Ray: 9df5dd2bbd16c876-FRA
-instagram-backend  |    CF-Country: DE
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | [Failover] checkStaleDomains error: supabase.from(...).insert(...).catch is not a function
-instagram-backend  | 📥 2026-03-20T15:50:22.354Z [713ac1b1-dfef-4cec-8324-a1ffbf9b714d] GET /
-instagram-backend  |    CF-Ray: 9df5df43de8fc99c-IAD
-instagram-backend  |    CF-Country: US
-instagram-backend  | API logging error: duplicate key value violates unique constraint "api_usage_unique_bucket" Key (COALESCE(user_id::text, ''::text), COALESCE(business_account_id::text, ''::text), endpoint, method, hour_bucket)=(, , /, GET, 2026-03-20 15:00:00+00) already exists.
+instagram-backend  | [logApiRequest] Non-retryable error (42883): operator does not exist: double precision % bigint

@@ -113,13 +113,14 @@ async function runTokenHealthCheck() {
               });
               clearCredentialCache(cred.business_account_id);
 
-              await supabase.from('system_alerts').insert({
+              const { error: alertErr1 } = await fireAndForgetInsert(supabase.from('system_alerts').insert({
                 alert_type:          'pat_auto_recovered',
                 business_account_id: cred.business_account_id,
                 message:             'Your Instagram access token was automatically recovered using stored credentials.',
                 details:             { user_id: cred.user_id, old_credential_id: cred.id, source: 'token_health_check' },
                 resolved:            true,
-              });
+              }));
+              if (alertErr1) console.warn('[TokenHealthCheck] pat_auto_recovered alert insert failed:', alertErr1.message);
 
               console.log(`[TokenHealthCheck] PAT auto-recovered for cred ${cred.id} via stored UAT`);
               recovered = true;
@@ -143,13 +144,14 @@ async function runTokenHealthCheck() {
               .update({ is_active: false, updated_at: new Date().toISOString() })
               .eq('id', cred.id);
 
-            await supabase.from('system_alerts').insert({
+            const { error: alertErr2 } = await fireAndForgetInsert(supabase.from('system_alerts').insert({
               alert_type:          'auth_failure',
               business_account_id: cred.business_account_id,
               message:             'Instagram access token is no longer valid. Please reconnect your account.',
               details:             { user_id: cred.user_id, credential_id: cred.id, source: 'token_health_check' },
               resolved:            false,
-            });
+            }));
+            if (alertErr2) console.warn('[TokenHealthCheck] auth_failure alert insert failed:', alertErr2.message);
 
             const { error: err2 } = await fireAndForgetInsert(supabase.from('token_lifecycle_events').insert({
               credential_id:       cred.id,
@@ -264,7 +266,7 @@ async function runUATRefreshCheck() {
       const result = await refreshUserToken(uat.user_id, uat.business_account_id);
       console.log(`[UATRefresh] UAT refreshed, new expiry: ${result.expiresAt}`);
 
-      await supabase.from('system_alerts').insert({
+      const { error: alertErr3 } = await fireAndForgetInsert(supabase.from('system_alerts').insert({
         alert_type:          'uat_auto_refreshed',
         business_account_id: uat.business_account_id,
         message:             `Your access token was automatically refreshed. New expiry: ${result.expiresAt}`,
@@ -274,7 +276,8 @@ async function runUATRefreshCheck() {
           days_remaining_at_refresh: daysLeft,
         },
         resolved: true,
-      });
+      }));
+      if (alertErr3) console.warn('[UATRefresh] uat_auto_refreshed alert insert failed:', alertErr3.message);
 
       const { error: err5 } = await fireAndForgetInsert(supabase.from('token_lifecycle_events').insert({
         credential_id:       uat.id,
@@ -286,7 +289,7 @@ async function runUATRefreshCheck() {
     } catch (refreshErr) {
       console.error(`[UATRefresh] UAT refresh failed: ${refreshErr.message}`);
 
-      await supabase.from('system_alerts').insert({
+      const { error: alertErr4 } = await fireAndForgetInsert(supabase.from('system_alerts').insert({
         alert_type:          'uat_expiry_warning',
         business_account_id: uat.business_account_id,
         message:             `Your access token expires in ${daysLeft} days and auto-refresh failed. Please reconnect your Instagram account.`,
@@ -296,7 +299,8 @@ async function runUATRefreshCheck() {
           days_remaining: daysLeft,
         },
         resolved: false,
-      });
+      }));
+      if (alertErr4) console.warn('[UATRefresh] uat_expiry_warning alert insert failed:', alertErr4.message);
 
       const { error: err6 } = await fireAndForgetInsert(supabase.from('token_lifecycle_events').insert({
         credential_id:       uat.id,
@@ -337,7 +341,7 @@ async function runUATRefreshCheck() {
       .maybeSingle();
 
     if (!existing) {
-      await supabase.from('system_alerts').insert({
+      const { error: alertErr5 } = await fireAndForgetInsert(supabase.from('system_alerts').insert({
         alert_type:          'data_access_expiry_warning',
         business_account_id: uat.business_account_id,
         message:             `Instagram data access expires in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}. Reconnect your account to renew access to messages and comments.`,
@@ -347,7 +351,8 @@ async function runUATRefreshCheck() {
           note:                   'Cannot be refreshed via fb_exchange_token — requires fresh OAuth consent',
         },
         resolved: false,
-      });
+      }));
+      if (alertErr5) console.warn('[UATRefresh] data_access_expiry_warning insert failed:', alertErr5.message);
 
       const { error: err7 } = await fireAndForgetInsert(supabase.from('token_lifecycle_events').insert({
         credential_id:       uat.id,
