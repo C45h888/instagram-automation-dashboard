@@ -178,7 +178,7 @@ export const useVisitorPosts = (): UseVisitorPostsResult => {
 
       // ✅ UPDATED: Add userId parameter and use fetchWithRetry
       const response = await fetchWithRetry(
-        `${apiBaseUrl}/api/instagram/visitor-posts?userId=${user.id}&businessAccountId=${businessAccountId}&limit=50`,
+        `${apiBaseUrl}/api/instagram/visitor-posts?userId=${user.id}&business_account_id=${businessAccountId}&limit=50`,
         { headers: { 'Content-Type': 'application/json' } }
       );
 

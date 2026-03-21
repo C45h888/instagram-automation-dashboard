@@ -270,7 +270,7 @@ const ContentManagement: React.FC = () => {
       console.log('📥 Fetching Instagram media...');
 
       const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
-      const url = `${apiBaseUrl}/api/instagram/media/${instagramBusinessId}?userId=${userId}&businessAccountId=${businessAccountId}&limit=50`;
+      const url = `${apiBaseUrl}/api/instagram/media/${instagramBusinessId}?userId=${userId}&business_account_id=${businessAccountId}&limit=50`;
       const response = await fetch(url);
       const result: MediaGridResponse = await response.json();
 

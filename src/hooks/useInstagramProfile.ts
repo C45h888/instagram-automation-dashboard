@@ -53,7 +53,7 @@ export const useInstagramProfile = (): UseInstagramProfileResult => {
 
       // ✅ UPDATED: Build URL with full base URL and required query parameters
       const response = await fetch(
-        `${apiBaseUrl}/api/instagram/profile/${instagramBusinessId}?userId=${user.id}&businessAccountId=${businessAccountId}`,
+        `${apiBaseUrl}/api/instagram/profile/${instagramBusinessId}?userId=${user.id}&business_account_id=${businessAccountId}`,
         {
           headers: {
             // ✅ REMOVED: Authorization header (backend retrieves token internally)

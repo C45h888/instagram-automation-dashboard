@@ -17,12 +17,16 @@ router.post('/agent/heartbeat', async (req, res) => {
   if (!supabase) return res.status(503).json({ error: 'Database unavailable' });
 
   try {
+    // Use UPDATE instead of upsert: the row always exists after the first heartbeat.
+    // UPDATE modifies in place (1 new heap tuple). upsert always writes a new tuple
+    // even when the UPDATE path fires — creating unnecessary dead tuples on every beat.
     const { error } = await supabase
       .from('agent_heartbeats')
-      .upsert(
-        { agent_id, last_beat_at: timestamp || new Date().toISOString(), status: 'alive' },
-        { onConflict: 'agent_id' }
-      );
+      .update({
+        last_beat_at: timestamp || new Date().toISOString(),
+        status: 'alive',
+      })
+      .eq('agent_id', agent_id);
 
     if (error) throw error;
 

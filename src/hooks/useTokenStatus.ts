@@ -47,7 +47,7 @@ export const useTokenStatus = (): TokenStatusResult => {
     try {
       const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
       const res = await fetch(
-        `${apiBaseUrl}/api/instagram/token-status?userId=${encodeURIComponent(user.id)}&businessAccountId=${encodeURIComponent(businessAccountId)}`
+        `${apiBaseUrl}/api/instagram/token-status?userId=${encodeURIComponent(user.id)}&business_account_id=${encodeURIComponent(businessAccountId)}`
       );
       const data = await res.json();
 

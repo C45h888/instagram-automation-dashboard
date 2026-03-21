@@ -168,9 +168,13 @@ async function storeCommentBatches(businessAccountId, batches) {
   if (allCommentRecords.length === 0) return { count: 0 };
 
   // Step 5: Single batch upsert
+  // ignoreDuplicates: false (ON CONFLICT DO UPDATE) is intentional — updates in place
+  // producing one new heap tuple per upsert. ignoreDuplicates: true fires INSERT and
+  // silently discards on conflict — still writes, but with no update benefit.
+  // Aggressive autovacuum tuning (threshold=5, scale_factor=0) keeps bloat minimal.
   const { error: upsertErr } = await supabase
     .from('instagram_comments')
-    .upsert(allCommentRecords, { onConflict: 'instagram_comment_id', ignoreDuplicates: true });
+    .upsert(allCommentRecords, { onConflict: 'instagram_comment_id', ignoreDuplicates: false });
 
   if (upsertErr) {
     await logWithDomain('messaging', {

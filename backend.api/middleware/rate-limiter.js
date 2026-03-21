@@ -255,9 +255,17 @@ async function logInstagramAPICall(req, res, next) {
                  req.user?.user_id ||
                  req.body?.user_id;
 
-  const businessAccountId = req.body?.business_account_id ||
-                           req.query?.business_account_id ||
-                           req.user?.business_account_id;
+  // Support both snake_case (backend convention) and camelCase (some frontend callers)
+  // Also validate UUID type before inserting — numeric media IDs must not reach this column
+  const rawBusinessAccountId = req.body?.business_account_id ||
+                               req.query?.business_account_id ||
+                               req.user?.business_account_id ||
+                               req.query?.businessAccountId ||
+                               req.body?.businessAccountId;
+
+  // UUID validation: reject numeric Instagram IDs that would violate the column type
+  const isValidUuid = (v) => v && typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+  const businessAccountId = isValidUuid(rawBusinessAccountId) ? rawBusinessAccountId : null;
 
   if (!userId) {
     // No user to track - skip logging

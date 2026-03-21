@@ -386,25 +386,27 @@ async function logApiRequest(userIdOrObj, endpoint, method, responseTime, status
     let userId_v, endpoint_v, method_v, responseTime_v, statusCode_v, success_v, businessAccountId_v;
 
     let errorMessage_v = null;
+    let domain_v = null;
 
     if (userIdOrObj !== null && typeof userIdOrObj === 'object' && !Array.isArray(userIdOrObj)) {
       // Object form (used by agent-proxy.js)
-      userId_v = userIdOrObj.user_id || null;
-      endpoint_v = userIdOrObj.endpoint;
-      method_v = userIdOrObj.method;
-      responseTime_v = userIdOrObj.latency || userIdOrObj.response_time || 0;
-      statusCode_v = userIdOrObj.status_code || (userIdOrObj.success ? 200 : 500);
-      success_v = userIdOrObj.success !== undefined ? userIdOrObj.success : true;
+      userId_v            = userIdOrObj.user_id || null;
+      endpoint_v          = userIdOrObj.endpoint;
+      method_v            = userIdOrObj.method;
+      responseTime_v      = userIdOrObj.latency || userIdOrObj.response_time || 0;
+      statusCode_v       = userIdOrObj.status_code || (userIdOrObj.success ? 200 : 500);
+      success_v           = userIdOrObj.success !== undefined ? userIdOrObj.success : true;
       businessAccountId_v = userIdOrObj.business_account_id || null;
-      errorMessage_v = userIdOrObj.error || null;
+      errorMessage_v      = userIdOrObj.error || null;
+      domain_v            = userIdOrObj.domain || null;
     } else {
       // Positional form (used by server.js middleware)
-      userId_v = userIdOrObj;
-      endpoint_v = endpoint;
-      method_v = method;
-      responseTime_v = responseTime;
-      statusCode_v = statusCode;
-      success_v = success;
+      userId_v            = userIdOrObj;
+      endpoint_v          = endpoint;
+      method_v            = method;
+      responseTime_v      = responseTime;
+      statusCode_v        = statusCode;
+      success_v           = success;
       businessAccountId_v = businessAccountId;
     }
 
@@ -414,30 +416,54 @@ async function logApiRequest(userIdOrObj, endpoint, method, responseTime, status
       return;
     }
 
-    const _now = new Date();
+    const _now        = new Date();
     const _hourBucket = new Date(_now);
     _hourBucket.setMinutes(0, 0, 0);
 
-    const { error } = await admin.from('api_usage').insert({
-      user_id: userId_v || null,
-      business_account_id: businessAccountId_v || null,
-      endpoint: endpoint_v,
-      method: method_v,
-      response_time_ms: responseTime_v,
-      status_code: statusCode_v,
-      success: success_v,
-      error_message: errorMessage_v,
-      domain: (typeof userIdOrObj === 'object' && userIdOrObj !== null) ? (userIdOrObj.domain || null) : null,
-      hour_bucket: _hourBucket.toISOString(),
-      request_count: 1,
-      created_at: _now.toISOString()
-    });
+    // Retry loop: up to 3 attempts with exponential back-off for transient conflicts
+    const MAX_RETRIES    = 3;
+    const BASE_DELAY_MS  = 100;
 
-    if (error) {
-      console.error('API logging error:', error.message, error.details);
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      const { error } = await admin.rpc('log_api_request', {
+        p_user_id:             userId_v,
+        p_business_account_id: businessAccountId_v,
+        p_endpoint:            endpoint_v,
+        p_method:              method_v,
+        p_response_time_ms:    responseTime_v,
+        p_status_code:         statusCode_v,
+        p_success:             success_v,
+        p_error_message:      errorMessage_v,
+        p_domain:              domain_v,
+        p_hour_bucket:         _hourBucket.toISOString()
+      });
+
+      if (!error) return; // success
+
+      // Only retry on PostgreSQL unique-constraint violation (23505)
+      // Other errors (bad RPC, auth failure) are non-retryable — fail fast
+      const isConstraintViolation = error?.code === '23505';
+
+      if (!isConstraintViolation) {
+        console.error(`[logApiRequest] Non-retryable error (${error?.code}): ${error?.message}`);
+        return;
+      }
+
+      if (attempt === MAX_RETRIES) {
+        console.error(
+          `[logApiRequest] All ${MAX_RETRIES} retries exhausted for ` +
+          `${endpoint_v} ${method_v} (hour_bucket=${_hourBucket.toISOString()}). ` +
+          `Last error: ${error.message}`
+        );
+        return;
+      }
+
+      // Exponential back-off: 100ms → 200ms → 400ms
+      const delay = BASE_DELAY_MS * Math.pow(2, attempt - 1);
+      await new Promise(resolve => setTimeout(resolve, delay));
     }
   } catch (error) {
-    console.error('API logging exception:', error.message);
+    console.error(`[logApiRequest] Unexpected exception: ${error.message}`);
   }
 }
 
