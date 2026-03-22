@@ -165,7 +165,6 @@ function handleFetchError(result, accountId) {
       logDataBusEvent('sync', 'token_expired_mid_run', {
         account_id: accountId,
         error_code: result.code || null,
-        domain: result.domain || null,
         success: false,
       }).catch(() => {});
     }
