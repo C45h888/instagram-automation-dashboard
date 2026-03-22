@@ -13,7 +13,7 @@ const {
   fetchDynamicScope,
   GRAPH_API_BASE,
 } = require('../../services/tokens');
-const { getSupabaseAdmin, logAudit: logAuditService } = require('../../config/supabase');
+const { getSupabaseAdmin, logAudit: logAuditService, fireAndForgetInsert } = require('../../config/supabase');
 const { clearCredentialCache } = require('../../helpers/credential-cache');
 
 const logAudit = logAuditService;
@@ -241,13 +241,14 @@ router.post('/exchange-token', async (req, res) => {
     clearCredentialCache(storeResult.businessAccountId);
 
     // Resolve any outstanding auth_failure alerts — account is now reconnected
-    await supabaseAdmin
-      .from('system_alerts')
-      .update({ resolved: true, resolved_at: new Date().toISOString() })
-      .eq('business_account_id', storeResult.businessAccountId)
-      .eq('alert_type', 'auth_failure')
-      .eq('resolved', false)
-      .catch((err) => console.warn('[Token] Failed to resolve auth_failure alerts:', err.message));
+    await fireAndForgetInsert(
+      supabaseAdmin
+        .from('system_alerts')
+        .update({ resolved: true, resolved_at: new Date().toISOString() })
+        .eq('business_account_id', storeResult.businessAccountId)
+        .eq('alert_type', 'auth_failure')
+        .eq('resolved', false)
+    );
 
     // ===== STEP 7: Store UAT in split vault =====
     if (uatDetected && finalUAT) {
