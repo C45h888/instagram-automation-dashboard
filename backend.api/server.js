@@ -434,14 +434,6 @@ try {
 // Backend auth.js deleted - signInWithIdToken() was incompatible with Facebook tokens
 // See: .claude/resources/current-work.md - Phase 3.7 for details
 
-try {
-  const testRoutes = require('./routes/test');
-  app.use('/api/test', testRoutes);
-  console.log('✅ Test routes loaded');
-} catch (error) {
-  console.warn('⚠️  Test routes not available:', error.message);
-}
-
 // =============================================================================
 // ROOT AND API DOCUMENTATION
 // =============================================================================
@@ -489,11 +481,6 @@ app.get('/api', (req, res) => {
         'POST /api/instagram/send-dm': 'Send DM for UGC permissions (agent only)',
         'POST /api/instagram/publish-post': 'Publish post from content scheduler (agent only)',
         'GET /api/instagram/insights': 'Get account/media insights for analytics (agent only)'
-      },
-      testing: {
-        '/api/test': 'Test suite overview',
-        '/api/test/supabase': 'Database connection test',
-        '/api/test/integration': 'Full integration test'
       },
       legal: {
         '/legal/privacy': 'Privacy policy',

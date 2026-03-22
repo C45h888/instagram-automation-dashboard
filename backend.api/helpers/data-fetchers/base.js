@@ -15,7 +15,7 @@ const {
   GRAPH_API_BASE,
 } = require('../agent-helpers');
 const { mapRawPostToUgcContent } = require('../ugc-field-map');
-const { parseUsageHeader } = require('../../services/sync/helpers');
+const { parseUsageHeader } = require('../../services/sync/helpersync');
 
 // ============================================
 // PER-DOMAIN LOGGER
