@@ -973,7 +973,8 @@ router.post('/validate-token', async (req, res) => {
  */
 router.get('/token-status', async (req, res) => {
   try {
-    const { userId, businessAccountId } = req.query;
+    const { userId } = req.query;
+    const businessAccountId = req.query.businessAccountId || req.query.business_account_id;
     if (!userId || !businessAccountId) {
       return res.status(400).json({ error: 'userId and businessAccountId required' });
     }

@@ -66,7 +66,8 @@ router.get('/media/:accountId', async (req, res) => {
 
   try {
     const { accountId } = req.params;
-    const { limit = 25, offset = 0, businessAccountId } = req.query;
+    const { limit = 25, offset = 0 } = req.query;
+    const businessAccountId = req.query.businessAccountId || req.query.business_account_id;
 
     console.log(`🖼️  Fetching media from database for account: ${accountId}`);
 
@@ -167,7 +168,8 @@ router.get('/profile/:id', async (req, res) => {
 
   try {
     const { id } = req.params;
-    const { userId, businessAccountId } = req.query;
+    const { userId } = req.query;
+    const businessAccountId = req.query.businessAccountId || req.query.business_account_id;
 
     console.log(`👤 Fetching profile for IG account: ${id}`);
 

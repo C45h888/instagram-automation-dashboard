@@ -20,7 +20,8 @@ router.get('/visitor-posts', async (req, res) => {
   const requestStartTime = Date.now();
 
   try {
-    const { userId, businessAccountId, limit = 20, offset = 0 } = req.query;
+    const { userId, limit = 20, offset = 0 } = req.query;
+    const businessAccountId = req.query.businessAccountId || req.query.business_account_id;
 
     console.log('[UGC] Fetching visitor posts from database');
     console.log('   User ID:', userId);
