@@ -26,7 +26,7 @@ const {
   logSyncAudit,
   updateQuotaUsage,
   getAdaptiveDelay,
-} = require('./helpersync');
+} = require('./helpers');
 
 const {
   fetchComments,

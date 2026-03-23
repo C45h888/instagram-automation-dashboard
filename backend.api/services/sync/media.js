@@ -17,7 +17,7 @@ const {
   updateQuotaUsage,
   getAdaptiveDelay,
   clearRecentMediaCache,
-} = require('./helpersync');
+} = require('./helpers');
 
 const {
   fetchAndStoreBusinessPosts,
