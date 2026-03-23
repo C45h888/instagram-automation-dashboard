@@ -21,6 +21,7 @@ import ActivityFeedPanel from './ActivityFeedPanel'
 import QueueMonitorPanel from './QueueMonitorPanel'
 import MetricsOverviewPanel from './MetricsOverviewPanel'
 import AnimatedSpiralBackground from './AnimatedSpiralBackground'
+import SessionDropdown from './SessionDropdown'
 
 type PanelView = 'chat' | 'feed' | 'queue' | 'metrics'
 
@@ -120,6 +121,16 @@ export default function AgentTerminalDashboard() {
               isLoading={agentHealth.isLoading || queueMonitor.isLoading}
             />
           </div>
+          {/* Session picker */}
+          <div className="border-b border-terminal-border bg-terminal-bg-alt">
+            <SessionDropdown
+              sessions={oversightChat.sessions}
+              activeSession={oversightChat.activeSession}
+              isStreaming={oversightChat.isStreaming}
+              onSelect={oversightChat.selectSession}
+              onNewSession={oversightChat.startSession}
+            />
+          </div>
           {/* Close button */}
           <button
             onClick={handleClose}
@@ -130,34 +141,6 @@ export default function AgentTerminalDashboard() {
           </button>
         </div>
       </header>
-
-      {/* ── Session Selector ────────────────────────────────────────── */}
-      {oversightChat.sessions.length > 0 && (
-        <div className="flex gap-1 px-2 py-1 border-b border-terminal-border bg-terminal-bg-alt overflow-x-auto">
-          <span className="text-terminal-dim text-xs px-2 py-1 shrink-0">sessions:</span>
-          {oversightChat.sessions.map((session) => (
-            <button
-              key={session.id}
-              onClick={() => oversightChat.selectSession(session.id)}
-              className={`text-xs px-2 py-1 shrink-0 ${
-                session.id === oversightChat.activeSession?.id
-                  ? 'text-terminal-green bg-terminal-bg-panel'
-                  : 'text-terminal-dim hover:text-terminal-cyan'
-              }`}
-              title={session.session_title || `Session ${session.id.slice(0, 8)}`}
-            >
-              [{session.session_title?.slice(0, 15) || session.id.slice(0, 6)}]
-            </button>
-          ))}
-          <button
-            onClick={oversightChat.startSession}
-            className="text-xs text-terminal-dim hover:text-terminal-green px-2 py-1 shrink-0"
-            title="Start new session"
-          >
-            [+new]
-          </button>
-        </div>
-      )}
 
       {/* ── Mobile Tab Bar (< 1024px) ────────────────────────────────── */}
       <div className="flex lg:hidden border-b border-terminal-border bg-terminal-bg-alt">

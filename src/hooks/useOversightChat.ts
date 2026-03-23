@@ -94,14 +94,38 @@ export function useOversightChat(businessAccountId: string | null): UseOversight
         .select('*')
         .eq('business_account_id', businessAccountId)
         .order('created_at', { ascending: false })
-        .limit(20)
+        .limit(5)
 
       if (dbErr || !mounted) return
-      setSessions((data ?? []) as OversightSession[])
+
+      const loaded = (data ?? []) as OversightSession[]
+      setSessions(loaded)
+
+      if (loaded.length > 0) {
+        // Auto-select the most recent session
+        setActiveSession(loaded[0])
+      } else {
+        // No sessions exist — auto-create one
+        if (!user?.id) return
+        const { data: newData, error: createErr } = await supabase
+          .from('oversight_chat_sessions')
+          .insert({
+            business_account_id: businessAccountId,
+            dashboard_user_id:   user.id,
+            messages:            [],
+          })
+          .select()
+          .single()
+
+        if (createErr || !mounted) return
+        const newSession = newData as OversightSession
+        setSessions([newSession])
+        setActiveSession(newSession)
+      }
     })()
 
     return () => { mounted = false }
-  }, [businessAccountId])
+  }, [businessAccountId, user?.id])
 
   // ── Parse messages from active session ────────────────────────────────────
   useEffect(() => {
@@ -203,31 +227,44 @@ export function useOversightChat(businessAccountId: string | null): UseOversight
             const trimmed = block.trim()
             if (!trimmed) continue
 
-            // Keep-alive ping — drop silently (matches ': ping\n\n' format)
+            // Keep-alive ping (comment-style ': ping') — drop silently
             if (trimmed.startsWith(':')) continue
+
+            // Extract event: field from block lines (defaults to 'message' per SSE spec)
+            let currentEventType = 'message'
+            for (const line of trimmed.split('\n')) {
+              if (line.startsWith('event: ')) {
+                currentEventType = line.slice(7).trim()
+                break
+              }
+            }
+
+            // Gap 2: ignore ping events — heartbeat data must never reach message handler
+            if (currentEventType === 'ping') continue
 
             const event = parseSSEEvent(trimmed)
             if (!event) continue
 
-            if (isAgentToken(event)) {
-              accumulated += event.token
-              setStreamBuffer(accumulated)
-            } else if (isAgentDone(event)) {
+            // Gap 3: route by event type first, fall back to payload shape guards
+            if (currentEventType === 'done' || isAgentDone(event)) {
               await persistMessage(sessionId, accumulated)
               setStreamBuffer('')
               accumulated = ''
               cleanup()
               return
-            } else if (isAgentError(event)) {
+            } else if (currentEventType === 'error' || isAgentError(event)) {
               // Persist partial response if any content was accumulated
               if (accumulated) {
                 await persistMessage(sessionId, accumulated, true)
               }
-              setError(getSSEErrorMessage(event))
+              setError(getSSEErrorMessage(event as Parameters<typeof getSSEErrorMessage>[0]))
               cleanup()
               return
+            } else if (currentEventType === 'message' && isAgentToken(event)) {
+              accumulated += event.token
+              setStreamBuffer(accumulated)
             }
-            // Unknown payload shape — ignore silently
+            // tool_call and other unknown event types — ignore silently
           }
         }
       } catch (err: unknown) {
@@ -254,12 +291,19 @@ export function useOversightChat(businessAccountId: string | null): UseOversight
 
     setError(null)
 
+    // Mark all existing sessions for this account as stale
+    await supabase
+      .from('oversight_chat_sessions')
+      .update({ is_active: false })
+      .eq('business_account_id', businessAccountId)
+
     const { data, error: dbErr } = await supabase
       .from('oversight_chat_sessions')
       .insert({
         business_account_id: businessAccountId,
         dashboard_user_id:   user.id,
         messages:            [],
+        is_active:           true,
       })
       .select()
       .single()
@@ -267,9 +311,11 @@ export function useOversightChat(businessAccountId: string | null): UseOversight
     if (dbErr) { setError(dbErr.message); return }
 
     const session = data as OversightSession
-    setSessions((prev) => [session, ...prev])
+    // Update local sessions list — mark all stale, prepend new
+    setSessions((prev) => [session, ...prev.map((s) => ({ ...s, is_active: false }))].slice(0, 5))
     setActiveSession(session)
     setMessages([])
+    setStreamBuffer('')
   }, [businessAccountId, user])
 
   // ── Select an existing session ─────────────────────────────────────────────

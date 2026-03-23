@@ -125,7 +125,7 @@ router.post('/oversight/chat', async (req, res) => {
     try {
       const agentRes = await axios.post(agentUrl, agentPayload, {
         headers: agentHeaders,
-        timeout: 60000
+        timeout: 65000
       });
 
       const latency = Date.now() - startTime;
@@ -220,9 +220,25 @@ router.post('/oversight/chat', async (req, res) => {
 
     agentStream = agentRes.data;
 
-    // Pipe agent SSE chunks to client, normalizing error shapes in transit
+    // Pipe agent SSE chunks to client, normalizing complete events only.
+    // Buffer across chunks so JSON spanning multiple TCP packets is never split mid-parse.
+    let sseBuffer = '';
+
     agentStream.on('data', (chunk) => {
-      if (!res.writableEnded) res.write(normalizeAgentSseChunk(chunk.toString()));
+      if (res.writableEnded) return;
+
+      sseBuffer += chunk.toString();
+
+      // Split on SSE event boundaries; last element is the incomplete tail
+      const events = sseBuffer.split('\n\n');
+      sseBuffer = events.pop();  // hold back incomplete tail
+
+      for (const event of events) {
+        if (event.trim()) {
+          res.write(normalizeAgentSseChunk(event) + '\n\n');
+        }
+      }
+
       const now = Date.now();
       if (shouldLog('debug') && now - lastChunkLoggedAt > 5000) {
         lastChunkLoggedAt = now;
@@ -232,6 +248,10 @@ router.post('/oversight/chat', async (req, res) => {
     });
 
     agentStream.on('end', async () => {
+      // Flush any remaining buffered data that didn't end with \n\n
+      if (sseBuffer.trim() && !res.writableEnded) {
+        res.write(normalizeAgentSseChunk(sseBuffer) + '\n\n');
+      }
       if (!res.writableEnded) res.end();
 
       const latency = Date.now() - startTime;
