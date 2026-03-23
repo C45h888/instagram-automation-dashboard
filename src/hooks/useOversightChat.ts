@@ -258,7 +258,7 @@ export function useOversightChat(businessAccountId: string | null): UseOversight
       .from('oversight_chat_sessions')
       .insert({
         business_account_id: businessAccountId,
-        user_id:             user.id,
+        dashboard_user_id:   user.id,
         messages:            [],
       })
       .select()
