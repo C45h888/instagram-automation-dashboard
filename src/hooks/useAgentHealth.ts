@@ -29,8 +29,10 @@ export interface UseAgentHealthResult {
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Threshold for considering the agent alive (last heartbeat within this time) */
-export const LIVENESS_THRESHOLD_MS = 60_000  // 60 seconds
+/** Threshold for considering the agent alive (last heartbeat within this time).
+ *  Agent heartbeat interval is 20 minutes — threshold must exceed that.
+ *  Aligned with backend oversight.js: 25 minutes gives a 5-minute buffer. */
+export const LIVENESS_THRESHOLD_MS = 25 * 60 * 1000  // 1_500_000ms (25 minutes)
 const POLL_INTERVAL_MS             = 30_000  // 30 seconds
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -19,8 +19,10 @@ const { logApiRequest, logAudit, shouldLog, getSupabaseAdmin } = require('../../
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Threshold for considering the agent alive (matches frontend LIVENESS_THRESHOLD_MS) */
-const LIVENESS_THRESHOLD_MS = 60_000;  // 60 seconds
+/** Threshold for considering the agent alive.
+ *  Agent heartbeat interval is 20 minutes — threshold must exceed that.
+ *  25 minutes gives a 5-minute buffer over the 20-minute heartbeat interval. */
+const LIVENESS_THRESHOLD_MS = 25 * 60 * 1000;  // 1_500_000ms (25 minutes)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // normalizeAgentSseChunk

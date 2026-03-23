@@ -75,7 +75,7 @@ async function proactiveHeartbeatFailover(supabase, HEARTBEAT_STALE_MINUTES) {
 
   for (const agent of downAgents) {
     const missCount = Math.floor(
-      (Date.now() - new Date(agent.last_beat_at).getTime()) / (5 * 60 * 1000)
+      (Date.now() - new Date(agent.last_beat_at).getTime()) / (20 * 60 * 1000)  // 20-min heartbeat interval
     );
     if (missCount >= 3) {
       await logAudit({
