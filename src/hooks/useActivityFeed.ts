@@ -28,7 +28,6 @@ export interface UseActivityFeedResult {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function useActivityFeed(businessAccountId: string | null): UseActivityFeedResult {
-  const queryClient = useQueryClient()
   const [events, setEvents] = useState<AuditLogEntry[]>([])
 
   // ── Initial data fetch ───────────────────────────────────────────────────
