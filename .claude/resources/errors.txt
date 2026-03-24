@@ -1,147 +1,131 @@
-4m35h@ubuntu-8gb-nbg-888-iga:~/projects/instagram-automation-agent$ docker compose -f docker-compose.unified.yml logs -f backend
-WARN[0000] The "N8N_COMMENT_WEBHOOK" variable is not set. Defaulting to a blank string. 
-WARN[0000] The "N8N_BASE_URL" variable is not set. Defaulting to a blank string. 
-WARN[0000] The "N8N_DM_WEBHOOK" variable is not set. Defaulting to a blank string. 
-WARN[0000] The "N8N_ORDER_WEBHOOK" variable is not set. Defaulting to a blank string. 
-instagram-backend  | ⚠️  Node.js 18 and below are deprecated and will no longer be supported in future versions of @supabase/supabase-js. Please upgrade to Node.js 20 or later. For more information, visit: https://github.com/orgs/supabase/discussions/37217
-instagram-backend  | 🔒 CORS Allowed Origins: [
-instagram-backend  |   'https://app.888intelligenceautomation.in',
-instagram-backend  |   'https://app.888intelligenceautomation.in',
-instagram-backend  |   'https://api.888intelligenceautomation.in',
-instagram-backend  |   'https://888intelligenceautomation.in',
-instagram-backend  |   'https://www.888intelligenceautomation.in',
-instagram-backend  |   'https://api.888intelligenceautomation.in',
-instagram-backend  |   'https://app.888intelligenceautomation.in',
-instagram-backend  |   'https://agent.888intelligenceautomation.in',
-instagram-backend  |   'http://localhost:8080',
-instagram-backend  |   'http://localhost:3000',
-instagram-backend  |   'http://localhost:3002',
-instagram-backend  |   'http://instagram-frontend:80',
-instagram-backend  |   'http://instagram-agent:3002'
-instagram-backend  | ]
-instagram-backend  | ✅ Environment variables validated
-instagram-backend  |    Instagram App ID: 1595100661870639
-instagram-backend  |    Instagram App Secret: 16c39...
-instagram-backend  |    Supabase URL: https://uromexjprcrjfmhkmgxa...
-instagram-backend  | ✅ Webhook routes loaded
-instagram-backend  | ✅ Legal routes loaded
-instagram-backend  | ✅ Instagram API routes loaded (rate limited)
-instagram-backend  | ✅ Oversight proxy routes loaded (POST /api/instagram/oversight/chat)
-instagram-backend  | ✅ Agent proxy routes loaded (12 endpoints: search-hashtag, tags, send-dm, publish-post, insights, account-insights, media-insights, reply-comment, reply-dm, post-comments, conversations, conversation-messages)
-instagram-backend  | ✅ Test routes loaded
-instagram-backend  | 
-instagram-backend  | ============================================================
-instagram-backend  | 🚀 Instagram Automation Backend - Starting...
-instagram-backend  | ============================================================
-instagram-backend  | 
-instagram-backend  | 📋 Configuration:
-instagram-backend  |    Environment: production
-instagram-backend  |    Port: 3001
-instagram-backend  |    Supabase URL: https://uromexjprcrjfmhkmgxa.supabase.co
-instagram-backend  |    Service Key: ✅ Configured
-instagram-backend  |    Anon Key: ✅ Configured
-instagram-backend  | 
-instagram-backend  | 🔄 Initializing Supabase connection...
-instagram-backend  | 🔄 Initializing Supabase connection...
-instagram-backend  |    URL: https://uromexjprcrjfmhkmgxa.supabase.co
-instagram-backend  |    Environment: production
-instagram-backend  |    Max retries: 5
-instagram-backend  |    Timeout: 10000ms
-instagram-backend  | 
-instagram-backend  | 🔍 Connection attempt 1/5...
-instagram-backend  | ✅ Supabase connection established successfully
-instagram-backend  |    Connected on attempt: 1
-instagram-backend  |    Database: https://uromexjprcrjfmhkmgxa.supabase.co
-instagram-backend  |    Security: Row Level Security (RLS) active
-instagram-backend  |    Verified: 2 user profiles accessible
-instagram-backend  | 
-instagram-backend  | ✅ Database connection established
-instagram-backend  |    Connected to: https://uromexjprcrjfmhkmgxa.supabase.co
-instagram-backend  |    Connection established at: 2026-03-21T12:28:38.150Z
-instagram-backend  |    Database verified: 2 user profiles
-instagram-backend  | [TokenHealth] Token health check scheduled: 0 3 * * *
-instagram-backend  | [ProactiveSync] Initializing scheduled jobs:
-instagram-backend  |    Comment sync (most recent posts): */3 * * * *
-instagram-backend  |    Engagement (DM conversations+messages): */3 * * * *
-instagram-backend  |    UGC discovery: 0 */3 * * *
-instagram-backend  |    Media posts feed: 0 */6 * * *
-instagram-backend  |    Media insights: 0 2 * * *
-instagram-backend  | [ProactiveSync] 7 jobs scheduled
-instagram-backend  | [PostFallback] Initialized — cron: */5 * * * *, max_retries: 5, batch: 20
-instagram-backend  | 
-instagram-backend  | ============================================================
-instagram-backend  | ✅ Server Successfully Started!
-instagram-backend  | ============================================================
-instagram-backend  | 
-instagram-backend  | 📍 Access Points:
-instagram-backend  |    Production: https://api.888intelligenceautomation.in
-instagram-backend  |    Port: 3001
-instagram-backend  | 
-instagram-backend  | 🔗 Key Endpoints:
-instagram-backend  |    Health: /health
-instagram-backend  |    Database: /health/database
-instagram-backend  |    Status: /status
-instagram-backend  |    API Docs: /api
-instagram-backend  | 
-instagram-backend  | 🔐 Security:
-instagram-backend  |    CORS: Configured for allowed origins
-instagram-backend  |    Database: Direct connection with IP whitelisting
-instagram-backend  |    Encryption: Vault-based (Supabase pgsodium)
-instagram-backend  | 
-instagram-backend  | ============================================================
-instagram-backend  | 
-instagram-backend  | [Sync:comments] Starting run 9c00ca27-9d67-4646-ac87-67858b61e631
-instagram-backend  | [Sync:engagement] Starting run 48f589f7-9587-4cba-8189-f7247258e982
-instagram-backend  | [Sync:helpers] Stale domain detected: engagement (last run: never)
-instagram-backend  | [Sync:helpers] Stale domain detected: ugc (last run: never)
-instagram-backend  | [Sync:comments] Account 0882b710-4258-47cf-85c8-1fa82a3de763 failed: Cannot access 'commentAuthFailed' before initialization
-instagram-backend  | [Sync:helpers] Stale domain detected: media (last run: never)
-instagram-backend  | [Sync:comments] Run 9c00ca27-9d67-4646-ac87-67858b61e631 complete — ok:0 err:1 skip:0
-instagram-backend  | [Sync:helpers] Stale domain detected: insights (last run: never)
-instagram-backend  | [Sync:helpers] Stale domain detected: token_health (last run: never)
-instagram-backend  | [logApiRequest] Non-retryable error (42883): operator does not exist: double precision % bigint
-instagram-backend  | [Sync:engagement] Run 48f589f7-9587-4cba-8189-f7247258e982 complete — ok:1 err:0 skip:0
-instagram-backend  | 📥 2026-03-21T12:32:45.343Z [dd5ed269-b9d4-4aa3-ad3d-c77ab397ed62] GET /api/instagram/token-status?userId=7e631172-2287-4d95-994c-53a5c61a3af8&business_account_id=0882b710-4258-47cf-85c8-1fa82a3de763
-instagram-backend  |    CF-Ray: 9dfcfb28bce991c6-SIN
-instagram-backend  |    CF-Country: IN
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | 📥 2026-03-21T12:32:45.917Z [55c1edff-21cb-400b-a3ee-91e913ffe813] GET /api/instagram/profile/17841475450533073?userId=7e631172-2287-4d95-994c-53a5c61a3af8&business_account_id=0882b710-4258-47cf-85c8-1fa82a3de763
-instagram-backend  |    CF-Ray: 9dfcfb2c6d2291c6-SIN
-instagram-backend  |    CF-Country: IN
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | ❌ Missing required query parameters for profile fetch
-instagram-backend  | 👤 Fetching profile for IG account: 17841475450533073
-instagram-backend  | 📥 2026-03-21T12:32:46.047Z [83a41f36-7a6d-4199-a3b3-628b46e94ff4] POST /api/instagram/validate-token
-instagram-backend  |    CF-Ray: 9dfcfb2cdd2991c6-SIN
-instagram-backend  |    CF-Country: IN
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | [Token Validation] Validating token for user: 7e631172-2287-4d95-994c-53a5c61a3af8
-instagram-backend  | [Token Validation] ✅ Token decrypted successfully
-instagram-backend  | [Token Validation] 🔍 Calling Meta API: {
-instagram-backend  |   url: 'https://graph.facebook.com/v23.0/17841475450533073',
-instagram-backend  |   instagramBusinessId: '17841475450533073',
-instagram-backend  |   tokenLength: 224,
-instagram-backend  |   hasToken: true
-instagram-backend  | }
-instagram-backend  | [Token Validation] ✅ Token is active (735ms)
-instagram-backend  | [Sync:comments] Starting run be896861-c4b4-435c-ab36-32ad7888b0f0
-instagram-backend  | [Sync:engagement] Starting run c59318b6-9612-4d34-9a09-4873bb9c348b
-instagram-backend  | [Sync:comments] Account 0882b710-4258-47cf-85c8-1fa82a3de763 failed: Cannot access 'commentAuthFailed' before initialization
-instagram-backend  | [Sync:comments] Run be896861-c4b4-435c-ab36-32ad7888b0f0 complete — ok:0 err:1 skip:0
-instagram-backend  | [logApiRequest] Non-retryable error (42883): operator does not exist: double precision % bigint
-instagram-backend  | [Sync:engagement] Run c59318b6-9612-4d34-9a09-4873bb9c348b complete — ok:1 err:0 skip:0
-instagram-backend  | 📥 2026-03-21T12:33:49.626Z [85317c45-2ba2-45cf-a287-00e1ea8b8d18] GET /api/instagram/post-comments?business_account_id=0882b710-4258-47cf-85c8-1fa82a3de763&media_id=18119332864451803&limit=50
-instagram-backend  |    CF-Ray: 9dfcfcbcfba49963-FRA
-instagram-backend  |    CF-Country: DE
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | [logApiRequest] Non-retryable error (42883): operator does not exist: double precision % bigint
-instagram-backend  | 📥 2026-03-21T12:33:50.648Z [943344c4-c7f6-4014-a2b5-116dd1a21256] GET /api/instagram/post-comments?business_account_id=0882b710-4258-47cf-85c8-1fa82a3de763&media_id=18114826447521018&limit=50
-instagram-backend  |    CF-Ray: 9dfcfcc36db0d360-FRA
-instagram-backend  |    CF-Country: DE
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | [logApiRequest] Non-retryable error (42883): operator does not exist: double precision % bigint
-instagram-backend  | 📥 2026-03-21T12:33:51.101Z [1bf1b40b-d5a7-4dfc-8f01-f57ae5791777] GET /api/instagram/post-comments?business_account_id=0882b710-4258-47cf-85c8-1fa82a3de763&media_id=17991698096696570&limit=50
-instagram-backend  |    CF-Ray: 9dfcfcc65e97d39e-FRA
-instagram-backend  |    CF-Country: DE
-instagram-backend  | ℹ️  No user ID found - skipping rate limit check
-instagram-backend  | [logApiRequest] Non-retryable error (42883): operator does not exist: double precision % bigint
+Request URL
+https://api.888intelligenceautomation.in/api/instagram/oversight/chat
+Request Method
+POST
+Status Code
+503 Service Unavailable
+Remote Address
+[2606:4700:3031::ac43:91ce]:443
+Referrer Policy
+no-referrer-when-downgrade
+access-control-allow-credentials
+true
+access-control-allow-origin
+https://app.888intelligenceautomation.in
+alt-svc
+h3=":443"; ma=86400
+cache-control
+no-store, no-cache, must-revalidate, proxy-revalidate
+cf-cache-status
+DYNAMIC
+cf-ray
+9e14c42f58ee1dad-SIN
+content-length
+85
+content-security-policy
+default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://connect.facebook.net https://*.supabase.co; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https: blob:; connect-src 'self' https://graph.facebook.com https://*.supabase.co https://api.ipify.org; frame-src 'self' https://www.facebook.com https://web.facebook.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+content-type
+application/json; charset=utf-8
+date
+Tue, 24 Mar 2026 09:49:31 GMT
+etag
+W/"55-9dgvzERUm/Ndr2H/jcnkS4mHlaI"
+expires
+0
+nel
+{"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
+permissions-policy
+camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()
+pragma
+no-cache
+priority
+u=1,i
+referrer-policy
+strict-origin-when-cross-origin
+report-to
+{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=ZS%2FgbCauFvMTudOGAjckyFwBWjnqTquYniH68GkLJZIsaXDwtEi68wO1sLt%2Fv0osT42TnoyY%2F9zJakuBV%2BNgBn0MNWkQaSbYZtlfBgub6Q4JIZv1YSHTh1nOeZPwG9EVrSk9JV8XwWFaGR76"}]}
+server
+cloudflare
+server-timing
+cfExtPri
+strict-transport-security
+max-age=31536000; includeSubDomains; preload
+strict-transport-security
+max-age=31536000; includeSubDomains; preload
+vary
+Origin
+x-content-type-options
+nosniff
+x-content-type-options
+nosniff
+x-download-options
+noopen
+x-frame-options
+DENY
+x-frame-options
+SAMEORIGIN
+x-permitted-cross-domain-policies
+none
+x-powered-by
+Express
+x-request-id
+1a171c63-8177-4013-945c-2735f35f4f03
+x-xss-protection
+1; mode=block
+x-xss-protection
+1; mode=block
+:authority
+api.888intelligenceautomation.in
+:method
+POST
+:path
+/api/instagram/oversight/chat
+:scheme
+https
+accept
+*/*
+accept-encoding
+gzip, deflate, br, zstd
+accept-language
+en-GB,en-US;q=0.9,en;q=0.8,el;q=0.7
+content-length
+301
+content-type
+application/json
+origin
+https://app.888intelligenceautomation.in
+priority
+u=1, i
+referer
+https://app.888intelligenceautomation.in/agent-terminal
+sec-ch-ua
+"Not(A:Brand";v="8", "Chromium";v="144", "Opera GX";v="128"
+sec-ch-ua-mobile
+?0
+sec-ch-ua-platform
+"macOS"
+sec-fetch-dest
+empty
+sec-fetch-mode
+cors
+sec-fetch-site
+same-site
+user-agent
+Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 OPR/128.0.0.0 (Edition std-1)
+ 
+ {business_account_id: "0882b710-4258-47cf-85c8-1fa82a3de763",…}
+business_account_id
+: 
+"0882b710-4258-47cf-85c8-1fa82a3de763"
+chat_history
+: 
+[{role: "user", content: "hey", timestamp: "2026-03-24T09:49:21.236Z"},…]
+question
+: 
+"hey"
+stream
+: 
+true
+user_id
+: 
+"7e631172-2287-4d95-994c-53a5c61a3af8"
