@@ -48,6 +48,51 @@ router.post('/agent/heartbeat', async (req, res) => {
   }
 });
 
+// GET /agent/status
+// Returns agent liveness computed server-side using LIVENESS_THRESHOLD_MS.
+// Frontend routes through this (like all other agent data) instead of hitting Supabase directly.
+router.get('/agent/status', async (req, res) => {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) return res.status(503).json({ error: 'Database unavailable' });
+
+  const LIVENESS_THRESHOLD_MS = 25 * 60 * 1000; // must exceed 20-min agent heartbeat interval
+
+  try {
+    const { data: heartbeats, error } = await supabase
+      .from('agent_heartbeats')
+      .select('agent_id, status, last_beat_at')
+      .order('last_beat_at', { ascending: false })
+      .limit(1);
+
+    if (error) throw error;
+
+    const newestBeat = heartbeats?.[0];
+    const isAlive = newestBeat
+      ? Date.now() - new Date(newestBeat.last_beat_at).getTime() <= LIVENESS_THRESHOLD_MS
+      : false;
+
+    logAudit({
+      event_type: 'agent_status_check',
+      action: 'read',
+      resource_type: 'agent',
+      details: { agent_id: newestBeat?.agent_id, status: isAlive ? 'alive' : 'down' },
+      success: true,
+    }).catch(() => {});
+
+    res.json({
+      success: true,
+      data: {
+        status: isAlive ? 'alive' : 'down',
+        last_beat_at: newestBeat?.last_beat_at ?? null,
+        agent_id: newestBeat?.agent_id ?? null,
+      },
+    });
+  } catch (err) {
+    console.error('[Heartbeat] /agent/status failed:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // GET /sync/health
 // Returns latest run_completed row per domain + unresolved alert count.
 router.get('/sync/health', async (_req, res) => {

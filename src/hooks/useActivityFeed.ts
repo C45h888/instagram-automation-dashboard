@@ -2,13 +2,14 @@
  * useActivityFeed.ts
  *
  * TanStack Query hook for activity feed (audit_log).
- * Polls every 30s and filters client-side by business_account_id
- * (since audit_log stores it in details JSONB, not as a column).
+ * Uses Supabase Realtime (INSERT subscription) for live updates after initial fetch.
+ * Filters by business_account_id client-side since it's stored in details JSONB, not a column.
  */
 
+import { useState, useEffect, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useMemo, useCallback } from 'react'
 import { AgentService } from '../services/agentService'
+import { supabase } from '../lib/supabase'
 import type { AuditLogEntry } from '@/types'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -23,56 +24,72 @@ export interface UseActivityFeedResult {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Constants
-// ─────────────────────────────────────────────────────────────────────────────
-
-const POLL_INTERVAL_MS = 30_000 // 30 seconds
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Hook
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function useActivityFeed(businessAccountId: string | null): UseActivityFeedResult {
-  // ── Raw audit log query ───────────────────────────────────────────────────
-  const rawQuery = useQuery({
-    queryKey: ['activity-feed', 'raw', businessAccountId],
+  const queryClient = useQueryClient()
+  const [events, setEvents] = useState<AuditLogEntry[]>([])
+
+  // ── Initial data fetch ───────────────────────────────────────────────────
+  const { data: initialData, isLoading, error } = useQuery({
+    queryKey: ['activity-feed', 'initial', businessAccountId],
     queryFn: async () => {
       const result = await AgentService.getAuditLog(50)
       if (!result.success) throw new Error(result.error ?? 'Failed to fetch audit log')
       return result.data
     },
-    refetchInterval: POLL_INTERVAL_MS,
-    staleTime: POLL_INTERVAL_MS,
-    enabled: true, // Always fetch, filter client-side
+    staleTime: Infinity, // Realtime subscription handles updates; no auto-refetch needed
   })
 
-  // ── Client-side filter by business_account_id in details JSONB ───────────
-  const events = useMemo(() => {
-    const rawEvents = rawQuery.data ?? []
-    if (!businessAccountId) return rawEvents
+  // Set initial data once
+  useEffect(() => {
+    if (initialData) {
+      const filtered = businessAccountId
+        ? initialData.filter((e) => (e.details as Record<string, unknown>)?.business_account_id === businessAccountId)
+        : initialData
+      setEvents(filtered)
+    }
+  }, [initialData, businessAccountId])
 
-    return rawEvents.filter((event) => {
-      const details = event.details as Record<string, unknown> | null
-      return details?.business_account_id === businessAccountId
-    })
-  }, [rawQuery.data, businessAccountId])
+  // ── Supabase Realtime subscription for INSERT events ───────────────────────
+  useEffect(() => {
+    if (!businessAccountId) return
 
-  // ── Error handling ─────────────────────────────────────────────────────────
-  const error = rawQuery.error
-    ? rawQuery.error instanceof Error
-      ? rawQuery.error.message
-      : String(rawQuery.error)
-    : null
+    const channel = supabase
+      .channel('audit-log-live')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'audit_log' },
+        (payload) => {
+          const newEntry = payload.new as AuditLogEntry
+          const details = newEntry.details as Record<string, unknown> | null
+          // Filter client-side since business_account_id is in JSONB, not a column
+          if (details?.business_account_id !== businessAccountId) return
+          setEvents((prev) => [newEntry, ...prev].slice(0, 50))
+        }
+      )
+      .subscribe()
 
-  // ── Refetch handler ─────────────────────────────────────────────────────────
-  const refetch = useCallback(() => {
-    rawQuery.refetch()
-  }, [rawQuery])
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [businessAccountId])
+
+  // ── Refetch handler ──────────────────────────────────────────────────────
+  const refetch = useCallback(async () => {
+    const result = await AgentService.getAuditLog(50)
+    if (!result.success) throw new Error(result.error ?? 'Failed to fetch audit log')
+    const filtered = businessAccountId
+      ? result.data.filter((e) => (e.details as Record<string, unknown>)?.business_account_id === businessAccountId)
+      : result.data
+    setEvents(filtered)
+  }, [businessAccountId])
 
   return {
     events,
-    isLoading: rawQuery.isLoading,
-    error,
+    isLoading,
+    error: error ? (error instanceof Error ? error.message : String(error)) : null,
     refetch,
   }
 }

@@ -17,7 +17,6 @@ import SkeletonMediaGrid from '../components/ui/SkeletonMediaGrid';
 import PerformanceChart from '../components/dashboard/PerformanceChart';
 import AsyncWrapper from '../components/ui/AsyncWrapper';
 import { useToast } from '../hooks/useToast';
-import { useRealtimeUpdates } from '../services/realtimeService';
 import { InstagramProfileCard } from '../components/permissions/InstagramProfile';
 import { useInstagramProfile } from '../hooks/useInstagramProfile';
 // ✅ NEW: Token validation imports
@@ -28,85 +27,6 @@ import TokenWarningBanner from '../components/dashboard/TokenWarningBanner';
 // ✅ PHASE 5: LinkAccountModal integration
 import { LinkAccountModal } from '../components/modals';
 import { useInstagramAccount } from '../hooks/useInstagramAccount';
-
-// Real-time Test Panel Component
-const RealtimeTestPanel: React.FC = () => {
-  // BUG FIX: testConnection is used in the button's onClick, so it's not unused
-  const { isConnected, events, triggerTest, testConnection } = useRealtimeUpdates();
-
-  return (
-    <div className="glass-morphism-card p-6 rounded-2xl border-2 border-blue-500/30">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-xl font-bold text-white flex items-center">
-          🔥 Real-time Test Panel
-          <span className={`ml-3 w-3 h-3 rounded-full ${isConnected ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`}></span>
-        </h3>
-        <span className="text-sm text-gray-400">
-          {isConnected ? '✅ Connected' : '❌ Disconnected'}
-        </span>
-      </div>
-
-      {/* BUG FIX: Removed 'connection' from triggerTest types - only 'response', 'metrics', 'alert' are valid */}
-      {/* BUG FIX: Changed last button to use testConnection function directly, not triggerTest */}
-      <div className="flex gap-4 mb-4">
-        <button
-          onClick={() => triggerTest('response')}
-          className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-all"
-        >
-          Test Response
-        </button>
-        <button
-          onClick={() => triggerTest('metrics')}
-          className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg font-medium transition-all"
-        >
-          Test Metrics
-        </button>
-        <button
-          onClick={() => triggerTest('alert')}
-          className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-medium transition-all"
-        >
-          Test Alert
-        </button>
-        {/* 
-          BUG FIX: Use testConnection directly (not triggerTest('connection'))
-          testConnection is a separate async function that tests backend connectivity
-          triggerTest only accepts: 'response' | 'metrics' | 'alert'
-        */}
-        <button
-          onClick={testConnection}
-          className="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-medium transition-all"
-        >
-          Test Connection
-        </button>
-      </div>
-
-      <div className="bg-gray-900/50 rounded-lg p-4">
-        <div className="flex justify-between items-center mb-2">
-          <span className="text-sm font-semibold text-gray-300">Events Received: {events.length}</span>
-          <span className="text-sm text-gray-400">Recent Events:</span>
-        </div>
-        <div className="space-y-2 max-h-32 overflow-y-auto">
-          {events.length > 0 ? (
-            events.slice(-5).reverse().map((event, index) => (
-              <div key={index} className="text-xs bg-gray-800/50 p-2 rounded flex justify-between items-center">
-                <span className="text-gray-300">{event.type}</span>
-                <span className="text-gray-500">{new Date(event.timestamp).toLocaleTimeString()}</span>
-              </div>
-            ))
-          ) : (
-            <div className="text-center text-gray-500 text-sm py-4">
-              No events yet. Try triggering a test!
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="text-xs text-gray-500 border-t border-gray-700 pt-2 mt-2">
-        💡 This panel shows real-time events from your N8N workflow. Remove this component once testing is complete.
-      </div>
-    </div>
-  );
-};
 
 const Dashboard: React.FC = () => {
   const { metrics, activities, recentMedia, chartData, isLoading } = useDashboardData();
@@ -191,9 +111,6 @@ const Dashboard: React.FC = () => {
         }}
         isRetrying={isAccountLoading}
       />
-
-      {/* Real-time Test Panel - BUG-FREE VERSION */}
-      <RealtimeTestPanel />
 
       {/* Dashboard Header - Welcome section with quick stats */}
       <AsyncWrapper

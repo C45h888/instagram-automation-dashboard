@@ -1,281 +1,159 @@
-cat .env.production
-# =====================================
-# ENVIRONMENT
-# =====================================
-NODE_ENV=production
-PORT=3001
+Here's how each fix works, tied directly to the problem code:
 
-# =====================================
-# TUNNEL CONFIGURATION
-# =====================================
-# DISABLE tunnel for production reliability
-USE_DB_TUNNEL=false
-
-# Only API tunnel needed in production
-CLOUDFLARE_TUNNEL_TOKEN=eyJhIjoiYzFhOGFmOGQ5NmQ3Y2JiM2RiMDgwN2Q0MDMyZjkzY2EiLCJ0IjoiNGFhNjNiYjgtMzdhMS00Mjc3LTg3ZTAtNDQ1NDgxMGIwNGE2IiwicyI6Ill6WXpORGcxT0RjdFpHVTNNeTAwTmpVeExXRTBNRFl0TjJNM016a3hZemcwT1RSaiJ9
-# Note: No CLOUDFLARE_SUPABASE_TUNNEL_TOKEN in production
-
-# =====================================
-# SUPABASE CONFIGURATION
-# =====================================
-# Direct connection only in production
-SUPABASE_URL=https://uromexjprcrjfmhkmgxa.supabase.co
-SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVyb21leGpwcmNyamZtaGttZ3hhIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NTc1ODE5NSwiZXhwIjoyMDcxMzM0MTk1fQ.M_XwXITf1cYqT1-exKCpVzQTeY3gJb5qSprG1H-mWnM
-SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVyb21leGpwcmNyamZtaGttZ3hhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU3NTgxOTUsImV4cCI6MjA3MTMzNDE5NX0.4iMC2ktj2nDlOYy-4NfNVHnV4i-tfCVFvgqR835cAOI
-META_APP_ID=1449604936071207
-META_APP_SECRET=c9107cf010ca5bcf82236c71455fdc21
-
-# =====================================
-# INSTAGRAM APP CREDENTIALS (v3)
-# =====================================
-# Instagram-specific credentials for Graph API v23.0
-INSTAGRAM_APP_ID=1595100661870639
-INSTAGRAM_APP_SECRET=16c39820a855b2056b5ddc6c12d18b61
-
-# Legacy compatibility - keep for /refresh-token endpoint (lines 2557-2558)
-# Can remove after confirming INSTAGRAM_APP_* vars work in production
-FACEBOOK_APP_ID=1595100661870639
-FACEBOOK_APP_SECRET=16c39820a855b2056b5ddc6c12d18b61
-
-# No SUPABASE_TUNNEL_URL in production
-
-##admin login
-VITE_SHOW_ADMIN_LINK=true
-
-# ============================================
-# AUTHENTICATION MODE - PRODUCTION
-# ============================================
-# ⚠️ CRITICAL: Set to 'facebook' for Meta compliance
-# Only change to 'both' after Meta approval if needed
-#
-# Production Recommendation: 'facebook'
-# - Ensures Meta Platform Terms compliance
-# - Provides best user experience for Instagram Business
-# - Required for Meta app review approval
-#
-# Available Options:
-#   'facebook'  - RECOMMENDED for production (Meta compliant)
-#   'instagram' - Legacy mode (not recommended for new deployments)
-#   'both'      - Use only after Meta approval for user choice
-VITE_AUTH_MODE=both
+Fix 1 — Stop the interval restart cascade (useAuthStore selector)
+The problem at useOversightChat.ts:59 and useDMInbox.ts:133:
 
 
-
-# ============================================
-# META/FACEBOOK APP - PRODUCTION
-# ============================================
-# ⚠️ SECURITY: Use production app credentials only
-# Never use development/test credentials in production
-#
-# Obtain from: https://developers.facebook.com/apps (Production App)
-#
-# Before deploying:
-#   1. Ensure Meta app is approved for production use
-#   2. Verify all Instagram Business permissions are granted
-#   3. Configure Valid OAuth Redirect URIs in Meta Console
-#   4. Add production domain to App Domains
-#   5. Set Privacy Policy and Terms of Service URLs
-
-# Production Meta App credentials (real values set below in FRONTEND section)
-# See lines ~132-133 for VITE_META_APP_ID / VITE_META_APP_SECRET
-
-# ============================================
-# OAUTH CONFIGURATION - PRODUCTION
-# ============================================
-# Production callback URL (MUST match Meta Developer Console)
-# Example: https://instagram-backend.888intelligenceautomation.in/auth/callback
-#
-# Uncomment and configure:
-VITE_OAUTH_REDIRECT_URI=https://app.888intelligenceautomation.in/auth/callback
-
-# ============================================
-# DEPLOYMENT CHECKLIST
-# ============================================
-# Before deploying to production:
-#   ✅ Replace ALL placeholder values above
-#   ✅ Verify Meta Developer Console settings match
-#   ✅ Test authentication flow in staging first
-#   ✅ Enable Meta app for production use
-#   ✅ Record screencast for Meta review (if required)
-#
-# Meta Developer Console Configuration:
-#   ✅ Valid OAuth Redirect URIs: Must include callback URL
-#   ✅ App Domains: Must include your production domain
-#   ✅ Privacy Policy URL: Must be publicly accessible
-#   ✅ Terms of Service URL: Must be publicly accessible
-#   ✅ Data Deletion URL: Must be configured
-#
-# Post-Deployment Verification:
-#   ✅ Test Facebook login flow end-to-end
-#   ✅ Verify all permissions requested correctly
-#   ✅ Check browser console for any errors
-#   ✅ Validate OAuth callback handling works
-#   ✅ Monitor authentication success/failure rates
-# =====================================
-# FRONTEND ENVIRONMENT VARIABLES
-# =====================================
-# Production uses direct Supabase connection
-VITE_SUPABASE_URL=https://uromexjprcrjfmhkmgxa.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVyb21leGpwcmNyamZtaGttZ3hhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU3NTgxOTUsImV4cCI6MjA3MTMzNDE5NX0.4iMC2ktj2nDlOYy-4NfNVHnV4i-tfCVFvgqR835cAOI
-VITE_API_URL=https://api.888intelligenceautomation.in
-# Frontend Environment Variables (VITE_)
-VITE_WEBHOOK_URL=https://api.888intelligenceautomation.in
-VITE_API_BASE_URL=https://api.888intelligenceautomation.in
-VITE_AGENT_URL=https://agent.888intelligenceautomation.in
-VITE_WEBHOOK_VERIFY_TOKEN=instagram_automation_cf_token_2024
-VITE_META_APP_ID=1449604936071207
-VITE_META_APP_SECRET=c9107cf010ca5bcf82236c71455fdc21
-
-# Instagram App ID for frontend (NO SECRET - public safe)
-VITE_INSTAGRAM_APP_ID=1595100661870639
-
-# Frontend URL for backend redirects
-FRONTEND_URL=https://app.888intelligenceautomation.in
+// CURRENT — subscribes to the entire authStore object
+const { user } = useAuthStore()
+When you call useAuthStore() with no selector, Zustand gives you the entire store and re-renders the component on any store change — even if user itself didn't change. The returned user object is a new reference every re-render even if user.id is identical. This matters because useDMInbox puts user?.id in a useCallback dep array:
 
 
-# =====================================
-# STATIC IP (CRITICAL FOR PRODUCTION)
-# =====================================
-BACKEND_STATIC_IP=162.55.57.52
+// useDMInbox.ts:133
+const fetchMessages = useCallback(async (conversationId: string) => {
+  ...
+}, [user?.id, businessAccountId])  // new user reference = callback recreates
 
-# =====================================
-# INSTAGRAM API (Production)
-# =====================================
-INSTAGRAM_CLIENT_ID=1595100661870639
-INSTAGRAM_CLIENT_SECRET=16c39820a855b2056b5ddc6c12d18b61
-INSTAGRAM_REDIRECT_URI=https://instagram-backend.888intelligenceautomation.in/auth/instagram/callback
+// useDMInbox.ts:230
+useEffect(() => {
+  const intervalId = setInterval(() => fetchMessages(conversationId), 30000)
+  return () => clearInterval(intervalId)  // clears old interval
+}, [selectedConversationId, fetchMessages])  // fetchMessages changed = effect re-runs = interval restarts
+Every time authStore ticks (token refresh, businessAccountId update, anything) → user is a new object → fetchMessages recreates → effect cleanup fires → clearInterval → new setInterval → overlapping intervals accumulate.
 
-# =====================================
-# ENCRYPTION & SECURITY (DIFFERENT FROM DEV!)
-# =====================================
-JWT_SECRET=cF+FAdbiB3kE1SsFqtiCLWsL13hGiurxRd6Sz6tlDv9qRYphYIps7syKgnLTgHNVb3v7/NBWY9R7WrMksqyJTw==
-JWT_EXPIRES_IN=15m
-JWT_REFRESH_EXPIRES_IN=7d
-
-# =====================================
-# N8N WEBHOOKS
-# =====================================
-N8N_BASE_URL=n8n.888intelligenceautomation.in
-N8N_WEBHOOK_SECRET=your_webhook_secret
-    
-# =====================================
-# ADMIN CREDENTIALS (Consider changing for production)
-# =====================================
-ADMIN_EMAIL=admin@888intelligence.com
-ADMIN_PASSWORD=ProductionSecurePassword2024!
-
-# ============================================
-# FIXIE STATIC IP PROXY CONFIGURATION
-# ============================================
-# Enable proxy (set to true after successful testing)
-USE_FIXIE_PROXY=false
-
-# Fixie HTTP Proxy (for general HTTP requests)
-# Format: http://fixie:TOKEN@subdomain.usefixie.com:80
-FIXIE_URL=http://fixie:4uw0DeBh6Cpn37W@ventoux.usefixie.com:80
-
-# Fixie SOCKS5 Proxy (for database connections)
-# Format: username:password@criterium.usefixie.com:1080
-FIXIE_SOCKS_HOST=fixie:7kdXlctJx7yMwM1@galibier.usefixie.com:1080
-
-# Static IP addresses (comma-separated, from Fixie dashboard)
-FIXIE_STATIC_IPS=34.247.192.99,3.255.12.30,54.217.142.99,54.195.3.54
+The fix:
 
 
-# Proxy timeout (milliseconds)
-PROXY_TIMEOUT=30000
+// Select only the primitive value — Zustand only re-renders when user.id actually changes
+const user = useAuthStore(state => state.user)
+This makes user referentially stable. fetchMessages stops recreating on unrelated store changes. The useEffect only restarts when selectedConversationId genuinely changes.
 
-# Proxy retry attempts on failure
-PROXY_RETRY_ATTEMPTS=3
+Fix 2 — Eliminate duplicate post_queue query
+The problem at useQueueMonitor.ts:52 and useQueueMonitor.ts:64:
 
-# =====================================
-# AGENT CONFIGURATION (LangChain Oversight Brain)
-# =====================================
-# Required for POST /api/instagram/oversight/chat
-AGENT_URL=http://langchain-agent:3002
-AGENT_API_KEY=dqoSRrL3FJkXoUnI8B1HQ1Zpc2pEO3EsoMveDm0XB80
 
-# =====================================
-# PROACTIVE SYNC (Bus 1: Backend-driven cron)
-# =====================================
-# Enabled in production — backend autonomously syncs Instagram data to Supabase
-PROACTIVE_SYNC_ENABLED=true
-PROACTIVE_COMMENTS_CRON=*/3 * * * *
-PROACTIVE_UGC_CRON=0 */3 * * *
-PROACTIVE_INSIGHTS_CRON=0 2 * * *
+// Query 1 — fires every 15s, fetches ALL post_queue rows
+const statusQuery = useQuery({
+  queryKey: ['queue-monitor', 'status'],
+  queryFn: () => AgentService.getQueueStatus(),  // SELECT status, action_type FROM post_queue
+  refetchInterval: 15_000,
+})
 
-# Post Queue Fallback (Bus 2: outgoing IG write retry)
-POST_FALLBACK_ENABLED=true
-POST_FALLBACK_CRON=*/5 * * * *
+// Query 2 — fires every 30s, fetches post_queue WHERE status='dlq'
+const dlqQuery = useQuery({
+  queryKey: ['queue-monitor', 'dlq'],
+  queryFn: () => AgentService.getQueueDLQ(50),  // SELECT * FROM post_queue WHERE status='dlq'
+  refetchInterval: 30_000,
+})
+The DLQ rows are already inside the statusQuery result — they're just status='dlq' rows. Two separate network requests for overlapping data.
 
-# Heartbeat failover
-HEARTBEAT_STALE_MINUTES=30
+The fix: Drop the dlqQuery entirely. Derive DLQ from statusQuery.data with a client-side filter:
 
-# =====================================
-# AGENT VARS (LangChain Oversight Brain — docker-compose.unified.yml)
-# NOTE: OLLAMA_HOST, REDIS_HOST, REDIS_PORT, BACKEND_API_URL are
-# hard-set in compose environment: blocks — do NOT add them here.
-# =====================================
 
-# Supabase alias — agent reads SUPABASE_KEY, backend reads SUPABASE_SERVICE_KEY.
-# Both must be set to the same service-role key value.
-SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVyb21leGpwcmNyamZtaGttZ3hhIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NTc1ODE5NSwiZXhwIjoyMDcxMzM0MTk1fQ.M_XwXITf1cYqT1-exKCpVzQTeY3gJb5qSprG1H-mWnM
+// One query, one network request
+const statusQuery = useQuery({
+  queryKey: ['queue-monitor', 'status'],
+  queryFn: () => AgentService.getQueueStatus(),
+  refetchInterval: 15_000,
+})
 
-# Webhook HMAC secret for order webhooks
-ORDER_WEBHOOK_SECRET=769660f6be0743e6d2e9a36d22a1dec0320f66b24c99b5e89c00406f027f529d
+// DLQ derived client-side — zero extra requests
+const dlqItems = useMemo(
+  () => (statusQuery.data ?? []).filter(item => item.status === 'dlq'),
+  [statusQuery.data]
+)
+The AgentService.getQueueStatus() query needs to select enough fields for both use cases (it currently only selects status, action_type — it would need to also select id, payload, retry_count, error etc. that DLQ currently fetches separately). The alternative is to just make getQueueStatus() select all fields once.
 
-# Agent identity
-AGENT_USER_ID=agent-service
-# Stable UUID — generate once: python3 -c "import uuid; print(uuid.uuid4())"
-HEARTBEAT_AGENT_ID=08408f8d-68ae-40b8-a32a-607c0a03dea0
-HEARTBEAT_ENABLED=true
-HEARTBEAT_INTERVAL_MINUTES=20
+Fix 3 — Route agent_heartbeats through the backend
+The problem at useAgentHealth.ts:53:
 
-# Ollama model
-OLLAMA_MODEL=hf.co/MaziyarPanahi/Nemotron-Orchestrator-8B-GGUF:Q4_K_M
-MAX_CONCURRENT_LLM=4
 
-# Engagement monitor
-ENGAGEMENT_MONITOR_ENABLED=true
-ENGAGEMENT_MONITOR_INTERVAL_MINUTES=5
-ENGAGEMENT_MONITOR_MAX_COMMENTS_PER_RUN=50
-ENGAGEMENT_MONITOR_AUTO_REPLY_ENABLED=true
-ENGAGEMENT_MONITOR_CONFIDENCE_THRESHOLD=0.75
-ENGAGEMENT_MONITOR_HOURS_BACK=24
+// CURRENT — frontend directly queries Supabase
+const heartbeatsQuery = useQuery({
+  queryFn: async () => {
+    const result = await AgentService.getHeartbeats(5)  // SELECT * FROM agent_heartbeats
+    return result.data
+  },
+  refetchInterval: 30_000,
+})
 
-# Content scheduler
-CONTENT_SCHEDULER_ENABLED=true
-AUTO_PUBLISH=false
-POST_APPROVAL_THRESHOLD=0.6
+// Then the hook manually replicates the liveness threshold:
+const isAlive = heartbeat &&
+  (Date.now() - new Date(heartbeat.last_beat_at).getTime()) <= LIVENESS_THRESHOLD_MS
+The frontend is duplicating threshold logic that the backend already owns (oversight.js LIVENESS_THRESHOLD_MS). If you ever change the threshold, you have to update both places. Also exposes the raw agent_heartbeats table to frontend clients.
 
-# UGC collection
-UGC_COLLECTION_ENABLED=true
-UGC_COLLECTION_AUTO_SEND_DM=false
-UGC_COLLECTION_AUTO_REPOST=false
+The fix: One backend endpoint that does the check and returns a clean status:
 
-# Analytics
-ANALYTICS_REPORTS_ENABLED=true
-ANALYTICS_LLM_INSIGHTS_ENABLED=false
-SALES_ATTRIBUTION_ENABLED=true
-WEEKLY_LEARNING_ENABLED=true
 
-# Oversight / chat stream
-OVERSIGHT_STREAM_ENABLED=true
-OVERSIGHT_AUTO_CONTEXT_LIMIT=12
-OVERSIGHT_LLM_TIMEOUT_SECONDS=15
+// Backend already (or should) expose:
+// GET /api/instagram/agent/heartbeat-status
+// Response: { status: "online" | "offline", last_seen_ms: number, agent_id: string }
 
-# Outbound queue (Redis-backed IG API rate limiter)
-OUTBOUND_QUEUE_ENABLED=true
-<<<<<<< Updated upstream
-LOG_LEVEL=standard
-=======
-# ─── Missing vars (added from agent local env) ───
-ENCRYPTION_KEY=c38f5ccb05b576a28bbf69e4619007fc0e54df93948ad3b14f047256fa2cbd06
-CORS_ALLOW_ORIGINS=https://app.888intelligenceautomation.in,https://api.888intelligenceautomation.in,https://agent.888intelligenceautomation.in
-FLASK_PORT=3002
-OAUTH_REDIRECT_URI=https://app.888intelligenceautomation.in/auth/callback
-ALLOWED_ORIGIN_1=https://app.888intelligenceautomation.in
-ALLOWED_ORIGIN_2=https://api.888intelligenceautomation.in
-ALLOWED_ORIGIN_3=https://agent.888intelligenceautomation.in
-HEARTBEAT_AGENT_ID=$(python3 -c "import uuid; print(uuid.uuid4())")
->>>>>>> Stashed changes
+const heartbeatsQuery = useQuery({
+  queryFn: async () => {
+    const res = await fetch(`${apiBase}/api/instagram/agent/heartbeat-status`)
+    return res.json()  // { status: "online", last_seen_ms: 847000 }
+  },
+  refetchInterval: 30_000,
+})
+
+// No threshold math in the frontend — backend already applied the 25-min window
+const isAlive = heartbeatsQuery.data?.status === 'online'
+Single source of truth: the 25-min threshold lives only in oversight.js.
+
+Fix 4 — Replace polling with Supabase Realtime
+The problem: useActivityFeed, useAgentHealth (alerts), and useQueueMonitor all use refetchInterval — they pull on a timer whether or not anything changed. Supabase Realtime pushes only when a row is actually inserted/updated.
+
+The pattern:
+
+
+// CURRENT — blind pull every 30s
+const { data } = useQuery({
+  queryFn: () => AgentService.getAuditLog(50),
+  refetchInterval: 30_000,
+})
+
+// AFTER — initial fetch + push updates only
+const [entries, setEntries] = useState([])
+
+useEffect(() => {
+  // Fetch initial data once
+  AgentService.getAuditLog(50).then(r => setEntries(r.data ?? []))
+
+  // Subscribe to new inserts — only fires when agent writes to audit_log
+  const channel = supabase
+    .channel('audit-log-live')
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'audit_log' },
+      (payload) => setEntries(prev => [payload.new, ...prev].slice(0, 50))
+    )
+    .subscribe()
+
+  return () => supabase.removeChannel(channel)
+}, [businessAccountId])
+Same pattern applies to system_alerts (INSERT/UPDATE) and post_queue (UPDATE on status changes). The audit_log table is the best candidate — it's append-only (INSERT only), which is the cleanest Realtime use case.
+
+Fix 5 — Remove the dead realtimeService 3s poller
+The problem at realtimeService.ts:85:
+
+
+// Fires every 3 seconds, hits backend /webhook/realtime-updates
+this.pollingInterval = setInterval(async () => {
+  const response = await axios.get(`${API_BASE_URL}/webhook/realtime-updates`)
+  // ... data returned here but nothing in the dashboard consumes it
+}, 3_000)
+3 seconds is the most aggressive interval in the whole frontend. The data it fetches isn't wired to any component state in the Agent Terminal Dashboard. It's pure network noise — 20 requests/minute for nothing.
+
+The fix: Either wire it to a real consumer or delete realtimeService.ts entirely and replace with Fix 4 (Supabase Realtime subscriptions). There's no middle ground — a 3s poller that nobody reads is just overhead.
+
+Summary — what each fix actually eliminates
+Fix	Problem eliminated	Requests removed per 30s window
+1 — authStore selector	Interval restart cascade in useDMInbox	Unpredictable (accumulating overlapping intervals)
+2 — DLQ client-side filter	Duplicate post_queue query	1 request per 30s
+3 — Heartbeat via backend	Direct Supabase table access + duplicate threshold logic	0 new requests (same frequency, cleaner source)
+4 — Realtime subscriptions	Blind 30s polls for audit_log, system_alerts, post_queue	3 requests per 30s → 0 (push only)
+5 — Remove realtimeService	3s dead poller	10 requests per 30s
+Fix 1 is the most important to do first because it's the only one that can create accumulating intervals (each authStore mutation spawns a new one without clearing the old). The others are constant overhead. Fix 1 is also a one-line change per file.
+
+Want me to implement them in this order?

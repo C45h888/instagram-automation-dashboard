@@ -523,6 +523,14 @@ export interface QueueDLQItem {
   updated_at: string
 }
 
+/** Combined queue overview — single DB query replaces getQueueStatus + getQueueDLQ */
+export interface QueueOverview {
+  byKey:    Record<string, number>  // "{action_type}::{status}" → count (same shape as QueueStatusSummary.byKey)
+  total:    number                  // row count, capped at 200
+  dlqItems: QueueDLQItem[]          // rows where status='dlq', derived from same query
+  timestamp: string
+}
+
 /** Response from POST /post-queue/retry */
 export interface QueueRetryResult {
   queue_id: string

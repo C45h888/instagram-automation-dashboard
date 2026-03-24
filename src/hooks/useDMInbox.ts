@@ -10,7 +10,7 @@
 // ✅ UPDATED: Uses VITE_API_BASE_URL
 // =====================================
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useInstagramAccount } from './useInstagramAccount';
 import { supabase } from '../lib/supabase';
@@ -43,21 +43,33 @@ interface UseDMInboxResult {
  * ✅ UPDATED: No longer takes businessAccountId parameter (gets from useInstagramAccount)
  */
 export const useDMInbox = (): UseDMInboxResult => {
-  // ✅ NEW: Get user ID from auth store (no token needed)
-  const { user } = useAuthStore();
+  // Extract only the primitive needed — prevents re-renders from unrelated store field changes
+  // (token refresh, isLoading, session, etc.) and avoids object reference instability
+  const userId = useAuthStore(state => state.user?.id ?? null);
 
   // ✅ NEW: Get Instagram account IDs from useInstagramAccount hook
   const { businessAccountId, instagramBusinessId } = useInstagramAccount();
 
   const [conversations, setConversations] = useState<ConversationData[]>([]);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+
+  // Ref mirror of selectedConversationId — lets fetchConversations read the current
+  // selection without it being a useCallback dependency, breaking the cascade:
+  //   selectConversation() → selectedConversationId changes → fetchConversations recreates
+  //   → useEffect fires → all conversations refetch (wrong)
+  const selectedConversationIdRef = useRef<string | null>(null);
   const [messages, setMessages] = useState<DMMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Keep ref in sync with state — used inside fetchConversations as a read-only guard
+  // so selectedConversationId doesn't need to be a useCallback dependency
+  useEffect(() => {
+    selectedConversationIdRef.current = selectedConversationId;
+  }, [selectedConversationId]);
+
   const fetchConversations = useCallback(async () => {
-    // ✅ UPDATED: Validate user ID and business account ID
-    if (!user?.id || !businessAccountId || !instagramBusinessId) {
+    if (!userId || !businessAccountId || !instagramBusinessId) {
       setError('No Instagram Business Account connected.');
       setIsLoading(false);
       return;
@@ -67,10 +79,8 @@ export const useDMInbox = (): UseDMInboxResult => {
     setError(null);
 
     try {
-      // ✅ UPDATED: Use VITE_API_BASE_URL from environment
       const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
 
-      // Route to frontend /dm-conversations — reads from Supabase cache (no live Graph API call)
       const headers = await getAgentAuthHeaders();
       const response = await fetch(
         `${apiBaseUrl}/api/instagram/dm-conversations?business_account_id=${businessAccountId}`,
@@ -90,8 +100,9 @@ export const useDMInbox = (): UseDMInboxResult => {
 
       setConversations(result.data || []);
 
-      // Auto-select first conversation if none selected
-      if (result.data?.length > 0 && !selectedConversationId) {
+      // Auto-select first conversation if none already selected — read from ref, not state,
+      // so this guard doesn't force selectedConversationId into the dep array
+      if (result.data?.length > 0 && !selectedConversationIdRef.current) {
         setSelectedConversationId(result.data[0].id);
       }
 
@@ -104,17 +115,15 @@ export const useDMInbox = (): UseDMInboxResult => {
     } finally {
       setIsLoading(false);
     }
-  }, [user?.id, businessAccountId, instagramBusinessId, selectedConversationId]); // ✅ UPDATED: Removed token, added user.id and instagramBusinessId
+  }, [userId, businessAccountId, instagramBusinessId]);
 
   const fetchMessages = useCallback(async (conversationId: string) => {
-    // ✅ UPDATED: Validate authentication
-    if (!user?.id || !businessAccountId) {
+    if (!userId || !businessAccountId) {
       console.error('❌ Cannot fetch messages: No authentication');
       return;
     }
 
     try {
-      // Route to frontend /dm-messages — reads from Supabase cache (no live Graph API call)
       const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
       const headers = await getAgentAuthHeaders();
       const response = await fetch(
@@ -130,7 +139,7 @@ export const useDMInbox = (): UseDMInboxResult => {
     } catch (err: any) {
       console.error('❌ Failed to fetch messages:', err);
     }
-  }, [user?.id, businessAccountId]); // ✅ UPDATED: Removed token, added user.id and businessAccountId
+  }, [userId, businessAccountId]);
 
   const selectConversation = (conversationId: string) => {
     setSelectedConversationId(conversationId);
@@ -138,8 +147,7 @@ export const useDMInbox = (): UseDMInboxResult => {
   };
 
   const sendMessage = async (messageText: string): Promise<void> => {
-    // ✅ UPDATED: Validate authentication
-    if (!user?.id || !businessAccountId) {
+    if (!userId || !businessAccountId) {
       throw new Error('No Instagram Business Account connected');
     }
 

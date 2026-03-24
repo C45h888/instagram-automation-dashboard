@@ -28,7 +28,7 @@ import type {
   ScheduledPostStatus,
   SystemAlert,
 } from '@/types'
-import type { QueueStatusSummary, QueueDLQItem, QueueRetryResult, AuditLogEntry } from '@/types'
+import type { QueueOverview, QueueDLQItem, QueueRetryResult, AuditLogEntry } from '@/types'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Response wrappers (same shape as DatabaseService)
@@ -127,6 +127,23 @@ export class AgentService {
       const msg = err instanceof Error ? err.message : String(err)
       console.error('AgentService.getHeartbeats failed:', msg)
       return { success: false, data: [], error: msg }
+    }
+  }
+
+  /** Fetch computed agent liveness status via backend (single source of truth for LIVENESS_THRESHOLD_MS). */
+  static async getAgentStatus(): Promise<ServiceResponse<{ status: import('@/types').AgentHeartbeatStatus; last_beat_at: string | null; agent_id: string | null }>> {
+    try {
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in'
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers: Record<string, string> = session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}
+
+      const res = await fetch(`${apiBaseUrl}/api/instagram/agent/status`, { headers })
+      const json = await res.json() as ServiceResponse<{ status: import('@/types').AgentHeartbeatStatus; last_beat_at: string | null; agent_id: string | null }>
+      return json
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('AgentService.getAgentStatus failed:', msg)
+      return { success: false, data: null, error: msg }
     }
   }
 
@@ -370,20 +387,28 @@ export class AgentService {
     return import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in'
   }
 
-  /** Fetch queue status summary directly from Supabase post_queue table */
-  static async getQueueStatus(): Promise<ServiceResponse<QueueStatusSummary>> {
+  /** Single query replacing getQueueStatus + getQueueDLQ.
+   *  Fetches up to 200 rows, derives histogram and DLQ items from the same result.
+   *  Eliminates two independent polling clocks on the same table. */
+  static async getQueueOverview(): Promise<ServiceResponse<QueueOverview>> {
     try {
       const { data, error } = await supabase
         .from('post_queue')
-        .select('status, action_type')
+        .select('status, action_type, id, business_account_id, payload, retry_count, error, error_category, created_at, updated_at')
+        .order('updated_at', { ascending: false })
+        .limit(200)
 
       if (error) throw error
 
-      // Same JS aggregation the backend used: "{action_type}::{status}" → count
       const byKey: Record<string, number> = {}
+      const dlqItems: QueueDLQItem[] = []
+
       for (const row of (data ?? [])) {
         const key = `${row.action_type}::${row.status}`
         byKey[key] = (byKey[key] ?? 0) + 1
+        if (row.status === 'dlq') {
+          dlqItems.push(row as QueueDLQItem)
+        }
       }
 
       return {
@@ -391,37 +416,14 @@ export class AgentService {
         data: {
           byKey,
           total: data?.length ?? 0,
+          dlqItems,
           timestamp: new Date().toISOString(),
         },
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
-      console.error('AgentService.getQueueStatus failed:', msg)
+      console.error('AgentService.getQueueOverview failed:', msg)
       return { success: false, data: null, error: msg }
-    }
-  }
-
-  /** Fetch DLQ items directly from Supabase post_queue table */
-  static async getQueueDLQ(limit = 50): Promise<ServiceListResponse<QueueDLQItem>> {
-    try {
-      const { data, error } = await supabase
-        .from('post_queue')
-        .select('id, business_account_id, action_type, payload, retry_count, error, error_category, created_at, updated_at')
-        .eq('status', 'dlq')
-        .order('updated_at', { ascending: false })
-        .limit(Math.min(limit, 200))
-
-      if (error) throw error
-
-      return {
-        success: true,
-        data: (data ?? []) as QueueDLQItem[],
-        count: data?.length ?? 0,
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
-      console.error('AgentService.getQueueDLQ failed:', msg)
-      return { success: false, data: [], error: msg }
     }
   }
 

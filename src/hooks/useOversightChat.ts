@@ -56,7 +56,9 @@ export interface UseOversightChatResult {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function useOversightChat(businessAccountId: string | null): UseOversightChatResult {
-  const { user } = useAuthStore()
+  // Extract only the primitive needed — prevents re-renders from unrelated store field changes
+  // (token refresh, isLoading, etc.) and avoids object reference instability from mapToUser()
+  const userId = useAuthStore(state => state.user?.id ?? null)
 
   const [sessions,      setSessions]      = useState<OversightSession[]>([])
   const [activeSession, setActiveSession] = useState<OversightSession | null>(null)
@@ -106,12 +108,12 @@ export function useOversightChat(businessAccountId: string | null): UseOversight
         setActiveSession(loaded[0])
       } else {
         // No sessions exist — auto-create one
-        if (!user?.id) return
+        if (!userId) return
         const { data: newData, error: createErr } = await supabase
           .from('oversight_chat_sessions')
           .insert({
             business_account_id: businessAccountId,
-            dashboard_user_id:   user.id,
+            dashboard_user_id:   userId,
             messages:            [],
           })
           .select()
@@ -125,7 +127,7 @@ export function useOversightChat(businessAccountId: string | null): UseOversight
     })()
 
     return () => { mounted = false }
-  }, [businessAccountId, user?.id])
+  }, [businessAccountId, userId])
 
   // ── Parse messages from active session ────────────────────────────────────
   useEffect(() => {
@@ -287,7 +289,7 @@ export function useOversightChat(businessAccountId: string | null): UseOversight
 
   // ── Start a new session ────────────────────────────────────────────────────
   const startSession = useCallback(async (): Promise<void> => {
-    if (!businessAccountId || !user?.id) return
+    if (!businessAccountId || !userId) return
 
     setError(null)
 
@@ -301,7 +303,7 @@ export function useOversightChat(businessAccountId: string | null): UseOversight
       .from('oversight_chat_sessions')
       .insert({
         business_account_id: businessAccountId,
-        dashboard_user_id:   user.id,
+        dashboard_user_id:   userId,
         messages:            [],
         is_active:           true,
       })
@@ -316,7 +318,7 @@ export function useOversightChat(businessAccountId: string | null): UseOversight
     setActiveSession(session)
     setMessages([])
     setStreamBuffer('')
-  }, [businessAccountId, user])
+  }, [businessAccountId, userId])
 
   // ── Select an existing session ─────────────────────────────────────────────
   const selectSession = useCallback((sessionId: string): void => {
@@ -329,7 +331,7 @@ export function useOversightChat(businessAccountId: string | null): UseOversight
   // ── Send a message and open SSE stream ────────────────────────────────────
   const sendMessage = useCallback(
     (question: string): void => {
-      if (!activeSession || !businessAccountId || !user?.id || isStreaming) return
+      if (!activeSession || !businessAccountId || !userId || isStreaming) return
       if (!question.trim()) return
 
       // Append user message to UI immediately
@@ -369,7 +371,7 @@ export function useOversightChat(businessAccountId: string | null): UseOversight
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
           business_account_id: businessAccountId,
-          user_id:             user.id,
+          user_id:             userId,
           question:            question.trim(),
           chat_history:        updatedMessages,
           stream:              true,
@@ -392,7 +394,7 @@ export function useOversightChat(businessAccountId: string | null): UseOversight
           cleanup()
         })
     },
-    [activeSession, businessAccountId, user, isStreaming, messages, apiBase, readStream, cleanup]
+    [activeSession, businessAccountId, userId, isStreaming, messages, apiBase, readStream, cleanup]
   )
 
   // ── Manual close ──────────────────────────────────────────────────────────

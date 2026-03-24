@@ -2,17 +2,18 @@
  * useQueueMonitor.ts
  *
  * TanStack Query hook for queue status and DLQ monitoring.
- * Polls every 15s for status, 30s for DLQ.
- * Provides retry mutation for failed/DLQ items.
+ * Single query (getQueueOverview) replaces the previous two independent pollers
+ * (getQueueStatus at 15s + getQueueDLQ at 30s) that were hitting the same table
+ * on different clocks and synchronizing every 30s into a double-fire.
  */
 
 import { useCallback } from 'react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { AgentService } from '../services/agentService'
-import type { QueueStatusSummary, QueueDLQItem } from '@/types'
+import type { QueueStatusSummary, QueueDLQItem, QueueOverview } from '@/types'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Result interface
+// Result interface — unchanged, consumers see no diff
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface UseQueueMonitorResult {
@@ -31,8 +32,7 @@ export interface UseQueueMonitorResult {
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const STATUS_POLL_MS = 15_000  // 15 seconds
-const DLQ_POLL_MS = 30_000     // 30 seconds
+const POLL_INTERVAL_MS = 15_000  // one clock, one table scan
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Hook
@@ -41,31 +41,19 @@ const DLQ_POLL_MS = 30_000     // 30 seconds
 export function useQueueMonitor(): UseQueueMonitorResult {
   const queryClient = useQueryClient()
 
-  // ── Queue status query ────────────────────────────────────────────────────
-  const statusQuery = useQuery({
-    queryKey: ['queue-monitor', 'status'],
+  // ── Single combined query — histogram + DLQ derived from same 200-row fetch ─
+  const overviewQuery = useQuery({
+    queryKey: ['queue-monitor', 'overview'],
     queryFn: async () => {
-      const result = await AgentService.getQueueStatus()
-      if (!result.success) throw new Error(result.error ?? 'Failed to fetch queue status')
-      return result.data
+      const result = await AgentService.getQueueOverview()
+      if (!result.success) throw new Error(result.error ?? 'Failed to fetch queue overview')
+      return result.data as QueueOverview
     },
-    refetchInterval: STATUS_POLL_MS,
-    staleTime: STATUS_POLL_MS,
+    refetchInterval: POLL_INTERVAL_MS,
+    staleTime: POLL_INTERVAL_MS,
   })
 
-  // ── DLQ query ─────────────────────────────────────────────────────────────
-  const dlqQuery = useQuery({
-    queryKey: ['queue-monitor', 'dlq'],
-    queryFn: async () => {
-      const result = await AgentService.getQueueDLQ(50)
-      if (!result.success) throw new Error(result.error ?? 'Failed to fetch DLQ')
-      return result.data
-    },
-    refetchInterval: DLQ_POLL_MS,
-    staleTime: DLQ_POLL_MS,
-  })
-
-  // ── Retry mutation ───────────────────────────────────────────────────────
+  // ── Retry mutation ────────────────────────────────────────────────────────
   const retryMutation = useMutation({
     mutationFn: async (queueId: string) => {
       const result = await AgentService.retryQueueItem(queueId)
@@ -73,52 +61,49 @@ export function useQueueMonitor(): UseQueueMonitorResult {
       return result.data
     },
     onSuccess: (_, queueId) => {
-      // Optimistically remove from DLQ cache immediately
-      queryClient.setQueryData<QueueDLQItem[]>(['queue-monitor', 'dlq'], (old) =>
-        old?.filter((item) => item.id !== queueId) ?? []
-      )
-      // Invalidate both queries to refetch fresh data
-      queryClient.invalidateQueries({ queryKey: ['queue-monitor', 'status'] })
-      queryClient.invalidateQueries({ queryKey: ['queue-monitor', 'dlq'] })
+      // Optimistically remove the retried item from cache so the UI updates instantly
+      queryClient.setQueryData<QueueOverview>(['queue-monitor', 'overview'], (old) => {
+        if (!old) return old
+        return { ...old, dlqItems: old.dlqItems.filter((item) => item.id !== queueId) }
+      })
+      // Single invalidation — one refetch, one clock reset
+      queryClient.invalidateQueries({ queryKey: ['queue-monitor', 'overview'] })
     },
   })
 
-  // ── Derived values ───────────────────────────────────────────────────────
-  const summary = statusQuery.data ?? { byKey: {}, total: 0, timestamp: new Date().toISOString() }
-  const dlqItems = dlqQuery.data ?? []
+  // ── Derived values — same shape as before ────────────────────────────────
+  const overview = overviewQuery.data
+  const summary: QueueStatusSummary = {
+    byKey:     overview?.byKey     ?? {},
+    total:     overview?.total     ?? 0,
+    timestamp: overview?.timestamp ?? new Date().toISOString(),
+  }
+  const dlqItems  = overview?.dlqItems ?? []
+  const totalQueued = summary.total
+  const totalDLQ    = dlqItems.length
 
-  // Calculate totals from summary
-  const totalQueued = summary.total ?? 0
-  const totalDLQ = dlqItems.length
-
-  // Combined error state
-  const error = statusQuery.error
-    ? statusQuery.error instanceof Error
-      ? statusQuery.error.message
-      : String(statusQuery.error)
-    : dlqQuery.error
-      ? dlqQuery.error instanceof Error
-        ? dlqQuery.error.message
-        : String(dlqQuery.error)
-      : null
+  const error = overviewQuery.error
+    ? overviewQuery.error instanceof Error
+      ? overviewQuery.error.message
+      : String(overviewQuery.error)
+    : null
 
   // ── Retry handler ─────────────────────────────────────────────────────────
   const retryItem = useCallback(async (queueId: string): Promise<void> => {
     await retryMutation.mutateAsync(queueId)
   }, [retryMutation])
 
-  // ── Refetch handler ──────────────────────────────────────────────────────
+  // ── Refetch handler ───────────────────────────────────────────────────────
   const refetch = useCallback(() => {
-    statusQuery.refetch()
-    dlqQuery.refetch()
-  }, [statusQuery, dlqQuery])
+    overviewQuery.refetch()
+  }, [overviewQuery])
 
   return {
     summary,
     dlqItems,
     totalQueued,
     totalDLQ,
-    isLoading: statusQuery.isLoading || dlqQuery.isLoading,
+    isLoading: overviewQuery.isLoading,
     error,
     retryItem,
     isRetrying: retryMutation.isPending,
