@@ -19,7 +19,7 @@ no-store, no-cache, must-revalidate, proxy-revalidate
 cf-cache-status
 DYNAMIC
 cf-ray
-9e14c42f58ee1dad-SIN
+9e17592a9e08f908-SIN
 content-length
 85
 content-security-policy
@@ -27,7 +27,7 @@ default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://conn
 content-type
 application/json; charset=utf-8
 date
-Tue, 24 Mar 2026 09:49:31 GMT
+Tue, 24 Mar 2026 17:20:45 GMT
 etag
 W/"55-9dgvzERUm/Ndr2H/jcnkS4mHlaI"
 expires
@@ -38,16 +38,12 @@ permissions-policy
 camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()
 pragma
 no-cache
-priority
-u=1,i
 referrer-policy
 strict-origin-when-cross-origin
 report-to
-{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=ZS%2FgbCauFvMTudOGAjckyFwBWjnqTquYniH68GkLJZIsaXDwtEi68wO1sLt%2Fv0osT42TnoyY%2F9zJakuBV%2BNgBn0MNWkQaSbYZtlfBgub6Q4JIZv1YSHTh1nOeZPwG9EVrSk9JV8XwWFaGR76"}]}
+{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=0u5eVbAmMTlRfyj%2BFGwbtjo3FLgLhWMl8mxtnRLQmXdIuEYqkaHqJOuWoRs9wr0ORkTO94%2FKA6dOVw4cfxwgXhmve6Uce8NnDs61JOHx4wzeoHmZWQrXTqwwGY778hOfXrJjQ8k3dOPzLeH3"}]}
 server
 cloudflare
-server-timing
-cfExtPri
 strict-transport-security
 max-age=31536000; includeSubDomains; preload
 strict-transport-security
@@ -69,7 +65,7 @@ none
 x-powered-by
 Express
 x-request-id
-1a171c63-8177-4013-945c-2735f35f4f03
+65214ca5-62d2-4ab1-92a2-d777b6ebddff
 x-xss-protection
 1; mode=block
 x-xss-protection
@@ -112,20 +108,4 @@ sec-fetch-site
 same-site
 user-agent
 Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 OPR/128.0.0.0 (Edition std-1)
- 
- {business_account_id: "0882b710-4258-47cf-85c8-1fa82a3de763",…}
-business_account_id
-: 
-"0882b710-4258-47cf-85c8-1fa82a3de763"
-chat_history
-: 
-[{role: "user", content: "hey", timestamp: "2026-03-24T09:49:21.236Z"},…]
-question
-: 
-"hey"
-stream
-: 
-true
-user_id
-: 
-"7e631172-2287-4d95-994c-53a5c61a3af8"
+Request
