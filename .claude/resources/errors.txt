@@ -1,4 +1,4 @@
-Request URL
+#Request URL
 https://api.888intelligenceautomation.in/api/instagram/oversight/chat
 Request Method
 POST
@@ -19,7 +19,7 @@ no-store, no-cache, must-revalidate, proxy-revalidate
 cf-cache-status
 DYNAMIC
 cf-ray
-9e17592a9e08f908-SIN
+9e1cff14af010cea-SIN
 content-length
 85
 content-security-policy
@@ -27,7 +27,7 @@ default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://conn
 content-type
 application/json; charset=utf-8
 date
-Tue, 24 Mar 2026 17:20:45 GMT
+Wed, 25 Mar 2026 09:47:50 GMT
 etag
 W/"55-9dgvzERUm/Ndr2H/jcnkS4mHlaI"
 expires
@@ -38,12 +38,16 @@ permissions-policy
 camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()
 pragma
 no-cache
+priority
+u=1,i
 referrer-policy
 strict-origin-when-cross-origin
 report-to
-{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=0u5eVbAmMTlRfyj%2BFGwbtjo3FLgLhWMl8mxtnRLQmXdIuEYqkaHqJOuWoRs9wr0ORkTO94%2FKA6dOVw4cfxwgXhmve6Uce8NnDs61JOHx4wzeoHmZWQrXTqwwGY778hOfXrJjQ8k3dOPzLeH3"}]}
+{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=m4M70NfRM7GOeyJYN%2F7caAQRdmW4QRaqBxIqEKC5Cbe4qUNDU%2Blqt7dJeRY7vN34a2JSVLlE%2BAbkcr8ouzzab0yPkrhe4cJVwPcXyJI%2BSuUIN9lIrU0POq%2BVJZtn9sqlxjESF4UBgtbxZOuL"}]}
 server
 cloudflare
+server-timing
+cfExtPri
 strict-transport-security
 max-age=31536000; includeSubDomains; preload
 strict-transport-security
@@ -65,7 +69,7 @@ none
 x-powered-by
 Express
 x-request-id
-65214ca5-62d2-4ab1-92a2-d777b6ebddff
+7d30d345-c87b-4047-b9e9-d28aa041f6e4
 x-xss-protection
 1; mode=block
 x-xss-protection
@@ -85,7 +89,7 @@ gzip, deflate, br, zstd
 accept-language
 en-GB,en-US;q=0.9,en;q=0.8,el;q=0.7
 content-length
-301
+443
 content-type
 application/json
 origin
@@ -108,4 +112,19 @@ sec-fetch-site
 same-site
 user-agent
 Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 OPR/128.0.0.0 (Edition std-1)
-Request
+ error paylaod {business_account_id: "0882b710-4258-47cf-85c8-1fa82a3de763",…}
+business_account_id
+: 
+"0882b710-4258-47cf-85c8-1fa82a3de763"
+chat_history
+: 
+[{role: "user", content: "hey", timestamp: "2026-03-25T03:16:09.395Z"},…]
+question
+: 
+"hey"
+stream
+: 
+true
+user_id
+: 
+"7e631172-2287-4d95-994c-53a5c61a3af8"
