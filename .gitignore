@@ -91,3 +91,21 @@ skills-lock.json
 package.json
 .kilocode/skills/supabase-postgres-best-practices
 supabase-mcp-1.5.0.tgz
+
+# ---------------------------------------------------------------------------
+# Rust runtime (Phase 1) — build artifacts and binary-crate lockfile
+# ---------------------------------------------------------------------------
+# Target directory: Cargo's build output. Self-excluded by CACHEDIR.TAG but
+# the .gitignore pattern is the canonical gate.
+runtime/src-tauri/target/
+# Cargo backup files.
+runtime/src-tauri/**/*.rs.bk
+# Cargo.lock: this crate is a binary (lib + bin) — the lockfile is
+# reproducible from Cargo.toml + the toolchain pin in
+# runtime/src-tauri/rust-toolchain.toml, so it is excluded.
+runtime/src-tauri/Cargo.lock
+# Runtime log output written by the logging framework's FileSink.
+runtime/logs/
+# Local config files (RUNTIME_CONFIG override) — never commit.
+runtime/config/local.toml
+runtime/config/local.*.toml
