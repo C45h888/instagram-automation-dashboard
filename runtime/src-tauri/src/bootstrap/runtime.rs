@@ -25,7 +25,6 @@ use tauri::Manager;
 use crate::bootstrap::shutdown::Shutdown;
 use crate::bootstrap::startup::Startup;
 use crate::error::runtime_error::{RuntimeError, RuntimeResult};
-use crate::state::{RuntimeState, SessionState};
 
 /// The runtime itself. Pure namespace — every member is a static method.
 #[derive(Debug)]
@@ -90,13 +89,40 @@ impl Runtime {
 
         let context = tauri::generate_context!();
         let app = tauri::Builder::default()
+            .invoke_handler(tauri::generate_handler![
+                crate::ipc::commands::runtime_get_state,
+                crate::ipc::commands::runtime_get_phase,
+                crate::ipc::commands::runtime_get_correlation_id,
+                crate::ipc::commands::window_minimize,
+                crate::ipc::commands::window_maximize,
+                crate::ipc::commands::window_unmaximize,
+                crate::ipc::commands::window_close,
+                crate::ipc::commands::window_set_title,
+                crate::ipc::commands::window_focus,
+                crate::ipc::commands::window_inner_size,
+                crate::ipc::commands::settings_get,
+                crate::ipc::commands::settings_set_theme,
+                crate::ipc::commands::settings_set_font_scale,
+                crate::ipc::commands::settings_set_window_prefs,
+                crate::ipc::commands::session_get_current_view,
+                crate::ipc::commands::session_mount_view,
+                crate::ipc::commands::session_unmount_view,
+                crate::ipc::commands::log_emit_event,
+                crate::ipc::commands::log_get_session_log_path,
+                crate::ipc::commands::config_get_env,
+                crate::ipc::commands::config_get_runtime_config,
+            ])
             .setup(|app| {
                 // Run the startup sequence. If it fails, the setup
                 // callback returns an error and Tauri's run loop
                 // exits.
-                let (state, session) = Startup::run(app)?;
-                // Capture for the shutdown hook.
-                app.manage(RuntimeHandles { state, session });
+                let app_state = Startup::run(app)?;
+                // Capture the runtime state so the shutdown hook can
+                // reach it. (The full AppState is also managed with
+                // Tauri for IPC consumers.)
+                app.manage(BootstrapHandle {
+                    runtime: app_state.runtime.clone(),
+                });
                 Ok(())
             })
             .build(context)
@@ -106,8 +132,8 @@ impl Runtime {
             if let tauri::RunEvent::ExitRequested { .. } = event {
                 // Best-effort shutdown. We cannot return a Result from
                 // this callback; log any error and continue.
-                if let Some(handles) = _app.try_state::<RuntimeHandles>() {
-                    let _ = Shutdown::run(&handles.state);
+                if let Some(handle) = _app.try_state::<BootstrapHandle>() {
+                    let _ = Shutdown::run(&handle.runtime);
                 }
             }
         });
@@ -119,10 +145,9 @@ impl Runtime {
     }
 }
 
-/// Internal handle bundle kept in Tauri-managed state so the shutdown
-/// hook can reach the runtime state and session.
-struct RuntimeHandles {
-    state: Arc<RuntimeState>,
-    #[allow(dead_code)]
-    session: Arc<SessionState>,
+/// Internal handle kept in Tauri-managed state so the shutdown hook can
+/// reach the runtime state without going through `app.manage(AppState)`
+/// (which only IPC commands can access).
+struct BootstrapHandle {
+    runtime: Arc<crate::state::RuntimeState>,
 }

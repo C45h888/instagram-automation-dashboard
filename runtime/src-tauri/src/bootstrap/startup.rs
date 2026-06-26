@@ -21,60 +21,71 @@ use crate::config::Config;
 use crate::error::runtime_error::RuntimeError;
 use crate::error::runtime_error::RuntimeResult;
 use crate::logging::Logger;
-use crate::state::{RuntimeState, SessionState, SettingsState, ViewMetadata, WindowState};
+use crate::state::{
+    AppState, RuntimeState, SessionState, SettingsState, ViewMetadata, WindowState,
+};
 
 #[derive(Debug)]
 pub struct Startup;
 
 impl Startup {
-    pub fn run(app: &mut tauri::App) -> RuntimeResult<(Arc<RuntimeState>, Arc<SessionState>)> {
+    pub fn run(app: &mut tauri::App) -> RuntimeResult<Arc<AppState>> {
         // 1. Init: construct the initial runtime state. The tracing
         //    subscriber is NOT installed yet — `tracing::info!` calls in
         //    this phase are no-ops by design (per the Phase 1 plan:
         //    the subscriber is installed in the `Log` phase below).
-        let cold_logger = Arc::new(Logger::new(uuid::Uuid::new_v4().to_string(), vec![
-            Arc::new(crate::logging::StdoutSink),
-        ]));
-        let state = Arc::new(RuntimeState::new(cold_logger));
+        let correlation_id = uuid::Uuid::new_v4().to_string();
+        let state = Arc::new(RuntimeState::new(correlation_id));
         LifecyclePhase::Init
             .run(&state, || Ok(()))
             .map_err(|e| RuntimeError::startup(e.to_string()))?;
 
         // 2. Configure: load config, validate.
         let config: Config = LifecyclePhase::Configure
-            .run_value(&state, || Loader::load())
+            .run_value(&state, Loader::load)
             .map_err(|e| RuntimeError::startup(e.to_string()))?;
 
-        // 3. Log: replace the cold-start logger with the configured one.
-        let real_logger = LifecyclePhase::Log
+        // 3. Log: install the global tracing subscriber via
+        //    `Logger::init`. From this point on, every `tracing::info!`
+        //    emitted inside the `runtime.boot` Span carries the
+        //    correlation_id automatically.
+        LifecyclePhase::Log
             .run_value(&state, || Logger::init(&config.logging))
             .map_err(|e| RuntimeError::startup(e.to_string()))?;
-        let real_logger = Arc::new(real_logger);
-        // Re-construct state so it carries the real logger.
-        let state = Arc::new(RuntimeState::with_logger(&state, real_logger));
 
         // 4. Window: open the main window.
         let window: Arc<WindowState> = LifecyclePhase::Window
             .run_value(&state, || open_window(app, &config.window))
             .map_err(|e| RuntimeError::startup(e.to_string()))?;
 
-        // 5. Manage state containers. These are owned by Tauri via
-        //    `manage` and accessible from IPC commands (none in
-        //    Phase 1).
+        // 5. Manage the four state containers individually (Tauri
+        //    requires each `manage` to be a distinct type) AND the
+        //    composite `AppState` for callers that want all four at
+        //    once. The individual `manage` calls are kept because
+        //    `tauri::State<T>` extraction is by type, not by struct
+        //    member.
         let settings = Arc::new(SettingsState::new());
         let session = Arc::new(SessionState::new(uuid::Uuid::new_v4().to_string()));
         session.mount_view(ViewMetadata::new(window.label()));
-        app.manage(state.clone());
+        let app_state = Arc::new(AppState::new(
+            state.clone(),
+            window.clone(),
+            settings.clone(),
+            session.clone(),
+        ));
+
+        app.manage(state);
         app.manage(window);
         app.manage(settings);
-        app.manage(session.clone());
+        app.manage(session);
+        app.manage(app_state.clone());
 
         // 6. Ready.
         LifecyclePhase::Ready
-            .run(&state, || Ok(()))
+            .run(&app_state.runtime, || Ok(()))
             .map_err(|e| RuntimeError::startup(e.to_string()))?;
 
-        Ok((state, session))
+        Ok(app_state)
     }
 }
 

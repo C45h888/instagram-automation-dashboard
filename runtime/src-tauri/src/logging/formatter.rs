@@ -39,7 +39,7 @@ impl Formatter {
 fn quote(value: &str) -> String {
     if value.contains(' ') || value.contains('"') || value.contains('\n') {
         let escaped = value.replace('"', "\\\"");
-        format!("\"{}\"", escaped)
+        format!("\"{escaped}\"")
     } else {
         value.to_string()
     }
@@ -72,10 +72,7 @@ pub fn now_rfc3339() -> String {
     // pulling in `chrono` / `time` to keep the dependency footprint
     // small. Resolution is one second — sufficient for log correlation.
     let (year, month, day, hour, minute, second) = epoch_to_ymdhms(now);
-    format!(
-        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
-        year, month, day, hour, minute, second
-    )
+    format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}Z")
 }
 
 fn epoch_to_ymdhms(secs: u64) -> (i32, u32, u32, u32, u32, u32) {
@@ -121,7 +118,7 @@ mod tests {
         let s = line.find(" severity=").unwrap();
         let e = line.find(" event=").unwrap();
         let ci = line.find(" correlation_id=").unwrap();
-        assert!(t < c && c < s && s < e && e < ci, "field order: {}", line);
+        assert!(t < c && c < s && s < e && e < ci, "field order: {line}");
     }
 
     #[test]

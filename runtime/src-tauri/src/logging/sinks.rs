@@ -16,7 +16,7 @@ impl Sink for StdoutSink {
     fn write(&self, record: &LogRecord) {
         let line = Formatter::format(record);
         // Stdout is best-effort; failures are swallowed.
-        let _ = writeln!(std::io::stdout(), "{}", line);
+        let _ = writeln!(std::io::stdout(), "{line}");
     }
 }
 
@@ -48,7 +48,7 @@ impl Sink for FileSink {
         // Serialise writes to a single file so records do not interleave.
         let _guard = self.lock.lock();
         if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(&self.path) {
-            let _ = writeln!(file, "{}", line);
+            let _ = writeln!(file, "{line}");
         }
     }
 }

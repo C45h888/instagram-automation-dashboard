@@ -11,6 +11,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use serde::de::Deserializer;
+use serde::ser::{SerializeStruct, Serializer};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -31,6 +33,17 @@ impl ViewMetadata {
     }
 }
 
+/// Window session — the current `WebviewWindow`'s lifecycle.
+///
+/// `SessionState` is `Send + Sync` (via `Mutex` + `AtomicU64`) so it can
+/// live in `tauri::State<T>`. The `Clone`, `Serialize`, and `Deserialize`
+/// impls are hand-written because the inner `Mutex<Option<ViewMetadata>>`
+/// doesn't auto-derive them; the impls lock the mutex briefly to read or
+/// replace the view, then release it.
+///
+/// **No field in this struct may be auth-shaped.** The
+/// `session_carries_no_auth_fields` test below is a structural probe
+/// that fails the build if any forbidden identifier sneaks in.
 pub struct SessionState {
     session_id: String,
     started_at: AtomicU64,
@@ -67,6 +80,57 @@ impl SessionState {
             .lock()
             .expect("session view poisoned")
             .clone()
+    }
+}
+
+// --- Manual trait impls ----------------------------------------------------
+//
+// `Mutex<Option<ViewMetadata>>` does not derive Clone / Serialize /
+// Deserialize. We implement them here so SessionState satisfies the
+// Phase 1 Step C contract: "Each state type derives
+// Debug, Clone, Serialize, Deserialize". The impls respect the Mutex
+// by taking a brief lock around the inner value.
+
+impl Clone for SessionState {
+    fn clone(&self) -> Self {
+        Self {
+            session_id: self.session_id.clone(),
+            started_at: AtomicU64::new(self.started_at.load(Ordering::SeqCst)),
+            view: Mutex::new(
+                self.view
+                    .lock()
+                    .expect("session view poisoned")
+                    .clone(),
+            ),
+        }
+    }
+}
+
+impl Serialize for SessionState {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let view_guard = self.view.lock().expect("session view poisoned");
+        let mut s = serializer.serialize_struct("SessionState", 3)?;
+        s.serialize_field("session_id", &self.session_id)?;
+        s.serialize_field("started_at", &self.started_at.load(Ordering::SeqCst))?;
+        s.serialize_field("view", &*view_guard)?;
+        s.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for SessionState {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct Inner {
+            session_id: String,
+            started_at: u64,
+            view: Option<ViewMetadata>,
+        }
+        let inner = Inner::deserialize(deserializer)?;
+        Ok(Self {
+            session_id: inner.session_id,
+            started_at: AtomicU64::new(inner.started_at),
+            view: Mutex::new(inner.view),
+        })
     }
 }
 
@@ -115,13 +179,38 @@ mod tests {
         // We check the Debug output as a structural probe — it would
         // include any such field.
         let s = SessionState::new("test");
-        let dbg = format!("{:?}", s);
+        let dbg = format!("{s:?}");
         for forbidden in ["user_id", "account_id", "access_token", "auth"] {
             assert!(
                 !dbg.to_lowercase().contains(forbidden),
-                "SessionState Debug exposes forbidden field: {}",
-                forbidden
+                "SessionState Debug exposes forbidden field: {forbidden}"
             );
         }
+    }
+
+    #[test]
+    fn session_state_round_trips_through_serde() {
+        // Step C contract: each state type derives Serialize + Deserialize.
+        let original = SessionState::new("session-A");
+        original.mount_view(ViewMetadata::new("main-window"));
+        let json = serde_json::to_string(&original).expect("serialize");
+        let back: SessionState = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back.session_id(), original.session_id());
+        assert_eq!(back.started_at(), original.started_at());
+        assert_eq!(
+            back.current_view().expect("view should round-trip").view_id,
+            "main-window"
+        );
+    }
+
+    #[test]
+    fn session_state_clone_is_independent() {
+        let original = SessionState::new("session-B");
+        original.mount_view(ViewMetadata::new("main"));
+        let cloned = original.clone();
+        cloned.unmount_view();
+        // Mutating the clone must not affect the original.
+        assert!(cloned.current_view().is_none());
+        assert!(original.current_view().is_some());
     }
 }

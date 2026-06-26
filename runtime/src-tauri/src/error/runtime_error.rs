@@ -3,9 +3,9 @@
 //! This module defines [`RuntimeError`] — the *only* error type the runtime
 //! kernel uses. It is intentionally domain-free.
 //!
-//! Any concern that needs to carry domain vocabulary (auth errors, Instagram
-//! API errors, workflow errors, etc.) is the responsibility of the preserved
-//! TypeScript platform. The runtime logs them and returns
+//! Any concern that needs to carry business-domain vocabulary
+//! is the responsibility of the preserved TypeScript platform.
+//! The runtime logs them and returns
 //! [`RuntimeError::InternalRuntimeError`] if the calling context is unable to
 //! recover.
 //!

@@ -5,12 +5,9 @@
 //! authenticated user session, not a tenant context, not a business
 //! record.
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, Ordering};
 
 use serde::{Deserialize, Serialize};
-
-use crate::logging::Logger;
 
 /// Phase of the bootstrap lifecycle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -39,35 +36,37 @@ impl RuntimePhase {
     }
 }
 
-/// Runtime state, owned by the kernel. Thread-safe.
+/// Runtime state, owned by the kernel.
+///
+/// Per the Phase 1 Step C contract, `RuntimeState` exposes exactly three
+/// fields:
+///
+/// - `booted_at_epoch_secs` — when `Runtime::boot` was entered
+/// - `correlation_id` — the per-boot UUID v4
+/// - `phase` — current [`RuntimePhase`] (atomic, lock-free)
+///
+/// This is the metadata the kernel needs to make decisions; it is **not**
+/// a logger, not a config, not a window handle. The bootstrap layer logs
+/// through `tracing` and looks up other state via Tauri-managed
+/// `tauri::State<T>` handles.
 #[derive(Debug)]
 pub struct RuntimeState {
-    booted_at: chrono_like::Instant,
+    booted_at_epoch_secs: u64,
     correlation_id: String,
     phase: AtomicU8,
-    logger: Arc<Logger>,
 }
 
 impl RuntimeState {
-    pub fn new(logger: Arc<Logger>) -> Self {
+    /// Construct a fresh `RuntimeState`. `correlation_id` should be the
+    /// UUID v4 generated at the very start of `Runtime::boot`.
+    pub fn new(correlation_id: impl Into<String>) -> Self {
         Self {
-            booted_at: chrono_like::Instant::now(),
-            correlation_id: logger.correlation_id().to_string(),
+            booted_at_epoch_secs: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0),
+            correlation_id: correlation_id.into(),
             phase: AtomicU8::new(RuntimePhase::Cold as u8),
-            logger,
-        }
-    }
-
-    /// Re-construct a [`RuntimeState`] preserving the boot timestamp and
-    /// correlation id from `existing`, but using a different logger. Used
-    /// by the bootstrap layer to swap the cold-start logger for the
-    /// configured one.
-    pub fn with_logger(existing: &Self, logger: Arc<Logger>) -> Self {
-        Self {
-            booted_at: existing.booted_at,
-            correlation_id: existing.correlation_id.clone(),
-            phase: AtomicU8::new(existing.phase.load(Ordering::SeqCst)),
-            logger,
         }
     }
 
@@ -75,8 +74,8 @@ impl RuntimeState {
         &self.correlation_id
     }
 
-    pub fn booted_at(&self) -> chrono_like::Instant {
-        self.booted_at
+    pub fn booted_at_epoch_secs(&self) -> u64 {
+        self.booted_at_epoch_secs
     }
 
     pub fn phase(&self) -> RuntimePhase {
@@ -94,33 +93,38 @@ impl RuntimeState {
     pub fn set_phase(&self, phase: RuntimePhase) {
         self.phase.store(phase as u8, Ordering::SeqCst);
     }
-
-    pub fn logger(&self) -> &Arc<Logger> {
-        &self.logger
-    }
 }
 
-mod chrono_like {
-    use serde::{Deserialize, Serialize};
-    use std::time::{SystemTime, UNIX_EPOCH};
+/// Composite state handle — every IPC command and every observer of the
+/// runtime reaches into this single `Arc<AppState>` instead of holding
+/// four separate `tauri::State<T>` handles.
+///
+/// Per the Phase 1 Step C contract:
+/// "`runtime_state.rs` defines `pub struct AppState { runtime, window,
+/// settings, session }` (composite, also `Send + Sync`)"
+///
+/// `AppState` is automatically `Send + Sync` because each field is
+/// `Arc<T>` where `T: Send + Sync`.
+#[derive(Debug, Clone)]
+pub struct AppState {
+    pub runtime: std::sync::Arc<RuntimeState>,
+    pub window: std::sync::Arc<crate::state::WindowState>,
+    pub settings: std::sync::Arc<crate::state::SettingsState>,
+    pub session: std::sync::Arc<crate::state::SessionState>,
+}
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-    pub struct Instant {
-        epoch_secs: u64,
-    }
-
-    impl Instant {
-        pub fn now() -> Self {
-            Self {
-                epoch_secs: SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .map(|d| d.as_secs())
-                    .unwrap_or(0),
-            }
-        }
-
-        pub fn epoch_secs(&self) -> u64 {
-            self.epoch_secs
+impl AppState {
+    pub fn new(
+        runtime: std::sync::Arc<RuntimeState>,
+        window: std::sync::Arc<crate::state::WindowState>,
+        settings: std::sync::Arc<crate::state::SettingsState>,
+        session: std::sync::Arc<crate::state::SessionState>,
+    ) -> Self {
+        Self {
+            runtime,
+            window,
+            settings,
+            session,
         }
     }
 }
@@ -128,30 +132,16 @@ mod chrono_like {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::logging::logger::{LogRecord, Severity, Sink};
-    use crate::logging::formatter::Formatter;
-
-    struct CaptureSink(std::sync::Mutex<Vec<String>>);
-    impl Sink for CaptureSink {
-        fn write(&self, record: &LogRecord) {
-            self.0.lock().unwrap().push(Formatter::format(record));
-        }
-    }
-
-    fn logger() -> Arc<Logger> {
-        let sink: Arc<dyn Sink> = Arc::new(CaptureSink(std::sync::Mutex::new(Vec::new())));
-        Arc::new(Logger::new("test-correlation", vec![sink]))
-    }
 
     #[test]
     fn runtime_state_initial_phase_is_cold() {
-        let state = RuntimeState::new(logger());
+        let state = RuntimeState::new("test-cid");
         assert_eq!(state.phase(), RuntimePhase::Cold);
     }
 
     #[test]
     fn runtime_state_phase_transitions() {
-        let state = RuntimeState::new(logger());
+        let state = RuntimeState::new("test-cid");
         state.set_phase(RuntimePhase::Configuring);
         assert_eq!(state.phase(), RuntimePhase::Configuring);
         state.set_phase(RuntimePhase::Ready);
@@ -173,15 +163,47 @@ mod tests {
 
     #[test]
     fn correlation_id_is_preserved() {
-        let log = logger();
-        let cid = log.correlation_id().to_string();
-        let state = RuntimeState::new(log);
-        assert_eq!(state.correlation_id(), cid);
+        let state = RuntimeState::new("00000000-0000-0000-0000-000000000000");
+        assert_eq!(state.correlation_id(), "00000000-0000-0000-0000-000000000000");
     }
 
     #[test]
-    fn severity_strings_are_stable() {
-        assert_eq!(Severity::Info.as_str(), "INFO");
-        assert_eq!(Severity::Error.as_str(), "ERROR");
+    fn booted_at_is_set_at_construction() {
+        let before = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let state = RuntimeState::new("cid");
+        let after = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let booted = state.booted_at_epoch_secs();
+        assert!(
+            booted >= before && booted <= after,
+            "booted_at {booted} not in [{before}, {after}]",
+        );
+    }
+
+    #[test]
+    fn app_state_field_layout_matches_contract() {
+        // Compile-time + structural assertion: AppState has exactly
+        // four fields with the names the Phase 1 contract requires.
+        let cid = "cid".to_string();
+        let runtime = std::sync::Arc::new(RuntimeState::new(cid.clone()));
+        let window = std::sync::Arc::new(crate::state::WindowState::new(
+            "main", "title", 800, 600,
+        ));
+        let settings = std::sync::Arc::new(crate::state::SettingsState::new());
+        let session = std::sync::Arc::new(crate::state::SessionState::new("s1"));
+        let app = AppState::new(
+            std::sync::Arc::clone(&runtime),
+            std::sync::Arc::clone(&window),
+            std::sync::Arc::clone(&settings),
+            std::sync::Arc::clone(&session),
+        );
+        assert_eq!(app.runtime.correlation_id(), "cid");
+        assert_eq!(app.window.label(), "main");
+        assert_eq!(app.session.session_id(), "s1");
     }
 }

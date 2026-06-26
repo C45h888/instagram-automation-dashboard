@@ -227,7 +227,7 @@ mod tests {
             LifecyclePhase::Window,
             LifecyclePhase::Ready,
         ] {
-            assert!(p.is_boot_phase(), "{:?} should be a boot phase", p);
+            assert!(p.is_boot_phase(), "{p:?} should be a boot phase");
         }
     }
 

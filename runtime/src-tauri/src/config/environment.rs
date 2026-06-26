@@ -12,8 +12,7 @@ pub fn resolve_from_env() -> RuntimeResult<Environment> {
     let raw = env::var("RUNTIME_ENV").unwrap_or_else(|_| "dev".to_string());
     Environment::from_str(&raw).map_err(|_| {
         RuntimeError::config(format!(
-            "invalid RUNTIME_ENV value '{}' (expected one of: dev, staging, prod)",
-            raw
+            "invalid RUNTIME_ENV value '{raw}' (expected one of: dev, staging, prod)"
         ))
     })
 }
