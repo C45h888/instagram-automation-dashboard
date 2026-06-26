@@ -1,189 +1,94 @@
 /**
- * useTerminalKeyboard.ts
+ * useTerminalKeyboard.ts — Phase 2 refactored.
  *
- * Keyboard shortcuts for terminal input.
- * - Ctrl+L: Clear screen (preserves session)
- * - Ctrl+C: Cancel streaming
- * - ArrowUp/Down: Command history navigation
- * - Escape: Close/clear
+ * Public API is byte-identical to the legacy hook:
+ *   - UseTerminalKeyboardOptions interface
+ *   - UseTerminalKeyboardResult interface
+ *   - { register, historyUp, historyDown, addToHistory }
+ *
+ * The implementation now delegates to
+ * createTerminalKeyboardController from src/lib/bridge/terminalKeyboard.ts.
+ * The controller owns the event listener, command history, and sessionStorage.
+ * The hook wires options reactively and exposes the controller result.
+ *
+ * Options changes are propagated to the controller via updateOptions(),
+ * which rebuilds the listener with live callbacks.
  */
 
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
+import { createTerminalKeyboardController } from '../lib/bridge/terminalKeyboard';
 
-const STORAGE_KEY = 'terminal-command-history'
+// ─────────────────────────────────────────────────────────────────────────────
+// Result interface — unchanged from the legacy hook
+// ─────────────────────────────────────────────────────────────────────────────
 
 export interface UseTerminalKeyboardOptions {
-  /** Called when Ctrl+L is pressed */
-  onClearScreen?: () => void
-  /** Called when Ctrl+C is pressed (cancel streaming) */
-  onCancel?: () => void
-  /** Called when ArrowUp is pressed - returns previous command */
-  onHistoryUp?: () => string | undefined
-  /** Called when ArrowDown is pressed - returns next command */
-  onHistoryDown?: () => string | undefined
-  /** Called when Escape is pressed */
-  onEscape?: () => void
-  /** Whether input is currently focused */
-  inputFocused?: boolean
-  /** Whether streaming is active */
-  isStreaming?: boolean
+  onClearScreen?: () => void;
+  onCancel?: () => void;
+  onHistoryUp?: () => string | undefined;
+  onHistoryDown?: () => string | undefined;
+  onEscape?: () => void;
+  inputFocused?: boolean;
+  isStreaming?: boolean;
 }
 
 export interface UseTerminalKeyboardResult {
-  /** Register keyboard event listeners */
-  register: (element: HTMLElement | null) => void
-  /** Manually trigger history up */
-  historyUp: () => string | undefined
-  /** Manually trigger history down */
-  historyDown: () => string | undefined
-  /** Add command to history */
-  addToHistory: (command: string) => void
+  register: (element: HTMLElement | null) => void;
+  historyUp: () => string | undefined;
+  historyDown: () => string | undefined;
+  addToHistory: (command: string) => void;
 }
 
-const MAX_HISTORY = 100
+// ─────────────────────────────────────────────────────────────────────────────
+// Hook — body delegates to the controller
+// ─────────────────────────────────────────────────────────────────────────────
 
-export function useTerminalKeyboard({
-  onClearScreen,
-  onCancel,
-  onHistoryUp,
-  onHistoryDown,
-  onEscape,
-  inputFocused = false,
-  isStreaming = false,
-}: UseTerminalKeyboardOptions): UseTerminalKeyboardResult {
-  // Command history stored in ref (not state to avoid re-renders)
-  const historyRef = useRef<string[]>([])
-  const historyIndexRef = useRef<number>(-1)
-  const elementRef = useRef<HTMLElement | null>(null)
+export function useTerminalKeyboard(
+  options: UseTerminalKeyboardOptions = {},
+): UseTerminalKeyboardResult {
+  // Create the controller once. It is stable across re-renders.
+  const controller = useMemo(
+    () => createTerminalKeyboardController(options),
+    [], // intentionally empty — controller is created once, options applied via updateOptions
+  );
 
-  // Load history from sessionStorage on mount
+  // Track the previous options to avoid unnecessary updates
+  const prevOptionsRef = useRef<UseTerminalKeyboardOptions | undefined>(undefined);
+
+  // Sync options to the controller whenever they change
   useEffect(() => {
-    try {
-      const saved = sessionStorage.getItem(STORAGE_KEY)
-      if (saved) {
-        historyRef.current = JSON.parse(saved)
-        historyIndexRef.current = historyRef.current.length
-      }
-    } catch (e) {
-      console.warn('Failed to load terminal history:', e)
+    // Shallow-compare: only update if any option actually changed
+    const prev = prevOptionsRef.current;
+    const changed =
+      !prev ||
+      prev.onClearScreen !== options.onClearScreen ||
+      prev.onCancel !== options.onCancel ||
+      prev.onHistoryUp !== options.onHistoryUp ||
+      prev.onHistoryDown !== options.onHistoryDown ||
+      prev.onEscape !== options.onEscape ||
+      prev.inputFocused !== options.inputFocused ||
+      prev.isStreaming !== options.isStreaming;
+
+    if (changed) {
+      controller.updateOptions(options);
+      prevOptionsRef.current = options;
     }
-  }, [])
+  }, [controller, options]);
 
-  // Save history to sessionStorage when it changes
-  const saveHistory = useCallback(() => {
-    try {
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(historyRef.current))
-    } catch (e) {
-      console.warn('Failed to save terminal history:', e)
-    }
-  }, [])
-
-  // Add command to history
-  const addToHistory = useCallback((command: string) => {
-    if (!command.trim()) return
-
-    const history = historyRef.current
-    // Don't add duplicate of last command
-    if (history[history.length - 1] === command) return
-
-    history.push(command)
-
-    // Trim to max size
-    if (history.length > MAX_HISTORY) {
-      history.shift()
-    }
-
-    historyIndexRef.current = history.length
-    saveHistory()
-  }, [saveHistory])
-
-  // History navigation
-  const historyUp = useCallback(() => {
-    const history = historyRef.current
-    if (history.length === 0) return undefined
-
-    const newIndex = Math.max(0, historyIndexRef.current - 1)
-    historyIndexRef.current = newIndex
-
-    return onHistoryUp?.() ?? history[newIndex]
-  }, [onHistoryUp])
-
-  const historyDown = useCallback(() => {
-    const history = historyRef.current
-    if (history.length === 0) return undefined
-
-    const newIndex = Math.min(history.length, historyIndexRef.current + 1)
-    historyIndexRef.current = newIndex
-
-    // If at end, return empty (user typed new command)
-    if (newIndex >= history.length) {
-      return ''
-    }
-
-    return onHistoryDown?.() ?? history[newIndex]
-  }, [onHistoryDown])
-
-  // Register element and attach listeners
-  const register = useCallback((element: HTMLElement | null) => {
-    elementRef.current = element
-  }, [])
-
-  // Handle key events
+  // Dispose the controller on unmount
   useEffect(() => {
-    const element = elementRef.current
-    if (!element) return
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl+L: Clear screen
-      if (e.ctrlKey && e.key === 'l') {
-        e.preventDefault()
-        onClearScreen?.()
-        return
-      }
-
-      // Ctrl+C: Cancel streaming
-      if (e.ctrlKey && e.key === 'c') {
-        e.preventDefault()
-        if (isStreaming) {
-          onCancel?.()
-        }
-        return
-      }
-
-      // Escape: Close/clear
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        onEscape?.()
-        return
-      }
-
-      // ArrowUp/Down: History navigation (only when input focused)
-      if (inputFocused && !isStreaming) {
-        if (e.key === 'ArrowUp') {
-          e.preventDefault()
-          historyUp()
-          return
-        }
-
-        if (e.key === 'ArrowDown') {
-          e.preventDefault()
-          historyDown()
-          return
-        }
-      }
-    }
-
-    element.addEventListener('keydown', handleKeyDown)
     return () => {
-      element.removeEventListener('keydown', handleKeyDown)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inputFocused, isStreaming, onClearScreen, onCancel, onEscape, historyUp, historyDown, elementRef])
+      controller.dispose();
+    };
+  }, [controller]);
 
-  return {
-    register,
-    historyUp,
-    historyDown,
-    addToHistory,
-  }
+  // The controller is stateless (result is always the same actions),
+  // so useSyncExternalStore with a no-op subscribe is equivalent to
+  // returning state() directly — but useSyncExternalStore is required
+  // for the framework-agnostic controller pattern.
+  return useSyncExternalStore(
+    () => () => {}, // no-op subscribe — controller state is always the same
+    () => controller.state(),
+    () => controller.state(),
+  );
 }
