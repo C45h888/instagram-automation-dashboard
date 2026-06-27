@@ -26,9 +26,9 @@
  *   - UseOversightChatResult interface
  */
 
-import { supabase } from '../../../runtime/web/src/lib/substrates/supabase/client';
+import { supabase } from '../../../runtime/src-tauri/lib/substrates/supabase/client';
 import { LIVENESS_THRESHOLD_MS } from './agentHealth';
-import type { Json } from '../../../runtime/web/src/lib/substrates/supabase/database.types';
+import type { Json } from '../../../runtime/src-tauri/lib/substrates/supabase/database.types';
 import type {
   OversightSession,
   OversightMessage,
@@ -37,8 +37,8 @@ import type {
   AgentDonePayload,
   AgentErrorPayload,
   BackendSSEError,
-} from '../../../runtime/web/src/lib/contracts/agent/oversight.contract';
-import { isAgentToken, isAgentDone, isAgentError, getSSEErrorMessage } from '../../../runtime/web/src/lib/contracts/agent/oversight.contract';
+} from '../../../runtime/src-tauri/lib/contracts/agent/oversight.contract';
+import { isAgentToken, isAgentDone, isAgentError, getSSEErrorMessage } from '../../../runtime/src-tauri/lib/contracts/agent/oversight.contract';
 import type { UseOversightChatResult } from '../../hooks/useOversightChat';
 import type { ControllerSlot } from './controller';
 import { DisposeScope, createControllerSlot } from './controller';

@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
-import { supabase } from '../../runtime/web/src/lib/substrates/supabase/client';
-import { INSTAGRAM_OAUTH_SCOPES } from '../../runtime/web/src/lib/contracts/instagram/oauth-scopes.contract';
+import { supabase } from '../../runtime/src-tauri/lib/substrates/supabase/client';
+import { INSTAGRAM_OAUTH_SCOPES } from '../../runtime/src-tauri/lib/contracts/instagram/oauth-scopes.contract';
 import {  Instagram,      // Instagram logo
   Lock,           // Security/privacy indicator
   ChevronRight,   // Accordion arrow

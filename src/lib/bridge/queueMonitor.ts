@@ -21,7 +21,7 @@
  */
 
 import { AgentService } from '../../services/agentService';
-import type { QueueStatusSummary, QueueDLQItem, QueueOverview } from '../../../runtime/web/src/lib/contracts/agent/agent-tables.contract';
+import type { QueueStatusSummary, QueueDLQItem, QueueOverview } from '../../../runtime/src-tauri/lib/contracts/agent/agent-tables.contract';
 import type { UseQueueMonitorResult } from '../../hooks/useQueueMonitor';
 import type { ControllerSlot } from './controller';
 import { DisposeScope, createControllerSlot } from './controller';

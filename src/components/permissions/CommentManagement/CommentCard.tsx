@@ -9,7 +9,7 @@ import { Heart, MessageCircle, Bot, Clock, AlertCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { SentimentBadge } from './SentimentBadge';
 import { ReplyInterface } from './ReplyInterface';
-import type { CommentData } from '../../../../runtime/web/src/lib/contracts/identity/permissions.contract';
+import type { CommentData } from '../../../../runtime/src-tauri/lib/contracts/identity/permissions.contract';
 
 interface CommentCardProps {
   comment: CommentData;

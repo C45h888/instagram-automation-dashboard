@@ -7,7 +7,7 @@
 import React from 'react';
 import { Heart, MessageCircle, ExternalLink, Star, Shield, StickyNote, Share2, Clock, X } from 'lucide-react';
 import { SentimentBadge } from '../CommentManagement'; // EVIDENCE: Reuse existing component
-import type { VisitorPost } from '../../../../runtime/web/src/lib/contracts/content/ugc.contract';
+import type { VisitorPost } from '../../../../runtime/src-tauri/lib/contracts/content/ugc.contract';
 import { motion } from 'framer-motion';
 
 interface VisitorPostCardProps {

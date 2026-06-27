@@ -1,11 +1,11 @@
 // =====================================
 // SIMPLIFIED IMPORTS - Single clean entry point
 // =====================================
-import { supabase } from '../../runtime/web/src/lib/substrates/supabase/client';
-import type * as Types from '../../runtime/web/src/lib/substrates/supabase/database.types';
-import { logAuditEvent } from '../../runtime/web/src/lib/substrates/supabase/audit';
-import type { ServiceResponse, ServiceListResponse, DeleteResponse, PaginationOptions } from '../../runtime/web/src/lib/substrates/supabase/query';
-import { isValidUUID } from '../../runtime/web/src/lib/substrates/supabase/query';
+import { supabase } from '../../runtime/src-tauri/lib/substrates/supabase/client';
+import type * as Types from '../../runtime/src-tauri/lib/substrates/supabase/database.types';
+import { logAuditEvent } from '../../runtime/src-tauri/lib/substrates/supabase/audit';
+import type { ServiceResponse, ServiceListResponse, DeleteResponse, PaginationOptions } from '../../runtime/src-tauri/lib/substrates/supabase/query';
+import { isValidUUID } from '../../runtime/src-tauri/lib/substrates/supabase/query';
 
 // =====================================
 // SERVICE RESPONSE TYPES — re-exported from substrates/supabase/query for

@@ -2,7 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import { CheckCircle, AlertCircle, MessageSquare, Camera, Calendar, TrendingUp, Clock } from 'lucide-react';
 import AnimatedCard from '../ui/AnimatedCard';
-import type { ActivityItem } from '../../../runtime/web/src/lib/contracts/observability/dashboard.contract';
+import type { ActivityItem } from '../../../runtime/src-tauri/lib/contracts/observability/dashboard.contract';
 
 interface AnimatedActivityFeedProps {
   activities: ActivityItem[];

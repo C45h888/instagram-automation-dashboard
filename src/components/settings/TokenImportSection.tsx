@@ -3,8 +3,8 @@ import { ChevronDown, ChevronRight, Facebook, Key, ExternalLink, RefreshCw } fro
 import { useAuthStore } from '../../stores/authStore';
 import { useInstagramAccount } from '../../hooks/useInstagramAccount';
 import { useToast } from '../../hooks/useToast';
-import { supabase } from '../../../runtime/web/src/lib/substrates/supabase/client';
-import { INSTAGRAM_OAUTH_SCOPES } from '../../../runtime/web/src/lib/contracts/instagram/oauth-scopes.contract';
+import { supabase } from '../../../runtime/src-tauri/lib/substrates/supabase/client';
+import { INSTAGRAM_OAUTH_SCOPES } from '../../../runtime/src-tauri/lib/contracts/instagram/oauth-scopes.contract';
 
 const TokenImportSection = forwardRef<HTMLDivElement>((_, ref) => {
   const [showManual, setShowManual] = useState(false);

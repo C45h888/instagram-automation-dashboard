@@ -6,7 +6,7 @@
  */
 
 import { useMemo, memo } from 'react'
-import type { QueueStatusSummary, QueueDLQItem } from '../../../runtime/web/src/lib/contracts/agent/agent-tables.contract'
+import type { QueueStatusSummary, QueueDLQItem } from '../../../runtime/src-tauri/lib/contracts/agent/agent-tables.contract'
 
 interface QueueMonitorPanelProps {
   summary: QueueStatusSummary

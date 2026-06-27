@@ -13,8 +13,8 @@ import type {
   ScheduledPost,
   ScheduledPostFilterState,
   ScheduledPostStatus,
-} from '../../runtime/web/src/lib/contracts/agent/agent-tables.contract'
-import { DEFAULT_SCHEDULED_POST_FILTERS } from '../../runtime/web/src/lib/contracts/agent/agent-tables.contract'
+} from '../../runtime/src-tauri/lib/contracts/agent/agent-tables.contract'
+import { DEFAULT_SCHEDULED_POST_FILTERS } from '../../runtime/src-tauri/lib/contracts/agent/agent-tables.contract'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants

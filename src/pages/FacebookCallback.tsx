@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../../runtime/web/src/lib/substrates/supabase/client';
+import { supabase } from '../../runtime/src-tauri/lib/substrates/supabase/client';
 import { useAuthStore } from '../stores/authStore';
 import { PagePickerModal, type PageOption } from '../components/auth/PagePickerModal';
 

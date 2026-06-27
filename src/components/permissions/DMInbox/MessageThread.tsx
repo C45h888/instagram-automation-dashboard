@@ -7,7 +7,7 @@
 import React, { useRef, useEffect } from 'react';
 import { Bot, Check, CheckCheck, Clock } from 'lucide-react';
 import { motion } from 'framer-motion';
-import type { Database } from '../../../../runtime/web/src/lib/substrates/supabase/database.types';
+import type { Database } from '../../../../runtime/src-tauri/lib/substrates/supabase/database.types';
 
 type DMMessage = Database['public']['Tables']['instagram_dm_messages']['Row'];
 

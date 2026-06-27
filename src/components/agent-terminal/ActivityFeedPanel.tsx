@@ -6,7 +6,7 @@
  */
 
 import { useMemo, memo } from 'react'
-import type { AuditLogEntry } from '../../../runtime/web/src/lib/contracts/agent/agent-tables.contract'
+import type { AuditLogEntry } from '../../../runtime/src-tauri/lib/contracts/agent/agent-tables.contract'
 
 interface ActivityFeedPanelProps {
   events: AuditLogEntry[]

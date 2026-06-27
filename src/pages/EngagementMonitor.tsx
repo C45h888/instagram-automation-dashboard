@@ -13,7 +13,7 @@ import { useInstagramInsights } from '../hooks/useInstagramInsights';
 import { useInstagramAccount } from '../hooks/useInstagramAccount';
 import { useAuthStore } from '../stores/authStore';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
-import type { CommentData, ConversationData } from '../../runtime/web/src/lib/contracts/identity/permissions.contract';
+import type { CommentData, ConversationData } from '../../runtime/src-tauri/lib/contracts/identity/permissions.contract';
 
 // Type definitions - Using real API types from permissions.ts
 // CommentData and ConversationData imported from types/permissions

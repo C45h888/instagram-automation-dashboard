@@ -15,7 +15,7 @@
  * typed data rather than raw Json.
  */
 
-import { supabase } from '../../runtime/web/src/lib/substrates/supabase/client';
+import { supabase } from '../../runtime/src-tauri/lib/substrates/supabase/client';
 import type {
   AgentHeartbeat,
   AgentWritableTableName,
@@ -27,8 +27,8 @@ import type {
   ScheduledPost,
   ScheduledPostStatus,
   SystemAlert,
-} from '../../runtime/web/src/lib/contracts/agent/agent-tables.contract'
-import type { QueueOverview, QueueDLQItem, QueueRetryResult, AuditLogEntry } from '../../runtime/web/src/lib/contracts/agent/agent-tables.contract'
+} from '../../runtime/src-tauri/lib/contracts/agent/agent-tables.contract'
+import type { QueueOverview, QueueDLQItem, QueueRetryResult, AuditLogEntry } from '../../runtime/src-tauri/lib/contracts/agent/agent-tables.contract'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Response wrappers (same shape as DatabaseService)
@@ -131,14 +131,14 @@ export class AgentService {
   }
 
   /** Fetch computed agent liveness status via backend (single source of truth for LIVENESS_THRESHOLD_MS). */
-  static async getAgentStatus(): Promise<ServiceResponse<{ status: import('../../runtime/web/src/lib/contracts/agent/agent-tables.contract').AgentHeartbeatStatus; last_beat_at: string | null; agent_id: string | null }>> {
+  static async getAgentStatus(): Promise<ServiceResponse<{ status: import('../../runtime/src-tauri/lib/contracts/agent/agent-tables.contract').AgentHeartbeatStatus; last_beat_at: string | null; agent_id: string | null }>> {
     try {
       const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in'
       const { data: { session } } = await supabase.auth.getSession()
       const headers: Record<string, string> = session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}
 
       const res = await fetch(`${apiBaseUrl}/api/instagram/agent/status`, { headers })
-      const json = await res.json() as ServiceResponse<{ status: import('../../runtime/web/src/lib/contracts/agent/agent-tables.contract').AgentHeartbeatStatus; last_beat_at: string | null; agent_id: string | null }>
+      const json = await res.json() as ServiceResponse<{ status: import('../../runtime/src-tauri/lib/contracts/agent/agent-tables.contract').AgentHeartbeatStatus; last_beat_at: string | null; agent_id: string | null }>
       return json
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)

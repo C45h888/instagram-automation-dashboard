@@ -18,8 +18,8 @@
  */
 
 import { AgentService } from '../../services/agentService';
-import { supabase } from '../../../runtime/web/src/lib/substrates/supabase/client';
-import type { AuditLogEntry } from '../../../runtime/web/src/lib/contracts/agent/agent-tables.contract';
+import { supabase } from '../../../runtime/src-tauri/lib/substrates/supabase/client';
+import type { AuditLogEntry } from '../../../runtime/src-tauri/lib/contracts/agent/agent-tables.contract';
 import type { UseActivityFeedResult } from '../../hooks/useActivityFeed';
 import type { ControllerSlot } from './controller';
 import { DisposeScope, createControllerSlot } from './controller';

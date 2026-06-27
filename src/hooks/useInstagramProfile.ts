@@ -12,7 +12,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useInstagramAccount } from './useInstagramAccount';
-import type { InstagramProfileData } from '../../runtime/web/src/lib/contracts/identity/permissions.contract';
+import type { InstagramProfileData } from '../../runtime/src-tauri/lib/contracts/identity/permissions.contract';
 
 interface UseInstagramProfileResult {
   profile: InstagramProfileData | null;

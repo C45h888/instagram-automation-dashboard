@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../stores/authStore';
-import type { DashboardData } from '../../runtime/web/src/lib/contracts/observability/dashboard.contract';
+import type { DashboardData } from '../../runtime/src-tauri/lib/contracts/observability/dashboard.contract';
 
 /**
  * Hook to fetch dashboard statistics

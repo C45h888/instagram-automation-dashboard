@@ -13,7 +13,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useInstagramAccount } from './useInstagramAccount';
-import { supabase } from '../../runtime/web/src/lib/substrates/supabase/client';
+import { supabase } from '../../runtime/src-tauri/lib/substrates/supabase/client';
 
 async function getAgentAuthHeaders(): Promise<Record<string, string>> {
   const { data: { session } } = await supabase.auth.getSession();
@@ -22,8 +22,8 @@ async function getAgentAuthHeaders(): Promise<Record<string, string>> {
     ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {}),
   };
 }
-import type { ConversationData } from '../../runtime/web/src/lib/contracts/identity/permissions.contract';
-import type { Database } from '../../runtime/web/src/lib/substrates/supabase/database.types';
+import type { ConversationData } from '../../runtime/src-tauri/lib/contracts/identity/permissions.contract';
+import type { Database } from '../../runtime/src-tauri/lib/substrates/supabase/database.types';
 
 type DMMessage = Database['public']['Tables']['instagram_dm_messages']['Row'];
 

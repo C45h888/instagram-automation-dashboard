@@ -7,7 +7,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import type { OversightSession } from '../../../runtime/web/src/lib/contracts/agent/oversight.contract'
+import type { OversightSession } from '../../../runtime/src-tauri/lib/contracts/agent/oversight.contract'
 
 interface SessionDropdownProps {
   sessions:      OversightSession[]

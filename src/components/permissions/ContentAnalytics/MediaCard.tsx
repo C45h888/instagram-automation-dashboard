@@ -7,7 +7,7 @@
 import React, { useState } from 'react';
 import { Heart, MessageCircle, Share2, Eye, TrendingUp, Image as ImageIcon, Video, Grid } from 'lucide-react';
 import { motion } from 'framer-motion';
-import type { MediaData } from '../../../../runtime/web/src/lib/contracts/identity/permissions.contract';
+import type { MediaData } from '../../../../runtime/src-tauri/lib/contracts/identity/permissions.contract';
 
 interface MediaCardProps {
   media: MediaData;

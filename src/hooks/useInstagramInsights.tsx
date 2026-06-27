@@ -19,7 +19,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useInstagramAccount } from './useInstagramAccount';
 import { Users, User, MousePointer } from 'lucide-react';
-import { supabase } from '../../runtime/web/src/lib/substrates/supabase/client';
+import { supabase } from '../../runtime/src-tauri/lib/substrates/supabase/client';
 import type {
   InsightsData,
   InsightsDailyData,
@@ -30,7 +30,7 @@ import type {
   RetryConfig,
   TrendsData,
   TrendData
-} from '../../runtime/web/src/lib/contracts/observability/insights.contract';
+} from '../../runtime/src-tauri/lib/contracts/observability/insights.contract';
 
 // =====================================
 // CONSTANTS

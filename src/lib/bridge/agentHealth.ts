@@ -27,8 +27,8 @@
  */
 
 import { AgentService } from '../../services/agentService';
-import { supabase } from '../../../runtime/web/src/lib/substrates/supabase/client';
-import type { AgentHeartbeat, AgentHeartbeatStatus, SystemAlert } from '../../../runtime/web/src/lib/contracts/agent/agent-tables.contract';
+import { supabase } from '../../../runtime/src-tauri/lib/substrates/supabase/client';
+import type { AgentHeartbeat, AgentHeartbeatStatus, SystemAlert } from '../../../runtime/src-tauri/lib/contracts/agent/agent-tables.contract';
 import type { UseAgentHealthResult } from '../../hooks/useAgentHealth';
 import type { ControllerSlot } from './controller';
 import { DisposeScope, createControllerSlot } from './controller';

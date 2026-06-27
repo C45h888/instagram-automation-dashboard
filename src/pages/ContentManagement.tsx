@@ -8,7 +8,7 @@ import { CreatePostModal } from '../components/permissions/ContentManagement/Cre
 import { SkeletonMediaGrid } from '../components/ui/SkeletonMediaGrid';
 import { useToast } from '../hooks/useToast';
 import LoadingButton from '../components/ui/LoadingButton';
-import type { MediaGridResponse, InstagramMedia } from '../../runtime/web/src/lib/contracts/instagram/media.contract';
+import type { MediaGridResponse, InstagramMedia } from '../../runtime/src-tauri/lib/contracts/instagram/media.contract';
 
 // Mock Facebook Posts Data
 interface FacebookPost {

@@ -14,15 +14,15 @@ import {
   useInfiniteQuery,
   useQueryClient,
 } from '@tanstack/react-query'
-import { supabase } from '../../runtime/web/src/lib/substrates/supabase/client';
+import { supabase } from '../../runtime/src-tauri/lib/substrates/supabase/client';
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import type {
   AutomationWorkflow,
   WorkflowExecution,
   WorkflowExecutionSummary,
   WorkflowFilterState,
-} from '../../runtime/web/src/lib/contracts/agent/workflows.contract'
-import { DEFAULT_WORKFLOW_FILTERS } from '../../runtime/web/src/lib/contracts/agent/workflows.contract'
+} from '../../runtime/src-tauri/lib/contracts/agent/workflows.contract'
+import { DEFAULT_WORKFLOW_FILTERS } from '../../runtime/src-tauri/lib/contracts/agent/workflows.contract'
 import { useState } from 'react'
 
 // ─────────────────────────────────────────────────────────────────────────────

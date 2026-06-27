@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { TrendingUp, TrendingDown, Minus, Users, Heart, Image, DollarSign } from 'lucide-react';
 import CountUpAnimation from '../ui/CountUpAnimation';
 import AnimatedCard from '../ui/AnimatedCard';
-import type { MetricData } from '../../../runtime/web/src/lib/contracts/observability/dashboard.contract';
+import type { MetricData } from '../../../runtime/src-tauri/lib/contracts/observability/dashboard.contract';
 
 interface AnimatedMetricCardProps extends MetricData {
   index: number;

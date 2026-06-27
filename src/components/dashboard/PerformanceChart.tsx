@@ -1,6 +1,6 @@
 import React from 'react';
 import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
-import type { ChartDataPoint } from '../../../runtime/web/src/lib/contracts/observability/dashboard.contract';
+import type { ChartDataPoint } from '../../../runtime/src-tauri/lib/contracts/observability/dashboard.contract';
 
 interface PerformanceChartProps {
   data: ChartDataPoint[];

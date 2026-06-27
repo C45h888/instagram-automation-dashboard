@@ -12,7 +12,7 @@ import { CommentFilters,  } from './CommentFilters';
 import { PermissionBadge } from '../shared/PermissionBadge';
 import { FeatureHighlight } from '../shared/FeatureHighlight';
 import { Smile, Bot, Zap, Shield } from 'lucide-react';
-import type { CommentData } from '../../../../runtime/web/src/lib/contracts/identity/permissions.contract';
+import type { CommentData } from '../../../../runtime/src-tauri/lib/contracts/identity/permissions.contract';
 
 interface CommentInboxProps {
   comments: CommentData[];

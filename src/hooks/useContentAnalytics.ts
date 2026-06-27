@@ -21,7 +21,7 @@ import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { createContentAnalyticsController } from '../lib/bridge/contentAnalytics';
 import { useAuthStore } from '../stores/authStore';
 import { useInstagramAccount } from './useInstagramAccount';
-import type { MediaData } from '../../runtime/web/src/lib/contracts/identity/permissions.contract';
+import type { MediaData } from '../../runtime/src-tauri/lib/contracts/identity/permissions.contract';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Interfaces — unchanged from the legacy hook

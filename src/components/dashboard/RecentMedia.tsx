@@ -1,6 +1,6 @@
 import React from 'react';
 import { Heart, MessageCircle, Play, Eye } from 'lucide-react';
-import type { MediaItem } from '../../../runtime/web/src/lib/contracts/observability/dashboard.contract';
+import type { MediaItem } from '../../../runtime/src-tauri/lib/contracts/observability/dashboard.contract';
 
 interface RecentMediaProps {
   media: MediaItem[];

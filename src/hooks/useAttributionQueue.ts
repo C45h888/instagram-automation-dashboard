@@ -15,8 +15,8 @@ import type {
   AttributionModel,
   AttributionFilterState,
   AttributionModelWeights,
-} from '../../runtime/web/src/lib/contracts/agent/agent-tables.contract'
-import { DEFAULT_ATTRIBUTION_FILTERS } from '../../runtime/web/src/lib/contracts/agent/agent-tables.contract'
+} from '../../runtime/src-tauri/lib/contracts/agent/agent-tables.contract'
+import { DEFAULT_ATTRIBUTION_FILTERS } from '../../runtime/src-tauri/lib/contracts/agent/agent-tables.contract'
 import { useAuthStore } from '../stores/authStore'
 
 /**

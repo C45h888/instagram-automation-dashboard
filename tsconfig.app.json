@@ -27,5 +27,5 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["src", "runtime/web/src/lib"]
+  "include": ["src", "runtime/src-tauri/lib", "runtime/src-tauri/ipc"]
 }

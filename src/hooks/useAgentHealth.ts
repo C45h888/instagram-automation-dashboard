@@ -20,7 +20,7 @@
 
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { createAgentHealthController } from '../lib/bridge/agentHealth';
-import type { AgentHeartbeat, AgentHeartbeatStatus, SystemAlert } from '../../runtime/web/src/lib/contracts/agent/agent-tables.contract';
+import type { AgentHeartbeat, AgentHeartbeatStatus, SystemAlert } from '../../runtime/src-tauri/lib/contracts/agent/agent-tables.contract';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Result interface — unchanged from the legacy hook

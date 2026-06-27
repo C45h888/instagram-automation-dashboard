@@ -13,7 +13,7 @@ import type {
   RevenueReportMetrics,
   ReportInsights,
   HistoricalComparison,
-} from '../../../runtime/web/src/lib/contracts/agent/agent-tables.contract'
+} from '../../../runtime/src-tauri/lib/contracts/agent/agent-tables.contract'
 
 interface MetricsOverviewPanelProps {
   businessAccountId: string | null

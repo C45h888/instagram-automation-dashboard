@@ -20,7 +20,7 @@ import { createOversightChatController } from '../lib/bridge/oversightChat';
 import type {
   OversightSession,
   OversightMessage,
-} from '../../runtime/web/src/lib/contracts/agent/oversight.contract';
+} from '../../runtime/src-tauri/lib/contracts/agent/oversight.contract';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Result interface — unchanged from the legacy hook
