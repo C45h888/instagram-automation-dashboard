@@ -6,10 +6,8 @@
  * Follows terminal monospace aesthetic with compact dense layout.
  */
 
-import { useMemo } from 'react'
 import { useAnalyticsReports } from '@/hooks/useAnalyticsReports'
 import type {
-  AnalyticsReport,
   InstagramReportMetrics,
   MediaReportMetrics,
   RevenueReportMetrics,

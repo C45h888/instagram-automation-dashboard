@@ -51,10 +51,31 @@ export interface CommentData extends Omit<InstagramComment, 'id' | 'created_at' 
   requires_response: boolean;
 }
 
+/**
+ * MediaData — Instagram media with computed analytics fields.
+ *
+ * NOTE: `engagement_rate`, `best_time_posted`, and `performance_tier` are
+ * COMPUTED values derived by the frontend analytics layer — they do NOT exist
+ * as columns in the `instagram_media` DB table. They are added here for
+ * convenience when the API returns enriched media data.
+ *
+ * DB columns (instagram_media table):
+ *   id, business_account_id, instagram_media_id, caption, media_type, media_url,
+ *   thumbnail_url, permalink, hashtags, mentions, like_count, comments_count,
+ *   reach, impressions, saves, shares_count, scheduled_for, published_at,
+ *   status, created_at, updated_at, last_updated_at
+ *
+ * Computed fields added here:
+ *   engagement_rate, best_time_posted, performance_tier
+ */
 export interface MediaData extends Omit<InstagramMedia, 'id' | 'created_at' | 'updated_at'> {
+  /** Internal UUID primary key (same as InstagramMedia.id) */
   id: string;
+  /** Computed: (like_count + comments_count) / reach * 100 — NOT a DB column */
   engagement_rate: number;
+  /** Computed: whether this is an optimal posting time — NOT a DB column */
   best_time_posted?: boolean;
+  /** Computed: tier classification based on engagement — NOT a DB column */
   performance_tier: 'low' | 'average' | 'high' | 'viral';
 }
 

@@ -1,9 +1,9 @@
 // src/pages/Engagement.tsx - Full Featured Engagement Hub (Refactored with Real API)
 import React, { useState, useMemo } from 'react';
 import {
-  MessageCircle, Heart, TrendingUp, AlertCircle,
+  MessageCircle, TrendingUp, AlertCircle,
   Clock, Search, RefreshCw, ChevronRight,
-  ThumbsUp, Zap, Shield, Bot, Reply
+  ThumbsUp, Zap, Bot, Reply
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToastContext } from '../contexts/ToastContext';
@@ -128,7 +128,7 @@ const Engagement: React.FC = () => {
   // ============================================
   const { addToast } = useToastContext();
   const { user } = useAuthStore();
-  const { businessAccountId, instagramBusinessId } = useInstagramAccount();
+  const { businessAccountId } = useInstagramAccount();
 
   // Real API hooks
   const {
@@ -142,11 +142,9 @@ const Engagement: React.FC = () => {
   const {
     conversations: apiConversations,
     selectedConversation,
-    messages: conversationMessages,
     isLoading: dmsLoading,
     error: dmsError,
     selectConversation,
-    sendMessage,
     refetch: refetchConversations
   } = useDMInbox();
 
@@ -281,8 +279,10 @@ const Engagement: React.FC = () => {
       }
 
       // Fallback to priority_level as last resort
-      const priorityWeight = conv.priority_level === 'high' ? 0 :
-                             conv.priority_level === 'medium' ? 50 : 100;
+      // priority_level exists on ConversationData at runtime; field is
+      // present in DB but not yet in the generated type.
+      const priorityWeight = (conv as any).priority_level === 'high' ? 0 :
+                             (conv as any).priority_level === 'medium' ? 50 : 100;
       return sum + priorityWeight;
     }, 0);
 
@@ -299,10 +299,8 @@ const Engagement: React.FC = () => {
     const sentimentScore = calculateCombinedSentiment(apiComments, apiConversations);
 
     // Extract time_range from insights for dynamic tooltips
-    const timeRange = insightsData?.time_range || '7d';
-    const timeRangeLabel = timeRange === '7d' ? 'last 7 days' :
-                           timeRange === '30d' ? 'last 30 days' :
-                           `last ${timeRange}`;
+    // (kept available for downstream consumers needing the value;
+    // see L5 ticket for InsightsData.time_range type extension)
 
     const engagementMetrics: EngagementMetric[] = [
       {
@@ -811,7 +809,7 @@ const Engagement: React.FC = () => {
                                 on <span className="text-gray-400">{comment.post_title}</span>
                               </span>
                             )}
-                            {comment.like_count !== undefined && comment.like_count > 0 && (
+                            {comment.like_count != null && comment.like_count > 0 && (
                               <span className="flex items-center gap-1 text-gray-400">
                                 <ThumbsUp className="w-3 h-3" />
                                 {comment.like_count}

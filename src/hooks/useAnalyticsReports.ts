@@ -1,18 +1,27 @@
 /**
- * useAnalyticsReports.ts
+ * useAnalyticsReports.ts — Phase 2 refactored.
  *
- * Fetches agent-generated analytics reports (daily + weekly).
- * Reports are agent-written via UPSERT so staleTime is 10 minutes.
- * Derives latestDaily and latestWeekly from the fetched list.
+ * Public API is byte-identical to the legacy hook:
+ *   - `UseAnalyticsReportsResult` interface
+ *   - `useAnalyticsReports(businessAccountId: string | null, limit?: number)`
+ *
+ * The implementation now delegates to
+ * `createAnalyticsReportsController` from `src/lib/bridge/analyticsReports.ts`.
+ * The controller owns the polling loop, fetch-with-retry, and derived-value
+ * computation. The hook exposes that controller state to React via
+ * `useSyncExternalStore`.
+ *
+ * The legacy hook's contract (10-min polling, 20-min gcTime, 3 retries,
+ * derived latestDaily/latestWeekly, reportType filter) is preserved inside
+ * the controller. Consumers see no change.
  */
 
-import { useState, useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { AgentService } from '../services/agentService'
-import type { AnalyticsReport, ReportType } from '@/types'
+import { useEffect, useMemo, useSyncExternalStore } from 'react';
+import { createAnalyticsReportsController } from '../lib/bridge/analyticsReports';
+import type { AnalyticsReport, ReportType } from '../types';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Result interface
+// Result interface — unchanged from the legacy hook
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface UseAnalyticsReportsResult {
@@ -27,61 +36,35 @@ export interface UseAnalyticsReportsResult {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Hook
+// Hook — body delegates to the controller
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function useAnalyticsReports(
   businessAccountId: string | null,
-  limit = 30
+  limit = 30,
 ): UseAnalyticsReportsResult {
-  const [reportType, setReportType] = useState<ReportType | 'all'>('all')
+  // Memoize the controller per businessAccountId. Re-creating the
+  // controller when businessAccountId changes ensures polling targets
+  // the new account.
+  const controller = useMemo(
+    () => createAnalyticsReportsController(businessAccountId, limit),
+    [businessAccountId, limit],
+  );
 
-  // ── Query ──────────────────────────────────────────────────────────────────
-  const reportsQuery = useQuery({
-    queryKey: ['analytics-reports', businessAccountId, reportType],
-    queryFn: async () => {
-      if (!businessAccountId) return []
+  // Dispose the controller on unmount or when businessAccountId changes
+  // (which produces a new controller via useMemo above).
+  useEffect(() => {
+    return () => {
+      controller.dispose();
+    };
+  }, [controller]);
 
-      const result = await AgentService.getAnalyticsReports(
-        businessAccountId,
-        reportType === 'all' ? undefined : reportType,
-        limit
-      )
-      if (!result.success) throw new Error(result.error ?? 'Failed to fetch analytics reports')
-      return result.data as AnalyticsReport[]
-    },
-    enabled:              !!businessAccountId,
-    staleTime:            10 * 60 * 1000,
-    refetchInterval:      10 * 60 * 1000,
-    gcTime:               20 * 60 * 1000,
-    retry:                3,
-    retryDelay:           (i) => Math.min(1000 * 2 ** i, 30_000),
-    refetchOnWindowFocus: false,
-  })
-
-  const reports = reportsQuery.data ?? []
-
-  // ── Derived: most recent daily / weekly ───────────────────────────────────
-  const { latestDaily, latestWeekly } = useMemo(() => {
-    // Reports are already ordered by report_date DESC from AgentService
-    const daily   = reports.find((r) => r.report_type === 'daily')   ?? null
-    const weekly  = reports.find((r) => r.report_type === 'weekly')  ?? null
-    return { latestDaily: daily, latestWeekly: weekly }
-  }, [reports])
-
-  // ── Error ──────────────────────────────────────────────────────────────────
-  const error = reportsQuery.error
-    ? (reportsQuery.error instanceof Error ? reportsQuery.error.message : String(reportsQuery.error))
-    : null
-
-  return {
-    reports,
-    latestDaily,
-    latestWeekly,
-    isLoading:  reportsQuery.isLoading,
-    error,
-    reportType,
-    setReportType,
-    refetch: () => reportsQuery.refetch(),
-  }
+  // Subscribe to controller state via React's external-store hook.
+  // This gives us the same render-on-change semantics as the legacy
+  // hook's useQuery + useState chain.
+  return useSyncExternalStore(
+    controller.subscribe,
+    controller.state,
+    controller.state,
+  );
 }

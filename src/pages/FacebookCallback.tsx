@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../stores/authStore';
-import { PagePickerModal, PageOption } from '../components/auth/PagePickerModal';
+import { PagePickerModal, type PageOption } from '../components/auth/PagePickerModal';
 
 /**
  * PHASE 3.7: Native Supabase OAuth Callback Handler

@@ -13,7 +13,7 @@ import {  Instagram,      // Instagram logo
 // import { useFacebookSDK, facebookLogin } from '../hooks/useFacebookSDK';
 
 const Login: React.FC = () => {
-  const { login, setBusinessAccount } = useAuthStore();
+  const { login } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as any)?.from?.pathname || '/';
@@ -314,89 +314,6 @@ const Login: React.FC = () => {
    * 2. Receiving discovered businessAccountId
    * 3. Storing business account info in authStore
    */
-  const completeHandshake = async (
-    providerToken: string,
-    userId: string  // Must be UUID from Supabase Auth
-  ): Promise<{ success: boolean; error?: string; businessAccountId?: string }> => {
-    console.log('🤝 Starting handshake...');
-    console.log('   Provider token:', providerToken ? 'Present' : 'Missing');
-    console.log('   User ID (UUID):', userId);
-
-    try {
-      const backendUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
-
-      // ──────────────────────────────────────────────────────────────
-      // STEP 1: Call the FIXED /exchange-token endpoint
-      // Note: We do NOT send businessAccountId - backend will discover it
-      // ──────────────────────────────────────────────────────────────
-      const response = await fetch(`${backendUrl}/api/instagram/exchange-token`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          userAccessToken: providerToken,
-          userId: userId  // UUID from Supabase Auth
-          // Note: businessAccountId is intentionally NOT sent
-        })
-      });
-
-      // ──────────────────────────────────────────────────────────────
-      // STEP 2: Parse response (handle empty response gracefully)
-      // ──────────────────────────────────────────────────────────────
-      const text = await response.text();
-
-      if (!text) {
-        console.error('❌ Empty response from token exchange');
-        throw new Error('Server returned empty response');
-      }
-
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch (parseError) {
-        console.error('❌ Failed to parse response:', text.substring(0, 200));
-        throw new Error('Invalid JSON response from server');
-      }
-
-      if (!response.ok || !data.success) {
-        console.error('❌ Token exchange failed:', data.error || data.message);
-        throw new Error(data.error || 'Token exchange failed');
-      }
-
-      console.log('✅ Token exchange successful');
-      console.log('   Business Account ID:', data.data.businessAccountId);
-      console.log('   Instagram Business ID:', data.data.instagramBusinessId);
-
-      // ──────────────────────────────────────────────────────────────
-      // STEP 3: Update authStore with the new business account info
-      // ──────────────────────────────────────────────────────────────
-      setBusinessAccount({
-        businessAccountId: data.data.businessAccountId,
-        instagramBusinessId: data.data.instagramBusinessId,
-        pageId: data.data.pageId,
-        pageName: data.data.pageName
-      });
-
-      console.log('✅ Auth store updated with business account info');
-
-      // ──────────────────────────────────────────────────────────────
-      // STEP 4: Return success - caller should redirect to dashboard
-      // ──────────────────────────────────────────────────────────────
-      return {
-        success: true,
-        businessAccountId: data.data.businessAccountId
-      };
-
-    } catch (error: any) {
-      console.error('❌ Handshake failed:', error);
-      return {
-        success: false,
-        error: error.message || 'Handshake failed'
-      };
-    }
-  };
-
   const handleInstagramLogin = async (): Promise<void> => {
     // ============================================
     // STEP 1: CONSENT VALIDATION (CRITICAL)

@@ -7,7 +7,7 @@ import MoreDropdown from './MoreDropdown';
 import NotificationDropdown from './NotificationDropdown';
 import {
   Home, Calendar, MessageCircle, BarChart3, Settings,
-  Users, Bot, Target, Search, Menu, X, LogOut,
+  Users, Target, Search, Menu, X, LogOut,
   ChevronDown, Plus, Star, Terminal
 } from 'lucide-react';
 

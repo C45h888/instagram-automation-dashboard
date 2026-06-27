@@ -1,4 +1,4 @@
-import React, { useState, useEffect, forwardRef } from 'react';
+import { useState, useEffect, forwardRef } from 'react';
 import { ChevronDown, ChevronRight, Facebook, Key, ExternalLink, RefreshCw } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { useInstagramAccount } from '../../hooks/useInstagramAccount';

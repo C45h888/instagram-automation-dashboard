@@ -1,4 +1,4 @@
-import React, { forwardRef, useState } from 'react';
+import { forwardRef, useState } from 'react';
 import { AlertTriangle, LogOut, Unlink } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { useToast } from '../../hooks/useToast';

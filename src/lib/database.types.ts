@@ -1091,6 +1091,7 @@ export type Database = {
           response_sent_at?: string | null
           response_text?: string | null
           send_status?: string
+          sender_instagram_id?: string | null
           sender_username?: string | null
           sent_at: string
           sent_by_user_id?: string | null
@@ -2034,7 +2035,7 @@ export type Database = {
           consented_at: string
           created_at: string
           id: string | null
-          ip_address: unknown
+          ip_address: string | null
           privacy_policy_version: string | null
           revocation_reason: string | null
           revoked: boolean
@@ -2054,7 +2055,7 @@ export type Database = {
           consented_at?: string
           created_at?: string
           id?: string | null
-          ip_address?: unknown
+          ip_address?: string | null
           privacy_policy_version?: string | null
           revocation_reason?: string | null
           revoked?: boolean
@@ -2074,7 +2075,7 @@ export type Database = {
           consented_at?: string
           created_at?: string
           id?: string | null
-          ip_address?: unknown
+          ip_address?: string | null
           privacy_policy_version?: string | null
           revocation_reason?: string | null
           revoked?: boolean

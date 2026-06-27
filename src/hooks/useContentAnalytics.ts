@@ -1,16 +1,33 @@
-// =====================================
-// USE CONTENT ANALYTICS HOOK - PRODUCTION
-// Fetches REAL Instagram media/content data from Meta Graph API v23.0
-// NO MOCK DATA, NO FALLBACKS
-// Calculates engagement rates and performance tiers
-// =====================================
+/**
+ * useContentAnalytics.ts — Phase 2 refactored.
+ *
+ * Public API is byte-identical to the legacy hook:
+ *   - `UseContentAnalyticsResult` interface
+ *   - `ContentAnalytics` interface
+ *   - `useContentAnalytics()` (no parameters — reads from authStore + useInstagramAccount)
+ *
+ * The implementation now delegates to
+ * `createContentAnalyticsController` from `src/lib/bridge/contentAnalytics.ts`.
+ * The controller owns the fetch, auth guard, business-account guard, and
+ * analytics computation. The hook exposes that controller state to React
+ * via `useSyncExternalStore`.
+ *
+ * The legacy hook's contract (fail loudly, no mock data, no polling,
+ * engagement rate + top performer derivation) is preserved inside the
+ * controller. Consumers see no change.
+ */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useEffect, useMemo, useSyncExternalStore } from 'react';
+import { createContentAnalyticsController } from '../lib/bridge/contentAnalytics';
 import { useAuthStore } from '../stores/authStore';
 import { useInstagramAccount } from './useInstagramAccount';
 import type { MediaData } from '../types/permissions';
 
-interface ContentAnalytics {
+// ─────────────────────────────────────────────────────────────────────────────
+// Interfaces — unchanged from the legacy hook
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ContentAnalytics {
   totalPosts: number;
   totalLikes: number;
   totalComments: number;
@@ -19,7 +36,7 @@ interface ContentAnalytics {
   topPerformer: MediaData | null;
 }
 
-interface UseContentAnalyticsResult {
+export interface UseContentAnalyticsResult {
   media: MediaData[];
   analytics: ContentAnalytics;
   isLoading: boolean;
@@ -27,113 +44,43 @@ interface UseContentAnalyticsResult {
   refetch: () => void;
 }
 
-/**
- * Hook to fetch and analyze Instagram media content
- * Uses Meta Graph API v23.0 with proper authentication
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// Hook — body delegates to the controller
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const useContentAnalytics = (): UseContentAnalyticsResult => {
   const { user } = useAuthStore();
   const { businessAccountId, instagramBusinessId } = useInstagramAccount();
-  const [media, setMedia] = useState<MediaData[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  const fetchMedia = useCallback(async () => {
-    // ❌ NO DEMO MODE CHECK - Always fetch real data
+  // Memoize the controller. Dependencies (userId, businessAccountId,
+  // instagramBusinessId) are pulled from stores at render time; the
+  // controller re-creates when any of them change.
+  const controller = useMemo(
+    () =>
+      createContentAnalyticsController(
+        user?.id ?? null,
+        businessAccountId,
+        instagramBusinessId,
+      ),
+    [user?.id, businessAccountId, instagramBusinessId],
+  );
 
-    if (!user?.id) {
-      setError('User not authenticated. Please log in.');
-      setIsLoading(false);
-      return;
-    }
-
-    if (!businessAccountId || !instagramBusinessId) {
-      setError('No Instagram Business Account connected. Please reconnect your account.');
-      setIsLoading(false);
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      // ✅ REAL API CALL - Meta Graph API v23.0
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
-      const response = await fetch(
-        `${apiBaseUrl}/api/instagram/media/${instagramBusinessId}?userId=${user.id}&business_account_id=${businessAccountId}&limit=50`,
-        {
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        // ✅ FAIL LOUDLY - Show the actual error
-        throw new Error(errorData.error || `API Error: ${response.status}`);
-      }
-
-      const result = await response.json();
-
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to fetch media');
-      }
-
-      setMedia(result.data || []);
-
-      console.log('✅ Media fetched successfully:', result.data?.length || 0, 'items');
-
-    } catch (err: any) {
-      console.error('❌ Media fetch failed:', err);
-      // ✅ FAIL LOUDLY - Display error, don't fallback to mock data
-      setError(err.message || 'Failed to fetch media. Check console for details.');
-      setMedia([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [user?.id, businessAccountId, instagramBusinessId]);
-
-  // Calculate analytics from media data
-  const calculateAnalytics = (mediaData: MediaData[]): ContentAnalytics => {
-    const totalPosts = mediaData.length;
-    const totalLikes = mediaData.reduce((sum, m) => sum + (m.like_count || 0), 0);
-    const totalComments = mediaData.reduce((sum, m) => sum + (m.comments_count || 0), 0);
-    const totalReach = mediaData.reduce((sum, m) => sum + (m.reach || 0), 0);
-    const avgEngagementRate =
-      totalPosts > 0 ? mediaData.reduce((sum, m) => sum + m.engagement_rate, 0) / totalPosts : 0;
-
-    // Find top performer
-    const topPerformer =
-      mediaData.length > 0
-        ? mediaData.reduce((top, current) =>
-            current.engagement_rate > top.engagement_rate ? current : top
-          )
-        : null;
-
-    return {
-      totalPosts,
-      totalLikes,
-      totalComments,
-      totalReach,
-      avgEngagementRate,
-      topPerformer
-    };
-  };
-
-  const analytics = calculateAnalytics(media);
-
+  // Dispose the controller on unmount or when dependencies change
+  // (which produces a new controller via useMemo above).
   useEffect(() => {
-    fetchMedia();
-  }, [fetchMedia]);
+    return () => {
+      controller.dispose();
+    };
+  }, [controller]);
 
-  return {
-    media,
-    analytics,
-    isLoading,
-    error,
-    refetch: fetchMedia
-  };
+  // Subscribe to controller state via React's external-store hook.
+  // This gives us the same render-on-change semantics as the legacy
+  // hook's useState + useEffect + useCallback chain.
+  return useSyncExternalStore(
+    controller.subscribe,
+    controller.state,
+    controller.state,
+  );
 };
 
 export default useContentAnalytics;

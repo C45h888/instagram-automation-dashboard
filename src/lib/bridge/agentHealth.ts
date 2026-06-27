@@ -30,7 +30,8 @@ import { AgentService } from '../../services/agentService';
 import { supabase } from '../../lib/supabase';
 import type { AgentHeartbeat, AgentHeartbeatStatus, SystemAlert } from '../../types';
 import type { UseAgentHealthResult } from '../../hooks/useAgentHealth';
-import { ControllerSlot, DisposeScope, createControllerSlot } from './controller';
+import type { ControllerSlot } from './controller';
+import { DisposeScope, createControllerSlot } from './controller';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants — preserved verbatim from useAgentHealth.ts
@@ -130,10 +131,6 @@ export function createAgentHealthController(
   const slot: ControllerSlot<AgentHealthInternalState> = createControllerSlot(INITIAL_STATE);
   const dispose = new DisposeScope();
 
-  // Track latest fetched values so resolveAlert can mutate cache in place.
-  let lastHeartbeats: AgentHeartbeat[] = [];
-  let lastStatus: AgentHeartbeatStatus = 'down';
-
   // Polling abort controllers — one per query kind, plus a master for refetch.
   const pollAbortRef: { current: AbortController | null } = { current: null };
 
@@ -149,7 +146,6 @@ export function createAgentHealthController(
   async function fetchStatus(): Promise<void> {
     try {
       const data = await fetchWithRetry(() => AgentService.getAgentStatus());
-      lastStatus = data.status;
       setState({ agentStatus: data.status, error: null });
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
@@ -161,7 +157,6 @@ export function createAgentHealthController(
   async function fetchHeartbeats(): Promise<void> {
     try {
       const data = await fetchWithRetry(() => AgentService.getHeartbeats(5));
-      lastHeartbeats = data;
       setState({ heartbeats: data, error: null });
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
