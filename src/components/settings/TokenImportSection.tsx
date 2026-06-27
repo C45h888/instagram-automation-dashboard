@@ -4,7 +4,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { useInstagramAccount } from '../../hooks/useInstagramAccount';
 import { useToast } from '../../hooks/useToast';
 import { supabase } from '../../lib/supabase';
-import { INSTAGRAM_OAUTH_SCOPES } from '../../config/instagramScopes';
+import { INSTAGRAM_OAUTH_SCOPES } from '../../../runtime/web/src/lib/contracts/instagram/oauth-scopes.contract';
 
 const TokenImportSection = forwardRef<HTMLDivElement>((_, ref) => {
   const [showManual, setShowManual] = useState(false);

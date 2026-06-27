@@ -24,7 +24,7 @@
  */
 
 import { AgentService } from '../../services/agentService';
-import type { AnalyticsReport, ReportType } from '../../types';
+import type { AnalyticsReport, ReportType } from '../../../runtime/web/src/lib/contracts/agent/agent-tables.contract';
 import type { UseAnalyticsReportsResult } from '../../hooks/useAnalyticsReports';
 import type { ControllerSlot } from './controller';
 import { createControllerSlot, DisposeScope } from './controller';

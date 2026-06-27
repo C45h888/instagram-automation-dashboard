@@ -5,7 +5,7 @@ import LoadingButton from '../../ui/LoadingButton';
 import { useToast } from '../../../hooks/useToast';
 import { useAuthStore } from '../../../stores/authStore';
 import { useInstagramAccount } from '../../../hooks/useInstagramAccount';
-import type { CreatePostRequest, CreatePostResponse } from '../../../types/instagram-media';
+import type { CreatePostRequest, CreatePostResponse } from '../../../../runtime/web/src/lib/contracts/instagram/media.contract';
 
 interface CreatePostModalProps {
   isOpen: boolean;

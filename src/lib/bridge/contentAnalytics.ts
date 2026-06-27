@@ -22,7 +22,7 @@
  *   - useContentAnalytics()
  */
 
-import type { MediaData } from '../../types/permissions';
+import type { MediaData } from '../../../runtime/web/src/lib/contracts/identity/permissions.contract';
 import type { UseContentAnalyticsResult } from '../../hooks/useContentAnalytics';
 import type { ControllerSlot } from './controller';
 import { DisposeScope, createControllerSlot } from './controller';

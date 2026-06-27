@@ -22,7 +22,7 @@ async function getAgentAuthHeaders(): Promise<Record<string, string>> {
     ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {}),
   };
 }
-import type { CommentData } from '../types/permissions';
+import type { CommentData } from '../../runtime/web/src/lib/contracts/identity/permissions.contract';
 import type { CommentFilterState } from '../components/permissions/CommentManagement';
 
 interface UseCommentsResult {

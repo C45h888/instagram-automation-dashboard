@@ -9,7 +9,7 @@ import { Instagram, ExternalLink, CheckCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { PermissionBadge } from '../shared/PermissionBadge';
 import { ProfileStats } from './ProfileStats';
-import type { InstagramProfileData } from '../../../types/permissions';
+import type { InstagramProfileData } from '../../../../runtime/web/src/lib/contracts/identity/permissions.contract';
 
 interface InstagramProfileCardProps {
   account: InstagramProfileData;

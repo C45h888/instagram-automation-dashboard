@@ -10,7 +10,7 @@
 import React from 'react';
 import { X, Share2, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import type { VisitorPost } from '../../../types/ugc';
+import type { VisitorPost } from '../../../../runtime/web/src/lib/contracts/content/ugc.contract';
 
 interface RepostConfirmationModalProps {
   isOpen: boolean;

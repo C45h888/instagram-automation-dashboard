@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { X, Shield, Send } from 'lucide-react';
-import type { VisitorPost, PermissionRequestForm } from '../../../types/ugc';
+import type { VisitorPost, PermissionRequestForm } from '../../../../runtime/web/src/lib/contracts/content/ugc.contract';
 
 interface PermissionRequestModalProps {
   isOpen: boolean;

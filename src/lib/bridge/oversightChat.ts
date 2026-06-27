@@ -37,8 +37,8 @@ import type {
   AgentDonePayload,
   AgentErrorPayload,
   BackendSSEError,
-} from '../../types/oversight';
-import { isAgentToken, isAgentDone, isAgentError, getSSEErrorMessage } from '../../types/oversight';
+} from '../../../runtime/web/src/lib/contracts/agent/oversight.contract';
+import { isAgentToken, isAgentDone, isAgentError, getSSEErrorMessage } from '../../../runtime/web/src/lib/contracts/agent/oversight.contract';
 import type { UseOversightChatResult } from '../../hooks/useOversightChat';
 import type { ControllerSlot } from './controller';
 import { DisposeScope, createControllerSlot } from './controller';

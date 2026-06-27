@@ -18,7 +18,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useInstagramAccount } from '../hooks/useInstagramAccount';
 import { useInstagramInsights } from '../hooks/useInstagramInsights';
-import type { InsightsDailyData, MetricCardData, ChartData } from '../types/insights';
+import type { InsightsDailyData, MetricCardData, ChartData } from '../../runtime/web/src/lib/contracts/observability/insights.contract';
 
 // =====================================
 // CHART COMPONENT

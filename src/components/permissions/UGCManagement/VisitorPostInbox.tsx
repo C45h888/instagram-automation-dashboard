@@ -8,7 +8,7 @@ import React, { useMemo } from 'react';
 import { Search, Filter, X, TrendingUp, MessageSquare, Star } from 'lucide-react';
 import { VisitorPostCard } from './VisitorPostCard';
 import { FeatureHighlight } from '../shared/FeatureHighlight';
-import type { VisitorPost, UGCFilterState, UGCStats } from '../../../types/ugc';
+import type { VisitorPost, UGCFilterState, UGCStats } from '../../../../runtime/web/src/lib/contracts/content/ugc.contract';
 
 interface VisitorPostInboxProps {
   posts: VisitorPost[];

@@ -13,8 +13,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useInstagramAccount } from './useInstagramAccount';
-import type { VisitorPost, UGCStats, UGCFilterState, PermissionRequestForm } from '../types/ugc';
-import { DEFAULT_UGC_FILTERS } from '../types/ugc';
+import type { VisitorPost, UGCStats, UGCFilterState, PermissionRequestForm } from '../../runtime/web/src/lib/contracts/content/ugc.contract';
+import { DEFAULT_UGC_FILTERS } from '../../runtime/web/src/lib/contracts/content/ugc.contract';
 
 // ✅ NEW: Rate limit error codes (matches useInstagramInsights)
 const RATE_LIMIT_CODES = [17, 4, 32, 613];

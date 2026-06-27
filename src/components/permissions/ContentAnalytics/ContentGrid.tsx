@@ -7,7 +7,7 @@
 import React from 'react';
 import { AlertCircle } from 'lucide-react';
 import { MediaCard } from './MediaCard';
-import type { MediaData } from '../../../types/permissions';
+import type { MediaData } from '../../../../runtime/web/src/lib/contracts/identity/permissions.contract';
 
 interface ContentGridProps {
   media: MediaData[];

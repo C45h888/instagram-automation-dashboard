@@ -30,7 +30,7 @@ import type {
   RetryConfig,
   TrendsData,
   TrendData
-} from '../types/insights';
+} from '../../runtime/web/src/lib/contracts/observability/insights.contract';
 
 // =====================================
 // CONSTANTS

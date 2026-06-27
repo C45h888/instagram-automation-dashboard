@@ -16,7 +16,7 @@
 
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { createActivityFeedController } from '../lib/bridge/activityFeed';
-import type { AuditLogEntry } from '../types';
+import type { AuditLogEntry } from '../../runtime/web/src/lib/contracts/agent/agent-tables.contract';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Result interface — unchanged from the legacy hook

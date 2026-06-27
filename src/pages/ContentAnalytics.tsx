@@ -11,7 +11,7 @@ import { PermissionBadge } from '../components/permissions/shared/PermissionBadg
 import { FeatureHighlight } from '../components/permissions/shared/FeatureHighlight';
 import AsyncWrapper from '../components/ui/AsyncWrapper';
 import { BarChart3, TrendingUp, Target, Zap } from 'lucide-react';
-import type { MediaData } from '../types/permissions';
+import type { MediaData } from '../../runtime/web/src/lib/contracts/identity/permissions.contract';
 
 const ContentAnalytics: React.FC = () => {
   const { media, analytics, isLoading, error } = useContentAnalytics();

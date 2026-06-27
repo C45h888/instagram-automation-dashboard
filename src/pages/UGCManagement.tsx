@@ -31,7 +31,7 @@ import { useToast } from '../hooks/useToast';
 import { useAuthStore } from '../stores/authStore';
 import { useInstagramAccount } from '../hooks/useInstagramAccount';
 import { supabase } from '../lib/supabase';
-import type { VisitorPost, PermissionRequestForm } from '../types/ugc';
+import type { VisitorPost, PermissionRequestForm } from '../../runtime/web/src/lib/contracts/content/ugc.contract';
 
 const MAX_RETRIES = 3;
 

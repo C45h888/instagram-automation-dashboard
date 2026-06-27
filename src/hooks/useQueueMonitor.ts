@@ -18,7 +18,7 @@
 
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { createQueueMonitorController } from '../lib/bridge/queueMonitor';
-import type { QueueStatusSummary, QueueDLQItem } from '../types';
+import type { QueueStatusSummary, QueueDLQItem } from '../../runtime/web/src/lib/contracts/agent/agent-tables.contract';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Result interface — unchanged from the legacy hook

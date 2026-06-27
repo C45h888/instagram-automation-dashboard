@@ -21,8 +21,8 @@ import type {
   WorkflowExecution,
   WorkflowExecutionSummary,
   WorkflowFilterState,
-} from '@/types'
-import { DEFAULT_WORKFLOW_FILTERS } from '@/types'
+} from '../../runtime/web/src/lib/contracts/agent/workflows.contract'
+import { DEFAULT_WORKFLOW_FILTERS } from '../../runtime/web/src/lib/contracts/agent/workflows.contract'
 import { useState } from 'react'
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -18,7 +18,7 @@
 
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { createAnalyticsReportsController } from '../lib/bridge/analyticsReports';
-import type { AnalyticsReport, ReportType } from '../types';
+import type { AnalyticsReport, ReportType } from '../../runtime/web/src/lib/contracts/agent/agent-tables.contract';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Result interface — unchanged from the legacy hook

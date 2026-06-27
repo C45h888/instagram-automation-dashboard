@@ -7,7 +7,7 @@
 import React from 'react';
 import { Clock, AlertCircle, CheckCircle, User } from 'lucide-react';
 import { motion } from 'framer-motion';
-import type { ConversationData } from '../../../types/permissions';
+import type { ConversationData } from '../../../../runtime/web/src/lib/contracts/identity/permissions.contract';
 
 interface DMConversationListProps {
   conversations: ConversationData[];

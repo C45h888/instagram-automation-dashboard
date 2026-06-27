@@ -5,7 +5,7 @@ import { useAgentHealth } from '../../hooks/useAgentHealth';
 import { useInstagramAccount } from '../../hooks/useInstagramAccount';
 import { useToastContext } from '../../contexts/ToastContext';
 import { useAuthStore } from '../../stores/authStore';
-import type { SystemAlert } from '@/types';
+import type { SystemAlert } from '../../../runtime/web/src/lib/contracts/agent/agent-tables.contract';
 import type { Toast } from '../../contexts/ToastContext';
 
 // ─────────────────────────────────────────────────────────────────────────────

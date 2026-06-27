@@ -13,7 +13,7 @@ import type {
   RevenueReportMetrics,
   ReportInsights,
   HistoricalComparison,
-} from '@/types'
+} from '../../../runtime/web/src/lib/contracts/agent/agent-tables.contract'
 
 interface MetricsOverviewPanelProps {
   businessAccountId: string | null

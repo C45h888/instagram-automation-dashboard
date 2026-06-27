@@ -22,7 +22,7 @@ async function getAgentAuthHeaders(): Promise<Record<string, string>> {
     ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {}),
   };
 }
-import type { ConversationData } from '../types/permissions';
+import type { ConversationData } from '../../runtime/web/src/lib/contracts/identity/permissions.contract';
 import type { Database } from '../lib/database.types';
 
 type DMMessage = Database['public']['Tables']['instagram_dm_messages']['Row'];
