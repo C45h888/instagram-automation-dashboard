@@ -534,6 +534,13 @@ export class DMService {
         throw new Error(`Cannot send message: ${windowCheck.data.reason}`);
       }
 
+      // Get conversation to resolve recipient_instagram_id
+      const conversation = await this.getConversation(request.conversationId);
+      if (!conversation.success || !conversation.data) {
+        throw new Error('Conversation not found');
+      }
+      const recipientInstagramId = conversation.data.customer_instagram_id;
+
       // Generate Instagram message ID (in production, this comes from Instagram API)
       const instagramMessageId = `msg_${Date.now()}_${Math.random()
         .toString(36)
@@ -548,6 +555,7 @@ export class DMService {
           sent_by_user_id: request.senderId,
           is_from_business: true,
           sender_instagram_id: request.senderInstagramId,
+          recipient_instagram_id: recipientInstagramId,
           sender_username: request.senderUsername,
           message_type: request.messageType || 'text',
           message_text: request.messageText,

@@ -1087,7 +1087,7 @@ export type Database = {
           message_type?: string
           processed_by_automation?: boolean | null
           read_at?: string | null
-          recipient_instagram_id: string
+          recipient_instagram_id?: string
           response_sent_at?: string | null
           response_text?: string | null
           send_status?: string
