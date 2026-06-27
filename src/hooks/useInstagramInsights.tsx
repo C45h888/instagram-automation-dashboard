@@ -19,7 +19,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useInstagramAccount } from './useInstagramAccount';
 import { Users, User, MousePointer } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../../runtime/web/src/lib/substrates/supabase/client';
 import type {
   InsightsData,
   InsightsDailyData,

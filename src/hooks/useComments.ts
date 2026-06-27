@@ -13,7 +13,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useInstagramAccount } from './useInstagramAccount';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../../runtime/web/src/lib/substrates/supabase/client';
 
 async function getAgentAuthHeaders(): Promise<Record<string, string>> {
   const { data: { session } } = await supabase.auth.getSession();

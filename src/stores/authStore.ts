@@ -1,11 +1,12 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { devtools } from 'zustand/middleware';
-import { supabase, logAuditEvent } from '../lib/supabase';
+import { supabase } from '../../runtime/web/src/lib/substrates/supabase/client';
+import { logAuditEvent } from '../../runtime/web/src/lib/substrates/supabase/audit';
 import type { AuthChangeEvent, Session, User as SupabaseUser } from '@supabase/supabase-js';
 
 // Import types from the generated database.types.ts
-import type { Database } from '../lib/database.types';
+import type { Database } from '../../runtime/web/src/lib/substrates/supabase/database.types';
 
 // =====================================
 // TYPE DEFINITIONS - ENHANCED ARCHITECTURE

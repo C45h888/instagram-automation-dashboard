@@ -30,7 +30,7 @@ import PermissionBadge from '../components/permissions/shared/PermissionBadge'; 
 import { useToast } from '../hooks/useToast';
 import { useAuthStore } from '../stores/authStore';
 import { useInstagramAccount } from '../hooks/useInstagramAccount';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../../runtime/web/src/lib/substrates/supabase/client';
 import type { VisitorPost, PermissionRequestForm } from '../../runtime/web/src/lib/contracts/content/ugc.contract';
 
 const MAX_RETRIES = 3;

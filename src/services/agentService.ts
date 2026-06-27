@@ -15,7 +15,7 @@
  * typed data rather than raw Json.
  */
 
-import { supabase } from '../lib/supabase'
+import { supabase } from '../../runtime/web/src/lib/substrates/supabase/client';
 import type {
   AgentHeartbeat,
   AgentWritableTableName,

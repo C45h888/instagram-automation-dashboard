@@ -7,7 +7,7 @@
  * monitoring panel.
  */
 
-import type { Database } from '../../../../../../src/lib/database.types'
+import type { Database } from '../../substrates/supabase/database.types'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Row Type Aliases

@@ -4,7 +4,7 @@
 // Integrates with existing database types
 // =====================================
 
-import type { Database } from '../../../../../../src/lib/database.types';
+import type { Database } from '../../substrates/supabase/database.types';
 
 // Re-export database types for convenience
 export type InstagramBusinessAccount = Database['public']['Tables']['instagram_business_accounts']['Row'];

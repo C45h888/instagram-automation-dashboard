@@ -26,9 +26,9 @@
  *   - UseOversightChatResult interface
  */
 
-import { supabase } from '../../lib/supabase';
+import { supabase } from '../../../runtime/web/src/lib/substrates/supabase/client';
 import { LIVENESS_THRESHOLD_MS } from './agentHealth';
-import type { Json } from '../../lib/database.types';
+import type { Json } from '../../../runtime/web/src/lib/substrates/supabase/database.types';
 import type {
   OversightSession,
   OversightMessage,

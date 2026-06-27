@@ -14,7 +14,7 @@ import {
   useInfiniteQuery,
   useQueryClient,
 } from '@tanstack/react-query'
-import { supabase } from '../lib/supabase'
+import { supabase } from '../../runtime/web/src/lib/substrates/supabase/client';
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import type {
   AutomationWorkflow,

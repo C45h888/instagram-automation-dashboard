@@ -19,8 +19,8 @@
 // regenerate types with: npm run db:types
 // =====================================
 
-import { supabase } from '../lib/supabase';
-import type { Database } from '../lib/database.types';
+import { supabase } from '../../runtime/web/src/lib/substrates/supabase/client';
+import type { Database } from '../../runtime/web/src/lib/substrates/supabase/database.types';
 
 // =====================================
 // TYPE DEFINITIONS

@@ -1,38 +1,18 @@
 // =====================================
 // SIMPLIFIED IMPORTS - Single clean entry point
 // =====================================
-import { supabase } from '../lib/supabase';
-import type * as Types from '../lib/supabase';
+import { supabase } from '../../runtime/web/src/lib/substrates/supabase/client';
+import type * as Types from '../../runtime/web/src/lib/substrates/supabase/database.types';
+import { logAuditEvent } from '../../runtime/web/src/lib/substrates/supabase/audit';
+import type { ServiceResponse, ServiceListResponse, DeleteResponse, PaginationOptions } from '../../runtime/web/src/lib/substrates/supabase/query';
+import { isValidUUID } from '../../runtime/web/src/lib/substrates/supabase/query';
 
 // =====================================
-// SERVICE RESPONSE TYPES
+// SERVICE RESPONSE TYPES — re-exported from substrates/supabase/query for
+// backwards compatibility. New code should import directly from query.ts.
 // =====================================
 
-interface ServiceResponse<T> {
-  success: boolean;
-  data: T | null;
-  error?: string;
-}
-
-interface ServiceListResponse<T> {
-  success: boolean;
-  data: T[];
-  error?: string;
-  count?: number;
-}
-
-interface DeleteResponse {
-  success: boolean;
-  error?: string;
-  affected?: number;
-}
-
-interface PaginationOptions {
-  limit?: number;
-  offset?: number;
-  orderBy?: string;
-  orderDirection?: 'asc' | 'desc';
-}
+export type { ServiceResponse, ServiceListResponse, DeleteResponse, PaginationOptions };
 
 // =====================================
 // DATABASE SERVICE CLASS
@@ -111,11 +91,12 @@ export class DatabaseService {
       // ===== CRITICAL: Validate UUID format =====
       // This prevents the "invalid input syntax for type uuid" error
       // when Facebook ID is mistakenly used instead of Supabase UUID
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-      if (!uuidRegex.test(userId)) {
+      if (!isValidUUID(userId)) {
+        // eslint-disable-next-line no-console
         console.error('❌ Invalid user_id format. Expected UUID, got:', userId);
+        // eslint-disable-next-line no-console
         console.error('   This is likely a Facebook ID being used instead of Supabase UUID');
+        // eslint-disable-next-line no-console
         console.error('   Hint: Ensure authStore.user.id contains UUID, not Facebook ID');
 
         return {
@@ -438,35 +419,20 @@ export class DatabaseService {
   // =====================================
   
   /**
-   * Creates an audit log entry
+   * Creates an audit log entry.
+   *
+   * Thin shim over `substrates/supabase/audit.logAuditEvent`. Kept as a
+   * private static method so the 6 internal call sites in this file don't
+   * need to be rewritten. Phase 3e will inline these calls when the file
+   * is decomposed by domain.
    */
   private static async logAuditEvent(
     userId: string,
     eventType: string,
     action: string,
-    details?: any
+    details?: unknown
   ): Promise<void> {
-    try {
-      const auditEntry: Types.Database['public']['Tables']['audit_log']['Insert'] = {
-        user_id: userId,
-        event_type: eventType,
-        action: action,
-        details: details || {},
-        ip_address: 'web-client',
-        user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
-        success: true
-      };
-      
-      const { error } = await supabase
-        .from('audit_log')
-        .insert([auditEntry]);
-      
-      if (error) {
-        console.error('Audit log error:', error);
-      }
-    } catch (error) {
-      console.error('Audit log exception:', error);
-    }
+    await logAuditEvent(eventType, action, details, { userId });
   }
   
   /**

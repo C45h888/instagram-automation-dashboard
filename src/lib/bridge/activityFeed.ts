@@ -18,7 +18,7 @@
  */
 
 import { AgentService } from '../../services/agentService';
-import { supabase } from '../../lib/supabase';
+import { supabase } from '../../../runtime/web/src/lib/substrates/supabase/client';
 import type { AuditLogEntry } from '../../../runtime/web/src/lib/contracts/agent/agent-tables.contract';
 import type { UseActivityFeedResult } from '../../hooks/useActivityFeed';
 import type { ControllerSlot } from './controller';

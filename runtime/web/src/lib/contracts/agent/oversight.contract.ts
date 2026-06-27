@@ -6,7 +6,7 @@
  * used by POST /api/instagram/oversight/chat.
  */
 
-import type { Database } from '../../../../../../src/lib/database.types'
+import type { Database } from '../../substrates/supabase/database.types'
 import { z } from 'zod'
 
 // ─────────────────────────────────────────────────────────────────────────────

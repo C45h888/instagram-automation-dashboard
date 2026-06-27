@@ -4,7 +4,7 @@
 // Integrates with database types from Supabase
 // =====================================
 
-import type { Database } from '../../../../../../src/lib/database.types';
+import type { Database } from '../../substrates/supabase/database.types';
 import type { UGCQualityFactors } from '../agent/agent-tables.contract';
 
 // Re-export so consumers only need one import for UGC types

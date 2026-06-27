@@ -13,7 +13,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useInstagramAccount } from './useInstagramAccount';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../../runtime/web/src/lib/substrates/supabase/client';
 
 async function getAgentAuthHeaders(): Promise<Record<string, string>> {
   const { data: { session } } = await supabase.auth.getSession();
@@ -23,7 +23,7 @@ async function getAgentAuthHeaders(): Promise<Record<string, string>> {
   };
 }
 import type { ConversationData } from '../../runtime/web/src/lib/contracts/identity/permissions.contract';
-import type { Database } from '../lib/database.types';
+import type { Database } from '../../runtime/web/src/lib/substrates/supabase/database.types';
 
 type DMMessage = Database['public']['Tables']['instagram_dm_messages']['Row'];
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { testSupabaseConnection } from '../lib/supabase';
+import { testSupabaseConnection } from '../../runtime/web/src/lib/substrates/supabase/connection-test';
 import { useAuthStore } from '../stores/authStore';
 
 export const TestConnection: React.FC = () => {

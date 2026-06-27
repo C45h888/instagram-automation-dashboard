@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../../runtime/web/src/lib/substrates/supabase/client';
 import { useAuthStore } from '../stores/authStore';
 import { PagePickerModal, type PageOption } from '../components/auth/PagePickerModal';
 

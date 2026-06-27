@@ -11,7 +11,7 @@
  *  E. Filter states + DEFAULT constants
  */
 
-import type { Database } from '../../../../../../src/lib/database.types'
+import type { Database } from '../../substrates/supabase/database.types'
 import { z } from 'zod'
 
 // ─────────────────────────────────────────────────────────────────────────────

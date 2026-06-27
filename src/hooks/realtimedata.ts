@@ -1,10 +1,10 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../../runtime/web/src/lib/substrates/supabase/client';
 import { useAuthStore } from '../stores/authStore';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 // ✅ FIXED: Import the main Database type and derive the specific types from it.
-import type { Database } from '../lib/supabase';
+import type { Database } from '../../runtime/web/src/lib/substrates/supabase/database.types';
 
 type AutomationWorkflow = Database['public']['Tables']['automation_workflows']['Row'];
 type DailyAnalytics = Database['public']['Tables']['daily_analytics']['Row'];

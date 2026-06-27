@@ -27,7 +27,7 @@
  */
 
 import { AgentService } from '../../services/agentService';
-import { supabase } from '../../lib/supabase';
+import { supabase } from '../../../runtime/web/src/lib/substrates/supabase/client';
 import type { AgentHeartbeat, AgentHeartbeatStatus, SystemAlert } from '../../../runtime/web/src/lib/contracts/agent/agent-tables.contract';
 import type { UseAgentHealthResult } from '../../hooks/useAgentHealth';
 import type { ControllerSlot } from './controller';

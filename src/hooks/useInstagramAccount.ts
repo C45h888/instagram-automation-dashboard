@@ -9,7 +9,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../stores/authStore';
 import { DatabaseService } from '../services/databaseservices';
-import type { Database } from '../lib/database.types';
+import type { Database } from '../../runtime/web/src/lib/substrates/supabase/database.types';
 
 type InstagramBusinessAccount = Database['public']['Tables']['instagram_business_accounts']['Row'];
 
