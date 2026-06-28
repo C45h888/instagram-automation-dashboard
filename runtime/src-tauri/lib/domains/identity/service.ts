@@ -9,9 +9,12 @@
 //   - Username / permission derivation helpers
 //   - Admin-access policy (checkAdminAccess)
 //
-// Why pure: identity must be testable without mocks. The transport
-// layer (substrates/auth/transports/supabase.ts) fetches the data and
-// passes it in. This file only knows how to interpret what it gets.
+// The substrate transport (substrates/auth/transports/supabase.ts)
+// imports from this file when it needs to project a Supabase user
+// into an app User, or check role-based access. That's the
+// substrate-consuming-domain direction — acceptable per the
+// systems-theory principle that substrate interprets what domain
+// decides. Identity does NOT import back from substrate.
 // =====================================
 
 import type { User as SupabaseUser } from '@supabase/supabase-js';
@@ -28,9 +31,6 @@ import type {
 
 /**
  * Numeric rank for the role hierarchy. Higher = more privilege.
- * Used by hasRoleAtLeast() to compare a user's actual role against
- * a required minimum. The values are NOT persisted or transmitted —
- * they're the internal ordering of the policy.
  */
 export const ROLE_RANK: Record<Role, number> = {
   user: 1,
@@ -40,8 +40,7 @@ export const ROLE_RANK: Record<Role, number> = {
 
 /**
  * Returns true if `actual` ranks at or above `required` in the role
- * hierarchy. undefined / null / unknown role always returns false —
- * the safe default is to deny access.
+ * hierarchy. undefined / null / unknown role always returns false.
  */
 export function hasRoleAtLeast(
   actual: Role | undefined | null,
@@ -59,8 +58,7 @@ export function hasRoleAtLeast(
 /**
  * Safely extracts the username portion from an email address.
  * Returns 'user' as the fallback when the email is null, undefined,
- * or otherwise malformed. This is the same fallback used by
- * authStore.ts:196-200.
+ * or otherwise malformed.
  */
 export function getUsernameFromEmail(
   email: string | null | undefined,
@@ -72,8 +70,8 @@ export function getUsernameFromEmail(
 
 /**
  * Converts a full name to a username slug: lowercase, spaces -> underscores.
- * Returns 'admin' as the fallback when the name is null, undefined, or
- * otherwise malformed. Same fallback as authStore.ts:206-209.
+ * Returns 'admin' as the fallback when the name is null, undefined,
+ * or otherwise malformed.
  */
 export function formatUsername(
   fullName: string | null | undefined,
@@ -82,14 +80,6 @@ export function formatUsername(
   return fullName.toLowerCase().replace(/\s+/g, '_');
 }
 
-/**
- * Type guard + default for a permissions array. Accepts any value:
- *   - If it's an array of strings, returns the filtered array
- *   - Otherwise returns the default user permission set
- *
- * The default set is what authStore.ts:215-221 used inline.
- * Centralized here so the policy is testable.
- */
 const DEFAULT_USER_PERMISSIONS: string[] = [
   'dashboard',
   'content',
@@ -98,6 +88,9 @@ const DEFAULT_USER_PERMISSIONS: string[] = [
   'settings',
 ];
 
+/**
+ * Type guard + default for a permissions array.
+ */
 export function getPermissions(raw: unknown): string[] {
   if (Array.isArray(raw)) {
     return raw.filter((p): p is string => typeof p === 'string');
@@ -111,18 +104,7 @@ export function getPermissions(raw: unknown): string[] {
 
 /**
  * Projects a Supabase user + user_profile + (optional) admin_users row
- * into the application User shape. This is the only place where the
- * "what does our app call this person" mapping lives.
- *
- * Resolution order for each field:
- *   - email: profile.email || supabaseUser.email
- *   - username: profile.username || (admin full_name -> formatUsername) || getUsernameFromEmail(email)
- *   - permissions: adminProfile.permissions (if admin) || DEFAULT_USER_PERMISSIONS
- *   - role: adminProfile.role || profile.user_role || 'user'
- *   - facebook_id, avatarUrl, instagramConnected: from profile
- *
- * Returns null only when supabaseUser is null. A valid Supabase user
- * with no profile data still produces a User (with fallbacks).
+ * into the application User shape.
  */
 export function mapToUser(
   supabaseUser: SupabaseUser | null,
@@ -159,8 +141,7 @@ export function mapToUser(
 
 /**
  * Returns true iff the user is authenticated AND has the admin or
- * super_admin role. This is the same check that authStore.ts:343-348
- * used inline (in checkAdminAccess).
+ * super_admin role.
  */
 export function checkAdminAccess(user: User | null): boolean {
   if (!user) return false;
