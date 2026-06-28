@@ -36,7 +36,6 @@ import {
   tryDevAdminSignIn,
 } from '../../../domains/identity/dev-admin.policy';
 import type {
-  AuthCore,
   DevAdminEnv,
   User,
   UserProfileRow,

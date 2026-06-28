@@ -27,7 +27,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { devtools } from 'zustand/middleware';
 
-import { hasRoleAtLeast } from '../../../domains/identity/service';
+import { hasRoleAtLeast } from '../../domains/identity/service';
 import {
   checkSession as transportCheckSession,
   createTestUser as transportCreateTestUser,
@@ -38,7 +38,7 @@ import {
   signInWithEmail as transportSignInWithEmail,
   signOut as transportSignOut,
 } from './transports/supabase';
-import type { DevAdminEnv, PersistedAuthCore, User } from '../../../contracts/identity/auth.contract';
+import type { DevAdminEnv, PersistedAuthCore, User } from '../../contracts/identity/auth.contract';
 
 // =====================================
 // STATE SHAPE (the slot content)
@@ -108,6 +108,21 @@ export interface AuthState {
  * Not persisted (env vars are session-scoped config, not state).
  */
 let devAdminEnv: DevAdminEnv | null = null;
+
+/**
+ * Top-level setter for the dev-admin env. Called by the React
+ * adapter (src/stores/authStore.ts) once on module load with the
+ * values read from import.meta.env. Exported so the adapter can
+ * call it without going through the store.
+ */
+export function setDevAdminEnv(env: DevAdminEnv | null): void {
+  devAdminEnv = env;
+}
+
+/** Getter for the current dev-admin env. The transport reads this. */
+export function getDevAdminEnv(): DevAdminEnv | null {
+  return devAdminEnv;
+}
 
 // =====================================
 // INITIAL STATE
@@ -260,7 +275,7 @@ export const useAuthStore = create<AuthState>()(
           const userId = get().user?.id;
           try {
             if (userId && !isDevAdminUserId(userId)) {
-              const { logAuditEvent } = await import('../../supabase/audit');
+              const { logAuditEvent } = await import('../supabase/audit');
               await logAuditEvent('logout', 'success', { userId });
             }
             await transportSignOut();
