@@ -1,0 +1,38 @@
+/* Phase 3g: minimal Svelte shell styling. No design system yet —
+   future UI phases add component-scoped styles in *.svelte files. */
+
+:root {
+  font-family: system-ui, -apple-system, sans-serif;
+  color-scheme: light dark;
+  background: Canvas;
+  color: CanvasText;
+}
+
+main {
+  padding: 2rem;
+  max-width: 60rem;
+  margin: 0 auto;
+}
+
+dl {
+  display: grid;
+  grid-template-columns: 12rem 1fr;
+  gap: 0.5rem 1rem;
+}
+
+dt {
+  font-weight: 600;
+  opacity: 0.7;
+}
+
+dd {
+  margin: 0;
+  font-family: ui-monospace, monospace;
+}
+
+code {
+  font-family: ui-monospace, monospace;
+  background: rgba(127, 127, 127, 0.15);
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+}

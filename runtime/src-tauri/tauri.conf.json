@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "identifier": "com.systemic.runtime",
   "build": {
-    "beforeDevCommand": "",
-    "beforeBuildCommand": "",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
     "devUrl": "http://localhost:1420",
-    "frontendDist": "../"
+    "frontendDist": "../dist"
   },
   "app": {
     "windows": [
@@ -39,6 +39,6 @@
     ],
     "category": "DeveloperTool",
     "shortDescription": "Runtime kernel",
-    "longDescription": "Runtime kernel for the systemic refactor program. Hosts the preserved TypeScript platform inside a WebView."
+    "longDescription": "Runtime kernel for the systemic refactor program. Hosts a Svelte WebView (Phase 3g) that integrates with the kernel via the Phase 2 IPC seam."
   }
 }
