@@ -11,7 +11,7 @@
  */
 
 import { supabase } from './client';
-import { getCurrentUser } from '../auth';
+import { getCurrentUser } from '../auth/transports/supabase';
 
 export const logApiRequest = async (
   endpoint: string,

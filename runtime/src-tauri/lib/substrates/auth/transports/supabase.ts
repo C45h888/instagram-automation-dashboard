@@ -22,7 +22,7 @@
 // the slot. That's the substrate-as-interpreter model.
 // =====================================
 
-import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
+import type { AuthChangeEvent, Session, User as SupabaseUser } from '@supabase/supabase-js';
 
 import { supabase } from '../../supabase/client';
 import { logAuditEvent } from '../../supabase/audit';
@@ -426,6 +426,125 @@ export function onAuthStateChange(
 
   return () => subscription.unsubscribe();
 }
+
+// =====================================
+// FOLDED-IN FROM substrates/auth/index.ts (Phase 3c stabilisation)
+// These were pre-staged in 3b as substrate helpers with zero importers.
+// They belong in the transport because they all do Supabase I/O.
+// Kept here verbatim from the legacy index.ts to preserve behavior.
+// =====================================
+
+/**
+ * Returns the current Supabase user, or null on error. Used by
+ * callers that need raw Supabase user access (rare — most callers
+ * go through checkSession which projects to app User).
+ */
+export const getCurrentUser = async (): Promise<SupabaseUser | null> => {
+  try {
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+    if (error) throw error;
+    return user as SupabaseUser | null;
+  } catch (error) {
+    console.error('Error getting current user:', error);
+    return null;
+  }
+};
+
+/**
+ * Returns the current Supabase session, or null on error. Used by
+ * callers that need raw session access outside the auth store.
+ */
+export const getCurrentSession = async (): Promise<Session | null> => {
+  try {
+    const {
+      data: { session },
+      error,
+    } = await supabase.auth.getSession();
+    if (error) throw error;
+    return session;
+  } catch (error) {
+    console.error('Error getting current session:', error);
+    return null;
+  }
+};
+
+/**
+ * Fetches the user_profiles row for a given Supabase user_id.
+ * Returns the row or null. Used by callers that need raw profile
+ * access (admin tools, debugging, etc.).
+ */
+export const getUserProfile = async (
+  userId: string,
+): Promise<UserProfileRow | null> => {
+  try {
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data as UserProfileRow | null;
+  } catch (error) {
+    console.error('Error getting user profile:', error);
+    return null;
+  }
+};
+
+/**
+ * Dual-ID mapping: get Facebook ID from Supabase user_id. Used
+ * for making Facebook Graph API calls.
+ */
+export const getFacebookIdFromUserId = async (
+  userId: string,
+): Promise<string | null> => {
+  try {
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('facebook_id')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error fetching Facebook ID:', error);
+      return null;
+    }
+
+    return data?.facebook_id || null;
+  } catch (error) {
+    console.error('Error in getFacebookIdFromUserId:', error);
+    return null;
+  }
+};
+
+/**
+ * Dual-ID mapping: get Supabase user_id from Facebook ID. Used
+ * for mapping Facebook OAuth responses to internal users.
+ */
+export const getUserIdFromFacebookId = async (
+  facebookId: string,
+): Promise<string | null> => {
+  try {
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('user_id')
+      .eq('facebook_id', facebookId)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error fetching user_id from Facebook ID:', error);
+      return null;
+    }
+
+    return data?.user_id || null;
+  } catch (error) {
+    console.error('Error in getUserIdFromFacebookId:', error);
+    return null;
+  }
+};
 
 // =====================================
 // HELPERS re-exported for the store's convenience

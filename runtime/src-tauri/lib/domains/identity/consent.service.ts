@@ -477,29 +477,6 @@ export class ConsentService {
   }
 
   /**
-   * Gets the user's IP address from the browser
-   * Helper utility for consent recording
-   *
-   * @returns IP address string or 'unknown' if unavailable
-   *
-   * @example
-   * ```typescript
-   * const ipAddress = await ConsentService.getClientIpAddress();
-   * ```
-   */
-  static async getClientIpAddress(): Promise<string> {
-    try {
-      // In production, you might want to use a service like ipify or get it from your backend
-      const response = await fetch('https://api.ipify.org?format=json');
-      const data = await response.json();
-      return data.ip || 'unknown';
-    } catch (error) {
-      console.error('Failed to get client IP address:', error);
-      return 'unknown';
-    }
-  }
-
-  /**
    * Gets browser metadata for consent recording
    * Helper utility for consent recording
    *

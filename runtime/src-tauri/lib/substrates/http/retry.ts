@@ -1,26 +1,32 @@
 /**
  * substrates/http/retry.ts
  *
- * Canonical fetch retry primitive. Used by:
- *   - substrates/supabase/client.ts (every Supabase HTTP call)
- *   - domains that need to wrap raw HTTP calls in exponential backoff
+ * Canonical retry primitives for HTTP calls. Two layers:
  *
- * Why this lives in substrates/http/ and not in each consumer:
- *   The bridge controllers reinvented `fetchWithRetry` at least five times
- *   during Phase 2 (agentHealth.ts, analyticsReports.ts, contentAnalytics.ts,
- *   queueMonitor.ts, the supabase.ts client itself). This file is the one
- *   canonical implementation. Future consumers MUST import from here, not
- *   redefine. Phase 3g will collapse the duplicates.
+ * 1. fetchWithRetry — low-level: wraps fetch() with exponential backoff
+ *    for transient network errors. Every raw HTTP call should go through this.
  *
- * Behaviour (preserved verbatim from src/lib/supabase.ts:86-117):
- *   - 3 retries (MAX_RETRIES + 1 = 4 total attempts)
- *   - Exponential backoff: 1s, 2s, 4s
- *   - Only retries on network errors (TypeError "Failed to fetch",
- *     ERR_NETWORK_CHANGED). Auth/server errors propagate immediately.
+ * 2. retryWithBackoff — high-level: wraps an async callable that returns
+ *    {success, data, error} (ServiceResponse shape) with retry + response
+ *    unwrapping. Used by bridge controllers and domain services.
+ *
+ * Why two primitives instead of one:
+ *   fetchWithRetry operates at the fetch() level (network errors only).
+ *   retryWithBackoff operates at the ServiceResponse level (handles
+ *   application-level errors too). They compose: retryWithBackoff can call
+ *   fetchWithRetry underneath if the callable wraps a network request, but
+ *   they're independent utilities for different abstraction levels.
+ *
+ * Both honour AbortSignal for graceful cancellation.
  */
 
 export const MAX_RETRIES = 3;
 export const INITIAL_DELAY_MS = 1000;
+export const RETRY_CAP_MS = 30_000;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Layer 1: fetchWithRetry — raw fetch() with exponential backoff
+// ─────────────────────────────────────────────────────────────────────────────
 
 export interface RetryConfig {
   maxRetries?: number;
@@ -76,3 +82,66 @@ export const fetchWithRetry = async (
   // Unreachable: the loop either returns or throws on the last attempt.
   throw new Error('fetchWithRetry: unreachable');
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Layer 2: retryWithBackoff — callable retry with ServiceResponse unwrapping
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface RetryCallableConfig {
+  maxRetries?: number;
+  baseDelayMs?: number;
+  capDelayMs?: number;
+}
+
+/**
+ * Wraps an async callable that returns {success, data, error} with
+ * exponential backoff retry. Unwraps the ServiceResponse shape: on success
+ * returns the data payload; on failure throws with the error message.
+ *
+ * Accepts an optional AbortSignal for cancellation during backoff delays.
+ *
+ * This is the bridge-controller primitive. Use instead of redefining
+ * fetchWithRetry in each controller.
+ */
+export async function retryWithBackoff<T>(
+  fetchFn: () => Promise<{ success: boolean; data?: T | null; error?: string }>,
+  signal?: AbortSignal,
+  config: RetryCallableConfig = {},
+): Promise<T> {
+  const maxRetries = config.maxRetries ?? MAX_RETRIES;
+  const baseDelayMs = config.baseDelayMs ?? INITIAL_DELAY_MS;
+  const capDelayMs = config.capDelayMs ?? RETRY_CAP_MS;
+
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    try {
+      const result = await fetchFn();
+      if (result.success && result.data !== undefined && result.data !== null) {
+        return result.data;
+      }
+      lastErr = new Error(result.error ?? 'fetch returned null');
+    } catch (err) {
+      lastErr = err;
+    }
+    if (attempt < maxRetries - 1) {
+      const delay = Math.min(baseDelayMs * 2 ** attempt, capDelayMs);
+      await sleepWithSignal(delay, signal);
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+}
+
+function sleepWithSignal(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException('Aborted', 'AbortError'));
+      return;
+    }
+    const t = setTimeout(resolve, ms);
+    signal?.addEventListener('abort', () => {
+      clearTimeout(t);
+      reject(new DOMException('Aborted', 'AbortError'));
+    }, { once: true });
+  });
+}

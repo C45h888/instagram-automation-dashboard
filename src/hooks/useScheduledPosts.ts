@@ -2,13 +2,16 @@
  * useScheduledPosts.ts
  *
  * Fetches scheduled posts with infinite scroll pagination.
- * Provides approve/reject mutations that call AgentService and
+ * Provides approve/reject mutations that call the agent scheduled-posts
  * optimistically update the TanStack Query cache.
  */
 
 import { useState, useCallback } from 'react'
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
-import { AgentService } from '../services/agentService'
+import {
+  getScheduledPosts,
+  updateScheduledPostStatus,
+} from '../../runtime/src-tauri/lib/domains/agent/scheduled-posts.service'
 import type {
   ScheduledPost,
   ScheduledPostFilterState,
@@ -57,9 +60,9 @@ export function useScheduledPosts(businessAccountId: string | null): UseSchedule
       if (!businessAccountId) return { items: [], total: 0, nextPage: undefined }
 
       const offset = (pageParam as number) * PAGE_SIZE
-      // AgentService.getScheduledPosts fetches from offset 0 with a limit;
+      // getScheduledPosts fetches from offset 0 with a limit;
       // we drive pagination by computing the limit based on offset + PAGE_SIZE.
-      const result = await AgentService.getScheduledPosts(
+      const result = await getScheduledPosts(
         businessAccountId,
         filters.status === 'all' ? 'all' : (filters.status as ScheduledPostStatus),
         offset + PAGE_SIZE
@@ -100,7 +103,7 @@ export function useScheduledPosts(businessAccountId: string | null): UseSchedule
   // ── Optimistic update helper ───────────────────────────────────────────────
   const updatePostStatus = useCallback(
     async (postId: string, status: ScheduledPostStatus): Promise<void> => {
-      const result = await AgentService.updateScheduledPostStatus(postId, status)
+      const result = await updateScheduledPostStatus(postId, status)
       if (!result.success) throw new Error(result.error ?? 'Failed to update post status')
 
       // Update the cached post in-place across all pages

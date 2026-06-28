@@ -8,7 +8,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../stores/authStore';
-import { DatabaseService } from '../services/databaseservices';
+import { getBusinessAccounts } from '../../runtime/src-tauri/lib/domains/instagram/business-accounts.service';
 import type { Database } from '../../runtime/src-tauri/lib/substrates/supabase/database.types';
 
 type InstagramBusinessAccount = Database['public']['Tables']['instagram_business_accounts']['Row'];
@@ -45,8 +45,8 @@ export const useInstagramAccount = (): UseInstagramAccountResult => {
 
       console.log('🔍 Fetching business accounts for UUID:', userId);
 
-      // Fetch from database service
-      const result = await DatabaseService.getBusinessAccounts(userId);
+      // Fetch from canonical domain service
+      const result = await getBusinessAccounts(userId);
 
       // Log raw response for debugging
       console.log('📦 Raw API response:', JSON.stringify(result, null, 2));

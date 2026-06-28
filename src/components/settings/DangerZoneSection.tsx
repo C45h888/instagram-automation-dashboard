@@ -3,7 +3,7 @@ import { AlertTriangle, LogOut, Unlink } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { useToast } from '../../hooks/useToast';
 import { useModal } from '../../hooks/useModal';
-import { DatabaseService } from '../../services/databaseservices';
+import { deleteUserData } from '../../../runtime/src-tauri/lib/domains/gdpr/privacy.service';
 
 const DangerZoneSection = forwardRef<HTMLDivElement>((_, ref) => {
   const { user, logout } = useAuthStore();
@@ -24,7 +24,7 @@ const DangerZoneSection = forwardRef<HTMLDivElement>((_, ref) => {
 
     setIsDisconnecting(true);
     try {
-      const result = await DatabaseService.deleteUserData(user.id, { deleteAccounts: true });
+      const result = await deleteUserData(user.id, { deleteAccounts: true });
       if (result.success) {
         toast.success('Instagram account disconnected.', { title: 'Disconnected', duration: 4000 });
       } else {

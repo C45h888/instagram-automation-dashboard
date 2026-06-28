@@ -20,11 +20,12 @@
  *   - POLL_INTERVAL_MS = 15_000
  */
 
-import { AgentService } from '../../services/agentService';
+import { getQueueOverview, retryQueueItem } from '../../../runtime/src-tauri/lib/domains/agent/queue-monitor.service';
 import type { QueueStatusSummary, QueueDLQItem, QueueOverview } from '../../../runtime/src-tauri/lib/contracts/agent/agent-tables.contract';
 import type { UseQueueMonitorResult } from '../../hooks/useQueueMonitor';
 import type { ControllerSlot } from './controller';
 import { DisposeScope, createControllerSlot } from './controller';
+import { retryWithBackoff } from '../../../runtime/src-tauri/lib/substrates/http/retry';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants — preserved verbatim from useQueueMonitor.ts
@@ -32,11 +33,6 @@ import { DisposeScope, createControllerSlot } from './controller';
 
 /** Polling interval — 15s, one clock, one table scan */
 export const POLL_INTERVAL_MS = 15_000;
-
-/** Retry config */
-const MAX_RETRIES = 3;
-const RETRY_BASE_MS = 1000;
-const RETRY_CAP_MS = 30_000;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Internal state — same shape as the React hook's combined return
@@ -69,40 +65,6 @@ const INITIAL_STATE: QueueMonitorInternalState = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Fetch primitive — wraps the service call with retry + exponential backoff
-// ─────────────────────────────────────────────────────────────────────────────
-
-async function fetchWithRetry<T>(
-  fetchFn: () => Promise<{ success: boolean; data?: T | null; error?: string }>,
-  signal?: AbortSignal,
-): Promise<T> {
-  let lastErr: unknown;
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-    try {
-      const result = await fetchFn();
-      if (result.success && result.data !== undefined && result.data !== null) {
-        return result.data;
-      }
-      lastErr = new Error(result.error ?? 'fetch returned null');
-    } catch (err) {
-      lastErr = err;
-    }
-    if (attempt < MAX_RETRIES - 1) {
-      const delay = Math.min(RETRY_BASE_MS * 2 ** attempt, RETRY_CAP_MS);
-      await new Promise<void>((resolve, reject) => {
-        const t = setTimeout(resolve, delay);
-        signal?.addEventListener('abort', () => {
-          clearTimeout(t);
-          reject(new DOMException('Aborted', 'AbortError'));
-        });
-      });
-    }
-  }
-  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Controller factory
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -125,8 +87,8 @@ export function createQueueMonitorController(): {
 
   async function fetchOverview(): Promise<void> {
     try {
-      const data = await fetchWithRetry<QueueOverview>(
-        () => AgentService.getQueueOverview(),
+      const data = await retryWithBackoff<QueueOverview>(
+        () => getQueueOverview(),
         pollAbortRef.current?.signal,
       );
       const dlqItems = data.dlqItems ?? [];
@@ -181,7 +143,7 @@ export function createQueueMonitorController(): {
     }));
 
     try {
-      const result = await AgentService.retryQueueItem(queueId);
+      const result = await retryQueueItem(queueId);
       if (!result.success) {
         throw new Error(result.error ?? 'Failed to retry item');
       }

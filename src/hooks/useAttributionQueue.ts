@@ -8,7 +8,11 @@
 
 import { useState, useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { AgentService } from '../services/agentService'
+import {
+  getAttributionQueue,
+  getAttributionModel,
+  reviewAttribution,
+} from '../../runtime/src-tauri/lib/domains/agent/attribution.service'
 import type {
   AttributionReview,
   AttributionReviewStatus,
@@ -65,7 +69,7 @@ export function useAttributionQueue(businessAccountId: string | null): UseAttrib
     queryFn: async () => {
       if (!businessAccountId) return []
 
-      const result = await AgentService.getAttributionQueue(
+      const result = await getAttributionQueue(
         businessAccountId,
         filters.review_status
       )
@@ -93,7 +97,7 @@ export function useAttributionQueue(businessAccountId: string | null): UseAttrib
     queryKey: ['attribution-queue', 'model', businessAccountId],
     queryFn: async () => {
       if (!businessAccountId) return null
-      const result = await AgentService.getAttributionModel(businessAccountId)
+      const result = await getAttributionModel(businessAccountId)
       // PGRST116 = no row found — not an error for the UI
       if (!result.success && result.error === 'No model found') return null
       if (!result.success) throw new Error(result.error ?? 'Failed to fetch attribution model')
@@ -114,7 +118,7 @@ export function useAttributionQueue(businessAccountId: string | null): UseAttrib
   const submitReview = useCallback(
     async (reviewId: string, status: AttributionReviewStatus): Promise<void> => {
       const reviewedBy = user?.email ?? user?.id ?? 'dashboard_user'
-      const result = await AgentService.reviewAttribution(reviewId, status, reviewedBy)
+      const result = await reviewAttribution(reviewId, status, reviewedBy)
       if (!result.success) throw new Error(result.error ?? 'Failed to submit review')
 
       // Optimistic: update status in cache without a full refetch

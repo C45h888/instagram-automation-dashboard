@@ -26,12 +26,14 @@
  *   - `useAgentHealth(businessAccountId: string | null)`
  */
 
-import { AgentService } from '../../services/agentService';
+import { getAgentStatus, getHeartbeats } from '../../../runtime/src-tauri/lib/domains/agent/health.service';
+import { getSystemAlerts, resolveAlert } from '../../../runtime/src-tauri/lib/domains/agent/alerts.service';
 import { supabase } from '../../../runtime/src-tauri/lib/substrates/supabase/client';
 import type { AgentHeartbeat, AgentHeartbeatStatus, SystemAlert } from '../../../runtime/src-tauri/lib/contracts/agent/agent-tables.contract';
 import type { UseAgentHealthResult } from '../../hooks/useAgentHealth';
 import type { ControllerSlot } from './controller';
 import { DisposeScope, createControllerSlot } from './controller';
+import { retryWithBackoff } from '../../../runtime/src-tauri/lib/substrates/http/retry';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants — preserved verbatim from useAgentHealth.ts
@@ -42,17 +44,8 @@ export const LIVENESS_THRESHOLD_MS = 25 * 60 * 1000;
 
 /** Polling interval — preserved from useAgentHealth.ts:30 */
 export const POLL_INTERVAL_MS = 30_000;
-
-/** Stale time — TanStack Query value, applied here as refetch guard. */
 export const STALE_TIME_MS = POLL_INTERVAL_MS;
-
-/** Garbage collection time for cache invalidation. */
 export const GC_TIME_MS = 2 * POLL_INTERVAL_MS;
-
-/** Retry config — preserved from useAgentHealth.ts */
-export const MAX_RETRIES = 3;
-const RETRY_BASE_MS = 1000;
-const RETRY_CAP_MS = 30_000;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Internal state — same shape as the React hook's combined return
@@ -73,47 +66,6 @@ const INITIAL_STATE: AgentHealthInternalState = {
   isLoading: true,
   error: null,
 };
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Polling primitive — wraps the fetch logic with retry + exponential backoff
-// ─────────────────────────────────────────────────────────────────────────────
-
-async function fetchWithRetry<T>(
-  fetchFn: () => Promise<{ success: boolean; data?: T | null; error?: string }>,
-  signal?: AbortSignal,
-): Promise<T> {
-  let lastErr: unknown;
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-    try {
-      const result = await fetchFn();
-      // ServiceListResponse returns `data: []` on failure; ServiceResponse
-      // (single-item) returns `data: null`. A successful response can still
-      // carry a null body for endpoints that legitimately return empty
-      // (e.g. status with no heartbeat yet). Treat null as a successful
-      // empty/missing result only for list endpoints — the caller is
-      // responsible for choosing what to do with it. For non-null
-      // responses, propagate the value.
-      if (result.success && result.data !== undefined && result.data !== null) {
-        return result.data;
-      }
-      lastErr = new Error(result.error ?? 'fetch returned null');
-    } catch (err) {
-      lastErr = err;
-    }
-    if (attempt < MAX_RETRIES - 1) {
-      const delay = Math.min(RETRY_BASE_MS * 2 ** attempt, RETRY_CAP_MS);
-      await new Promise<void>((resolve, reject) => {
-        const t = setTimeout(resolve, delay);
-        signal?.addEventListener('abort', () => {
-          clearTimeout(t);
-          reject(new DOMException('Aborted', 'AbortError'));
-        });
-      });
-    }
-  }
-  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Controller factory
@@ -145,7 +97,7 @@ export function createAgentHealthController(
 
   async function fetchStatus(): Promise<void> {
     try {
-      const data = await fetchWithRetry(() => AgentService.getAgentStatus());
+      const data = await retryWithBackoff(() => getAgentStatus());
       setState({ agentStatus: data.status, error: null });
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
@@ -156,7 +108,7 @@ export function createAgentHealthController(
 
   async function fetchHeartbeats(): Promise<void> {
     try {
-      const data = await fetchWithRetry(() => AgentService.getHeartbeats(5));
+      const data = await retryWithBackoff(() => getHeartbeats(5));
       setState({ heartbeats: data, error: null });
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
@@ -172,8 +124,8 @@ export function createAgentHealthController(
       return;
     }
     try {
-      const data = await fetchWithRetry(() =>
-        AgentService.getSystemAlerts(businessAccountId, false),
+      const data = await retryWithBackoff(() =>
+        getSystemAlerts(businessAccountId, false),
       );
       setState({ alerts: data, error: null });
     } catch (err) {
@@ -259,7 +211,7 @@ export function createAgentHealthController(
   // optimistic cache removal. Throws on service failure (matches the
   // legacy hook's Promise<void> return contract).
   async function resolveAlert(alertId: string): Promise<void> {
-    const result = await AgentService.resolveAlert(alertId);
+    const result = await resolveAlert(alertId);
     if (!result.success) {
       throw new Error(result.error ?? 'Failed to resolve alert');
     }

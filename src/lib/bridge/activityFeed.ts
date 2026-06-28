@@ -2,12 +2,12 @@
  * Controller for useActivityFeed — Phase 2 bridge layer.
  *
  * Contract preserved (byte-identical to the React hook):
- *   - Initial fetch: AgentService.getAuditLog(50) — one-shot on boot
+ *   - Initial fetch: getAuditLog(50) — one-shot on boot
  *   - staleTime: Infinity — Realtime subscription handles all subsequent updates
  *   - Realtime subscription: INSERT on audit_log, channel 'audit-log-live'
  *   - Client-side filter on details.business_account_id (JSONB, not a column)
  *   - 50-event cap on prepend
- *   - refetch() calls AgentService.getAuditLog(50) directly, re-filters
+ *   - refetch() calls getAuditLog(50) directly, re-filters
  *
  * Framework-agnostic: no React, no TanStack Query.
  * Realtime subscription and manual fetch implemented directly.
@@ -17,7 +17,7 @@
  *   - UseActivityFeedResult interface
  */
 
-import { AgentService } from '../../services/agentService';
+import { getAuditLog } from '../../../runtime/src-tauri/lib/domains/agent/activity-feed.service';
 import { supabase } from '../../../runtime/src-tauri/lib/substrates/supabase/client';
 import type { AuditLogEntry } from '../../../runtime/src-tauri/lib/contracts/agent/agent-tables.contract';
 import type { UseActivityFeedResult } from '../../hooks/useActivityFeed';
@@ -80,7 +80,7 @@ export function createActivityFeedController(
   // Initial fetch
   async function fetchInitial(): Promise<void> {
     try {
-      const result = await AgentService.getAuditLog(MAX_EVENTS);
+      const result = await getAuditLog(MAX_EVENTS);
       if (!result.success) throw new Error(result.error ?? 'Failed to fetch audit log');
       const filtered = filterEvents(result.data as AuditLogEntry[]);
       setState({ events: filtered, isLoading: false, error: null });
@@ -114,9 +114,9 @@ export function createActivityFeedController(
     });
   }
 
-  // Refetch — calls AgentService directly, re-filters
+  // Refetch — calls getAuditLog directly, re-filters
   async function refetch(): Promise<void> {
-    const result = await AgentService.getAuditLog(MAX_EVENTS);
+    const result = await getAuditLog(MAX_EVENTS);
     if (!result.success) throw new Error(result.error ?? 'Failed to fetch audit log');
     const filtered = filterEvents(result.data as AuditLogEntry[]);
     setState({ events: filtered, error: null });
