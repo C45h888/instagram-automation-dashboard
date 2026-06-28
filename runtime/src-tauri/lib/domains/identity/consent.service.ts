@@ -1,8 +1,8 @@
 // =====================================
 // USER CONSENT TRACKING SERVICE
 // =====================================
-// File: src/services/consentService.ts
-// Version: 1.0.0
+// File: runtime/src-tauri/lib/domains/identity/consent.service.ts
+// Version: 1.1.0 (Phase 3c: moved from src/services/consentService.ts)
 // Purpose: Complete GDPR/CCPA compliant consent management
 //
 // Features:
@@ -17,7 +17,7 @@
 // regenerate types with: npm run db:types
 // =====================================
 
-import { supabase } from '../../runtime/src-tauri/lib/substrates/supabase/client';
+import { supabase } from '../../substrates/supabase/client';
 
 // =====================================
 // TYPE DEFINITIONS
