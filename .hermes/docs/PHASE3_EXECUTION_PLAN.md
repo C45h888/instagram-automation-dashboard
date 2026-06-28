@@ -245,7 +245,7 @@ Deliverables:
 
 ## SUB-PHASE 3e — Domain Services
 
-**Goal:** Every `src/services/*.ts` (except those already moved in 3b/3c/3d) lands in its domain home.
+**Goal:** Every `s=rc/services/*.ts` (except those already moved in 3b/3c/3d) lands in its domain home.
 
 **Files moved:**
 
@@ -268,9 +268,7 @@ Deliverables:
 | `src/hooks/useModal.ts` | `runtime/web/src/lib/domains/ui-prompts/modal.hooks.ts` (state stays in `domains/ui-prompts/modal-store.ts`) |
 | `src/hooks/useToast.ts` | `runtime/web/src/lib/domains/ui-prompts/toast.hooks.ts` (state stays in `domains/ui-prompts/toast-store.ts`) |
 | `src/contexts/ModalContext.tsx` (logic portion) | `runtime/web/src/lib/domains/ui-prompts/modal-store.ts` |
-| `src/contexts/ToastContext.tsx` (logic portion) | `runtime/web/src/lib/domains/ui-prompts/toast-store.ts` |
-
-**The split rule (per §5.3 of the contract):** If a `src/hooks/use<X>.ts` file is a thin wrapper over a controller (calls `use<X>` returning the controller's `state()` plus actions), it stays in `src/hooks/` and updates its import paths. If the file contains business logic (calls `supabase.from(...)`, computes derived values, owns a useEffect that does domain work), the business logic moves to `domains/<x>/hooks.ts` and the file becomes a thin React adapter.
+| `src/contexts/ToastContext.tsx` (logic portion) | `runtime/web/src/lib/domains/ui-prompts/toast-store.ts` |.
 
 **Tasks:**
 

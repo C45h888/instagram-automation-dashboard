@@ -17,7 +17,14 @@
 // regenerate types with: npm run db:types
 // =====================================
 
-import { supabase } from '../../substrates/supabase/client';
+import {
+  rpcRecordConsent,
+  rpcGetActiveConsent,
+  rpcRevokeConsent,
+  rpcGetConsentHistory,
+  rpcHasRequiredConsents,
+} from '../../substrates/supabase/query';
+import { getBrowserMetadata } from '../../substrates/platform/browser';
 
 // =====================================
 // TYPE DEFINITIONS
@@ -134,39 +141,30 @@ export class ConsentService {
   static async recordConsent(
     request: ConsentRequest
   ): Promise<ServiceResponse<{ id: string }>> {
-    try {
-      // Call the PostgreSQL function created in migration
-      // Note: Parameter order matches SQL function (required params first, optional params after)
-      const { data, error } = await supabase.rpc('record_consent', {
-        p_user_id: request.userId,
-        p_consent_type: request.consentType,
-        p_consent_given: request.consentGiven,
-        p_ip_address: request.ipAddress,              // Required param (moved up)
-        p_privacy_policy_version: request.privacyPolicyVersion,
-        p_terms_version: request.termsVersion,
-        p_consent_text: request.consentText,
-        p_user_agent: request.userAgent,
-        p_browser_language: request.browserLanguage,
-        p_consent_method: request.consentMethod ?? 'web'
-      });
-
-      if (error) {
-        console.error('Record consent error:', error);
-        throw error;
-      }
-
-      return {
-        success: true,
-        data: { id: data }
-      };
-    } catch (error: any) {
-      console.error('ConsentService.recordConsent failed:', error);
+    const result = await rpcRecordConsent(
+      request.userId,
+      request.consentType,
+      request.consentGiven,
+      request.ipAddress,
+      request.privacyPolicyVersion,
+      request.termsVersion,
+      request.consentText,
+      request.userAgent,
+      request.browserLanguage,
+      request.consentMethod ?? 'web',
+    );
+    if (!result.success) {
+      console.error('ConsentService.recordConsent failed:', result.error);
       return {
         success: false,
         data: null,
-        error: error.message || 'Failed to record consent'
+        error: result.error ?? 'Failed to record consent',
       };
     }
+    // Substrate returns the raw rpc payload (id as string) wrapped in ServiceResponse.
+    // Domain contract: { success, data: { id } }.
+    const id = typeof result.data === 'string' ? result.data : String(result.data ?? '');
+    return { success: true, data: { id } };
   }
 
   /**
@@ -194,23 +192,12 @@ export class ConsentService {
     userId: string,
     consentType: ConsentType
   ): Promise<boolean> {
-    try {
-      // Call the PostgreSQL function created in migration
-      const { data, error } = await supabase.rpc('get_active_consent', {
-        p_user_id: userId,
-        p_consent_type: consentType
-      });
-
-      if (error) {
-        console.error('Check consent error:', error);
-        return false;
-      }
-
-      return data === true;
-    } catch (error: any) {
-      console.error('ConsentService.hasConsent failed:', error);
+    const result = await rpcGetActiveConsent(userId, consentType);
+    if (!result.success) {
+      console.error('ConsentService.hasConsent failed:', result.error);
       return false;
     }
+    return result.data === true;
   }
 
   /**
@@ -239,31 +226,16 @@ export class ConsentService {
     consentType: ConsentType,
     reason?: string
   ): Promise<ServiceResponse<boolean>> {
-    try {
-      // Call the PostgreSQL function created in migration
-      const { data, error } = await supabase.rpc('revoke_consent', {
-        p_user_id: userId,
-        p_consent_type: consentType,
-        p_reason: reason
-      });
-
-      if (error) {
-        console.error('Revoke consent error:', error);
-        throw error;
-      }
-
-      return {
-        success: true,
-        data: data === true
-      };
-    } catch (error: any) {
-      console.error('ConsentService.revokeConsent failed:', error);
+    const result = await rpcRevokeConsent(userId, consentType, reason);
+    if (!result.success) {
+      console.error('ConsentService.revokeConsent failed:', result.error);
       return {
         success: false,
         data: null,
-        error: error.message || 'Failed to revoke consent'
+        error: result.error ?? 'Failed to revoke consent',
       };
     }
+    return { success: true, data: result.data === true };
   }
 
   /**
@@ -293,30 +265,16 @@ export class ConsentService {
     userId: string,
     consentType?: ConsentType
   ): Promise<ServiceResponse<UserConsent[]>> {
-    try {
-      // Call the PostgreSQL function created in migration
-      const { data, error } = await supabase.rpc('get_consent_history', {
-        p_user_id: userId,
-        p_consent_type: consentType
-      });
-
-      if (error) {
-        console.error('Get consent history error:', error);
-        throw error;
-      }
-
-      return {
-        success: true,
-        data: (data || []) as UserConsent[]
-      };
-    } catch (error: any) {
-      console.error('ConsentService.getConsentHistory failed:', error);
+    const result = await rpcGetConsentHistory(userId, consentType);
+    if (!result.success) {
+      console.error('ConsentService.getConsentHistory failed:', result.error);
       return {
         success: false,
         data: null,
-        error: error.message || 'Failed to get consent history'
+        error: result.error ?? 'Failed to get consent history',
       };
     }
+    return { success: true, data: (result.data ?? []) as UserConsent[] };
   }
 
   /**
@@ -344,35 +302,24 @@ export class ConsentService {
   static async checkRequiredConsents(
     userId: string
   ): Promise<ServiceResponse<RequiredConsentsCheck>> {
-    try {
-      // Call the PostgreSQL function created in migration
-      const { data, error } = await supabase.rpc('has_required_consents', {
-        p_user_id: userId
-      });
-
-      if (error) {
-        console.error('Check required consents error:', error);
-        throw error;
-      }
-
-      // Function returns array with single row: {has_all_required, missing_consents}
-      const result = data?.[0];
-
-      return {
-        success: true,
-        data: {
-          hasAll: result?.has_all_required || false,
-          missing: result?.missing_consents || []
-        }
-      };
-    } catch (error: any) {
-      console.error('ConsentService.checkRequiredConsents failed:', error);
+    const result = await rpcHasRequiredConsents(userId);
+    if (!result.success) {
+      console.error('ConsentService.checkRequiredConsents failed:', result.error);
       return {
         success: false,
         data: null,
-        error: error.message || 'Failed to check required consents'
+        error: result.error ?? 'Failed to check required consents',
       };
     }
+    // RPC returns array with single row: {has_all_required, missing_consents}
+    const row = Array.isArray(result.data) ? result.data[0] : undefined;
+    return {
+      success: true,
+      data: {
+        hasAll: row?.has_all_required ?? false,
+        missing: row?.missing_consents ?? [],
+      },
+    };
   }
 
   /**
@@ -477,22 +424,15 @@ export class ConsentService {
   }
 
   /**
-   * Gets browser metadata for consent recording
-   * Helper utility for consent recording
+   * Gets browser metadata for consent recording.
+   *
+   * Thin re-export of `substrates/platform/browser.getBrowserMetadata()`.
+   * Kept as a static method for back-compat with existing callers.
    *
    * @returns Object with userAgent and browserLanguage
-   *
-   * @example
-   * ```typescript
-   * const metadata = ConsentService.getBrowserMetadata();
-   * // { userAgent: 'Mozilla/5.0...', browserLanguage: 'en-US' }
-   * ```
    */
   static getBrowserMetadata(): { userAgent: string; browserLanguage: string } {
-    return {
-      userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
-      browserLanguage: typeof navigator !== 'undefined' ? navigator.language : 'en'
-    };
+    return getBrowserMetadata();
   }
 
   /**

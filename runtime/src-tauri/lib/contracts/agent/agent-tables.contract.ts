@@ -461,7 +461,7 @@ export const AuditLogDetailsSchema = z.object({
 // Maps every table the agent writes to → the operations it performs
 // and the scheduler/trigger that initiates them.
 //
-// Used by the generic get<T>() in domains/agent/agent-queries.service.ts and
+// Used by the generic queryAgentTable<T>() in substrates/supabase/query.ts and
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const AGENT_WRITABLE_TABLES = {

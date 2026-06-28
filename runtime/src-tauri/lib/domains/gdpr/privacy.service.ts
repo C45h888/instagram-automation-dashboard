@@ -8,7 +8,7 @@
  * Consumers should import from here, not from `databaseservices.ts`.
  */
 
-import { supabase } from '../../substrates/supabase/client';
+import { deleteUserDataRows } from '../../substrates/supabase/query';
 import { logAuditEvent } from '../../substrates/supabase/audit';
 
 export interface DeleteUserDataOptions {
@@ -29,68 +29,15 @@ export interface DeleteUserDataResult {
 /**
  * Deletes user data from multiple tables in dependency order.
  * Called from DangerZoneSection (disconnect Instagram account).
+ *
+ * Substrate: substrates/supabase/query.ts → deleteUserDataRows (per-table deletes).
+ * Domain concern (kept here): audit-log emission that records the deletion happened.
  */
 export async function deleteUserData(
   userId: string,
   options: DeleteUserDataOptions = {},
 ): Promise<DeleteUserDataResult> {
-  try {
-    const results: Record<string, boolean> = {};
-
-    // Delete in dependency order
-    if (options.deleteWorkflows) {
-      const { error } = await supabase
-        .from('automation_workflows')
-        .delete()
-        .eq('user_id', userId);
-      results.workflows = !error;
-    }
-
-    if (options.deleteAnalytics) {
-      const { error } = await supabase
-        .from('daily_analytics')
-        .delete()
-        .eq('user_id', userId);
-      results.analytics = !error;
-    }
-
-    if (options.deleteAccounts) {
-      const { error } = await supabase
-        .from('instagram_business_accounts')
-        .delete()
-        .eq('user_id', userId);
-      results.accounts = !error;
-    }
-
-    if (options.deleteNotifications) {
-      const { error } = await supabase
-        .from('notifications')
-        .delete()
-        .eq('user_id', userId);
-      results.notifications = !error;
-    }
-
-    if (options.deleteAuditLogs) {
-      const { error } = await supabase
-        .from('audit_log')
-        .delete()
-        .eq('user_id', userId);
-      results.auditLogs = !error;
-    }
-
-    if (options.deleteProfile) {
-      const { error } = await supabase
-        .from('user_profiles')
-        .delete()
-        .eq('user_id', userId);
-      results.profile = !error;
-    }
-
-    await logAuditEvent('data_deletion_requested', 'delete', { options, results }, { userId });
-
-    return { success: true, results };
-  } catch (error: any) {
-    console.error('Delete user data error:', error);
-    return { success: false, error: error.message, results: {} };
-  }
+  const result = await deleteUserDataRows(userId, options);
+  await logAuditEvent('data_deletion_requested', 'delete', { options, results: result.results }, { userId });
+  return result;
 }

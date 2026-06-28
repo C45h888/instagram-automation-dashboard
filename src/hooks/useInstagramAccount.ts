@@ -8,7 +8,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../stores/authStore';
-import { getBusinessAccounts } from '../../runtime/src-tauri/lib/domains/instagram/business-accounts.service';
+import { getBusinessAccounts } from '../lib/bridge/domains';
 import type { Database } from '../../runtime/src-tauri/lib/substrates/supabase/database.types';
 
 type InstagramBusinessAccount = Database['public']['Tables']['instagram_business_accounts']['Row'];

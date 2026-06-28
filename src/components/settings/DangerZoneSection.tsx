@@ -3,7 +3,7 @@ import { AlertTriangle, LogOut, Unlink } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { useToast } from '../../hooks/useToast';
 import { useModal } from '../../hooks/useModal';
-import { deleteUserData } from '../../../runtime/src-tauri/lib/domains/gdpr/privacy.service';
+import { deleteUserData } from '../../lib/bridge/domains';
 
 const DangerZoneSection = forwardRef<HTMLDivElement>((_, ref) => {
   const { user, logout } = useAuthStore();
