@@ -2191,6 +2191,258 @@
           "type": "string",
           "const": "core:window:deny-unminimize",
           "markdownDescription": "Denies the unminimize command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the config_get_env command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:allow-config-get-env",
+          "markdownDescription": "Enables the config_get_env command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the config_get_runtime_config command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:allow-config-get-runtime-config",
+          "markdownDescription": "Enables the config_get_runtime_config command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the log_emit_event command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:allow-log-emit-event",
+          "markdownDescription": "Enables the log_emit_event command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the log_get_session_log_path command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:allow-log-get-session-log-path",
+          "markdownDescription": "Enables the log_get_session_log_path command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the runtime_get_correlation_id command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:allow-runtime-get-correlation-id",
+          "markdownDescription": "Enables the runtime_get_correlation_id command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the runtime_get_phase command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:allow-runtime-get-phase",
+          "markdownDescription": "Enables the runtime_get_phase command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the runtime_get_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:allow-runtime-get-state",
+          "markdownDescription": "Enables the runtime_get_state command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the session_get_current_view command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:allow-session-get-current-view",
+          "markdownDescription": "Enables the session_get_current_view command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the session_mount_view command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:allow-session-mount-view",
+          "markdownDescription": "Enables the session_mount_view command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the session_unmount_view command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:allow-session-unmount-view",
+          "markdownDescription": "Enables the session_unmount_view command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the settings_get command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:allow-settings-get",
+          "markdownDescription": "Enables the settings_get command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the settings_set_font_scale command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:allow-settings-set-font-scale",
+          "markdownDescription": "Enables the settings_set_font_scale command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the settings_set_theme command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:allow-settings-set-theme",
+          "markdownDescription": "Enables the settings_set_theme command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the settings_set_window_prefs command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:allow-settings-set-window-prefs",
+          "markdownDescription": "Enables the settings_set_window_prefs command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the window_close command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:allow-window-close",
+          "markdownDescription": "Enables the window_close command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the window_focus command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:allow-window-focus",
+          "markdownDescription": "Enables the window_focus command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the window_inner_size command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:allow-window-inner-size",
+          "markdownDescription": "Enables the window_inner_size command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the window_maximize command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:allow-window-maximize",
+          "markdownDescription": "Enables the window_maximize command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the window_minimize command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:allow-window-minimize",
+          "markdownDescription": "Enables the window_minimize command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the window_set_title command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:allow-window-set-title",
+          "markdownDescription": "Enables the window_set_title command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the window_unmaximize command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:allow-window-unmaximize",
+          "markdownDescription": "Enables the window_unmaximize command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the config_get_env command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:deny-config-get-env",
+          "markdownDescription": "Denies the config_get_env command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the config_get_runtime_config command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:deny-config-get-runtime-config",
+          "markdownDescription": "Denies the config_get_runtime_config command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the log_emit_event command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:deny-log-emit-event",
+          "markdownDescription": "Denies the log_emit_event command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the log_get_session_log_path command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:deny-log-get-session-log-path",
+          "markdownDescription": "Denies the log_get_session_log_path command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the runtime_get_correlation_id command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:deny-runtime-get-correlation-id",
+          "markdownDescription": "Denies the runtime_get_correlation_id command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the runtime_get_phase command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:deny-runtime-get-phase",
+          "markdownDescription": "Denies the runtime_get_phase command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the runtime_get_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:deny-runtime-get-state",
+          "markdownDescription": "Denies the runtime_get_state command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the session_get_current_view command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:deny-session-get-current-view",
+          "markdownDescription": "Denies the session_get_current_view command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the session_mount_view command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:deny-session-mount-view",
+          "markdownDescription": "Denies the session_mount_view command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the session_unmount_view command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:deny-session-unmount-view",
+          "markdownDescription": "Denies the session_unmount_view command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the settings_get command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:deny-settings-get",
+          "markdownDescription": "Denies the settings_get command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the settings_set_font_scale command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:deny-settings-set-font-scale",
+          "markdownDescription": "Denies the settings_set_font_scale command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the settings_set_theme command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:deny-settings-set-theme",
+          "markdownDescription": "Denies the settings_set_theme command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the settings_set_window_prefs command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:deny-settings-set-window-prefs",
+          "markdownDescription": "Denies the settings_set_window_prefs command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the window_close command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:deny-window-close",
+          "markdownDescription": "Denies the window_close command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the window_focus command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:deny-window-focus",
+          "markdownDescription": "Denies the window_focus command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the window_inner_size command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:deny-window-inner-size",
+          "markdownDescription": "Denies the window_inner_size command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the window_maximize command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:deny-window-maximize",
+          "markdownDescription": "Denies the window_maximize command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the window_minimize command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:deny-window-minimize",
+          "markdownDescription": "Denies the window_minimize command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the window_set_title command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:deny-window-set-title",
+          "markdownDescription": "Denies the window_set_title command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the window_unmaximize command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:deny-window-unmaximize",
+          "markdownDescription": "Denies the window_unmaximize command without any pre-configured scope."
         }
       ]
     },

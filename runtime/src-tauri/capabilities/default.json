@@ -1,9 +1,30 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default capability set for the automation kernel. Phase 3e pass 5: TS interpretation plane built at src/lib/bridge/ipc.ts (21 typed wrappers), but custom permission files for each Rust command are NOT yet generated. The TS plane exists as future-proofing; no React consumers call into it yet. To actually enable IPC for any Rust command, a follow-up pass needs to generate Tauri 2.x ACL manifest + permission.json files per the Tauri 2.x custom-command pattern.",
+  "description": "Default capability set for the automation kernel. Phase 3e pass 5: kernel plugin registered via Builder (no #[tauri::plugin] proc macro), 21 commands exposed as kernel:allow-* permissions.",
   "windows": ["main"],
   "permissions": [
-    "core:default"
+    "core:default",
+    "kernel:allow-runtime-get-state",
+    "kernel:allow-runtime-get-phase",
+    "kernel:allow-runtime-get-correlation-id",
+    "kernel:allow-window-minimize",
+    "kernel:allow-window-maximize",
+    "kernel:allow-window-unmaximize",
+    "kernel:allow-window-close",
+    "kernel:allow-window-set-title",
+    "kernel:allow-window-focus",
+    "kernel:allow-window-inner-size",
+    "kernel:allow-settings-get",
+    "kernel:allow-settings-set-theme",
+    "kernel:allow-settings-set-font-scale",
+    "kernel:allow-settings-set-window-prefs",
+    "kernel:allow-session-get-current-view",
+    "kernel:allow-session-mount-view",
+    "kernel:allow-session-unmount-view",
+    "kernel:allow-log-emit-event",
+    "kernel:allow-log-get-session-log-path",
+    "kernel:allow-config-get-env",
+    "kernel:allow-config-get-runtime-config"
   ]
 }

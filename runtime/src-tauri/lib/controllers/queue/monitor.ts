@@ -20,12 +20,32 @@
  *   - POLL_INTERVAL_MS = 15_000
  */
 
-import { getQueueOverview, retryQueueItem } from '../../../runtime/src-tauri/lib/domains/agent/queue-monitor.service';
-import type { QueueStatusSummary, QueueDLQItem, QueueOverview } from '../../../runtime/src-tauri/lib/contracts/agent/agent-tables.contract';
-import type { UseQueueMonitorResult } from '../../hooks/useQueueMonitor';
-import type { ControllerSlot } from './controller';
-import { DisposeScope, createControllerSlot } from './controller';
-import { retryWithBackoff } from '../../../runtime/src-tauri/lib/substrates/http/retry';
+import { getQueueOverview, retryQueueItem } from '../../domains/agent/queue-monitor.service';
+import type { QueueStatusSummary, QueueDLQItem, QueueOverview } from '../../contracts/agent/agent-tables.contract';
+// ─────────────────────────────────────────────────────────────────────────────
+// Types — inlined as part of Phase 3h. Originally lived in
+// src/hooks/useQueueMonitor.ts (purged in 3g). The controller is the
+// canonical home; the types travel with it.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import type { QueueStatusSummary, QueueDLQItem } from '../../contracts/agent/agent-tables.contract';
+
+export interface UseQueueMonitorResult {
+  summary: QueueStatusSummary;
+  dlqItems: QueueDLQItem[];
+  totalQueued: number;
+  totalDLQ: number;
+  isLoading: boolean;
+  error: string | null;
+  retryItem: (queueId: string) => Promise<void>;
+  isRetrying: boolean;
+  refetch: () => void;
+}
+
+
+import type { ControllerSlot } from '../primitives/controller';
+import { DisposeScope, createControllerSlot } from '../primitives/controller';
+import { retryWithBackoff } from '../../substrates/http/retry';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants — preserved verbatim from useQueueMonitor.ts

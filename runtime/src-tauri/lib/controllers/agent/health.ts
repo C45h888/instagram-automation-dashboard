@@ -26,14 +26,32 @@
  *   - `useAgentHealth(businessAccountId: string | null)`
  */
 
-import { getAgentStatus, getHeartbeats } from '../../../runtime/src-tauri/lib/domains/agent/health.service';
-import { getSystemAlerts, resolveAlert } from '../../../runtime/src-tauri/lib/domains/agent/alerts.service';
-import { supabase } from '../../../runtime/src-tauri/lib/substrates/supabase/client';
-import type { AgentHeartbeat, AgentHeartbeatStatus, SystemAlert } from '../../../runtime/src-tauri/lib/contracts/agent/agent-tables.contract';
-import type { UseAgentHealthResult } from '../../hooks/useAgentHealth';
-import type { ControllerSlot } from './controller';
-import { DisposeScope, createControllerSlot } from './controller';
-import { retryWithBackoff } from '../../../runtime/src-tauri/lib/substrates/http/retry';
+import { getAgentStatus, getHeartbeats } from '../../domains/agent/health.service';
+import { getSystemAlerts, resolveAlert } from '../../domains/agent/alerts.service';
+import { supabase } from '../../substrates/supabase/client';
+import type { AgentHeartbeat, AgentHeartbeatStatus, SystemAlert } from '../../contracts/agent/agent-tables.contract';
+// ─────────────────────────────────────────────────────────────────────────────
+// Types — inlined as part of Phase 3h. Originally lived in
+// src/hooks/useAgentHealth.ts (purged in 3g). The controller is the
+// canonical home; the types travel with it.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import type { AgentHeartbeat, AgentHeartbeatStatus, SystemAlert } from '../../contracts/agent/agent-tables.contract';
+
+export interface UseAgentHealthResult {
+  heartbeats: AgentHeartbeat[];
+  alerts: SystemAlert[];
+  agentStatus: AgentHeartbeatStatus;
+  isLoading: boolean;
+  error: string | null;
+  resolveAlert: (id: string) => Promise<void>;
+  refetch: () => void;
+}
+
+
+import type { ControllerSlot } from '../primitives/controller';
+import { DisposeScope, createControllerSlot } from '../primitives/controller';
+import { retryWithBackoff } from '../../substrates/http/retry';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants — preserved verbatim from useAgentHealth.ts

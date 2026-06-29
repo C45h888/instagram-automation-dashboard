@@ -89,29 +89,7 @@ impl Runtime {
 
         let context = tauri::generate_context!();
         let app = tauri::Builder::default()
-            .invoke_handler(tauri::generate_handler![
-                crate::ipc::commands::runtime_get_state,
-                crate::ipc::commands::runtime_get_phase,
-                crate::ipc::commands::runtime_get_correlation_id,
-                crate::ipc::commands::window_minimize,
-                crate::ipc::commands::window_maximize,
-                crate::ipc::commands::window_unmaximize,
-                crate::ipc::commands::window_close,
-                crate::ipc::commands::window_set_title,
-                crate::ipc::commands::window_focus,
-                crate::ipc::commands::window_inner_size,
-                crate::ipc::commands::settings_get,
-                crate::ipc::commands::settings_set_theme,
-                crate::ipc::commands::settings_set_font_scale,
-                crate::ipc::commands::settings_set_window_prefs,
-                crate::ipc::commands::session_get_current_view,
-                crate::ipc::commands::session_mount_view,
-                crate::ipc::commands::session_unmount_view,
-                crate::ipc::commands::log_emit_event,
-                crate::ipc::commands::log_get_session_log_path,
-                crate::ipc::commands::config_get_env,
-                crate::ipc::commands::config_get_runtime_config,
-            ])
+            .plugin(crate::ipc::commands::kernel())
             .setup(|app| {
                 // Run the startup sequence. If it fails, the setup
                 // callback returns an error and Tauri's run loop

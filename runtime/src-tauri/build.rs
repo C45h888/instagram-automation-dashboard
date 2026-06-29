@@ -1,3 +1,32 @@
 fn main() {
-    tauri_build::build()
+    tauri_build::try_build(
+        tauri_build::Attributes::default()
+            .plugin(
+                "kernel",
+                tauri_build::InlinedPlugin::new().commands(&[
+                    "runtime_get_state",
+                    "runtime_get_phase",
+                    "runtime_get_correlation_id",
+                    "window_minimize",
+                    "window_maximize",
+                    "window_unmaximize",
+                    "window_close",
+                    "window_set_title",
+                    "window_focus",
+                    "window_inner_size",
+                    "settings_get",
+                    "settings_set_theme",
+                    "settings_set_font_scale",
+                    "settings_set_window_prefs",
+                    "session_get_current_view",
+                    "session_mount_view",
+                    "session_unmount_view",
+                    "log_emit_event",
+                    "log_get_session_log_path",
+                    "config_get_env",
+                    "config_get_runtime_config",
+                ]),
+            ),
+    )
+    .expect("tauri-build failed");
 }

@@ -21,7 +21,7 @@
 
 use std::collections::HashMap;
 
-use tauri::{AppHandle, Manager, State, WebviewWindow};
+use tauri::{plugin::TauriPlugin, AppHandle, Manager, State, WebviewWindow};
 
 use crate::config::loader::Loader;
 use crate::error::runtime_error::RuntimeError;
@@ -495,4 +495,46 @@ mod tests {
         assert!(json.contains("\"event\":\"ui.click\""));
         assert!(json.contains("\"user_action\":\"click\""));
     }
+}
+
+// =============================================================================
+// Tauri plugin — exposes all IPC commands to the WebView capability system.
+// =============================================================================
+
+/// Kernel plugin — exposes all 21 IPC commands to the WebView capability system.
+///
+/// Plugin identifier: `"kernel"`. Permission names are prefixed accordingly
+/// (e.g. `kernel:default`, `kernel:allow-runtime-get-state`).
+///
+/// Note: the `#[tauri::plugin]` proc macro is NOT used here to avoid a
+/// Tauri 2.x proc-macro path-resolution issue with `::tauri::plugin::Builder`.
+/// Instead we construct the plugin directly via `Builder::new()` at the type
+/// level. Permission identifiers are added to `capabilities/default.json`
+/// manually (see step 8).
+pub fn kernel() -> TauriPlugin<tauri::Wry> {
+    tauri::plugin::Builder::new("kernel")
+        .invoke_handler(tauri::generate_handler![
+            runtime_get_state,
+            runtime_get_phase,
+            runtime_get_correlation_id,
+            window_minimize,
+            window_maximize,
+            window_unmaximize,
+            window_close,
+            window_set_title,
+            window_focus,
+            window_inner_size,
+            settings_get,
+            settings_set_theme,
+            settings_set_font_scale,
+            settings_set_window_prefs,
+            session_get_current_view,
+            session_mount_view,
+            session_unmount_view,
+            log_emit_event,
+            log_get_session_log_path,
+            config_get_env,
+            config_get_runtime_config,
+        ])
+        .build()
 }

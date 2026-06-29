@@ -1,30 +1,39 @@
 <script lang="ts">
   // =====================================
   // APP SHELL — Phase 3g
-  // Minimal Svelte surface that exercises the IPC adapter (Phase 3f).
-  // No domain UI is built here. Future phases add components/pages.
+  // Minimal Svelte surface that exercises the IPC adapter (Phase 3f)
+  // and mounts the legal page (Phase 3i) when the URL hash is #legal.
   //
   // Demonstrates:
   //   - isTauriRuntime() detection
   //   - runtimeGetState() IPC call
   //   - runtimeGetCorrelationId() IPC call
   //   - IpcError typed catch
+  //   - Conditional mounting of Legal.svelte
   // =====================================
 
   import { onMount } from 'svelte';
-  import { runtimeGetCorrelationId, runtimeGetState } from '../ipc/commands';
-  import { IpcError, isTauriRuntime } from '../ipc/errors';
+  import { runtimeGetCorrelationId, runtimeGetState } from '../../../runtime/src-tauri/lib/ipc/commands';
+  import { IpcError, isTauriRuntime } from '../../../runtime/src-tauri/lib/ipc/errors';
+  import Legal from './Legal.svelte';
 
   let runtimeDetected = false;
   let phase = 'unknown';
   let correlationId = 'unavailable';
   let ipcError: string | null = null;
   let loaded = false;
+  let showLegal = false;
+
+  function syncHash(): void {
+    showLegal = typeof window !== 'undefined' && window.location.hash === '#legal';
+  }
 
   onMount(async () => {
     runtimeDetected = isTauriRuntime();
     if (!runtimeDetected) {
       loaded = true;
+      syncHash();
+      window.addEventListener('hashchange', syncHash);
       return;
     }
     try {
@@ -35,6 +44,8 @@
       ipcError = e instanceof IpcError ? `[${e.kind}] ${e.message}` : String(e);
     } finally {
       loaded = true;
+      syncHash();
+      window.addEventListener('hashchange', syncHash);
     }
   });
 </script>
@@ -75,4 +86,16 @@
       <li><code>config_*</code> — configuration (2)</li>
     </ul>
   </section>
+
+  <section>
+    <h2>Legal</h2>
+    <p>Phase 3i: content relocated to the kernel tree.</p>
+    <p>
+      <a href="#legal">View Privacy Policy / Terms / Data Deletion</a>
+    </p>
+  </section>
 </main>
+
+{#if showLegal}
+  <Legal />
+{/if}

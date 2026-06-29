@@ -22,10 +22,26 @@
  *   - useContentAnalytics()
  */
 
-import type { MediaData } from '../../../runtime/src-tauri/lib/contracts/identity/permissions.contract';
-import type { UseContentAnalyticsResult } from '../../hooks/useContentAnalytics';
-import type { ControllerSlot } from './controller';
-import { DisposeScope, createControllerSlot } from './controller';
+import type { MediaData } from '../../contracts/identity/permissions.contract';
+// ─────────────────────────────────────────────────────────────────────────────
+// Types — inlined as part of Phase 3h. Originally lived in
+// src/hooks/useContentAnalytics.ts (purged in 3g). The controller is the
+// canonical home; the types travel with it.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import type { MediaData } from '../../contracts/identity/permissions.contract';
+
+export interface UseContentAnalyticsResult {
+  media: MediaData[];
+  analytics: ReturnType<typeof calculateAnalytics>;
+  isLoading: boolean;
+  error: string | null;
+  refetch: () => void;
+}
+
+
+import type { ControllerSlot } from '../primitives/controller';
+import { DisposeScope, createControllerSlot } from '../primitives/controller';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Internal state

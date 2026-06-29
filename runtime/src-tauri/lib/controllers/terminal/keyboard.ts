@@ -21,7 +21,23 @@
  *   - UseTerminalKeyboardResult interface
  */
 
-import type { UseTerminalKeyboardOptions, UseTerminalKeyboardResult } from '../../hooks/useTerminalKeyboard';
+// ─────────────────────────────────────────────────────────────────────────────
+// Types — inlined as part of Phase 3h. Originally lived in
+// src/hooks/useTerminalKeyboard.ts (purged in 3g). The controller is the
+// canonical home; the types travel with it.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface UseTerminalKeyboardOptions {
+  onHistoryUp?: () => void;
+  onHistoryDown?: () => void;
+}
+
+export interface UseTerminalKeyboardResult {
+  register: (element: HTMLElement | null) => void;
+  historyUp: () => string | undefined;
+  historyDown: () => string | undefined;
+  addToHistory: (command: string) => void;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants — preserved verbatim from useTerminalKeyboard.ts

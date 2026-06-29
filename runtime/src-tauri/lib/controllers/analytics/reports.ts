@@ -23,12 +23,31 @@
  *   - UseAnalyticsReportsResult interface
  */
 
-import { getAnalyticsReports } from '../../../runtime/src-tauri/lib/domains/agent/analytics-reports.service';
-import type { AnalyticsReport, ReportType } from '../../../runtime/src-tauri/lib/contracts/agent/agent-tables.contract';
-import type { UseAnalyticsReportsResult } from '../../hooks/useAnalyticsReports';
-import type { ControllerSlot } from './controller';
-import { createControllerSlot, DisposeScope } from './controller';
-import { retryWithBackoff } from '../../../runtime/src-tauri/lib/substrates/http/retry';
+import { getAnalyticsReports } from '../../domains/agent/analytics-reports.service';
+import type { AnalyticsReport, ReportType } from '../../contracts/agent/agent-tables.contract';
+// ─────────────────────────────────────────────────────────────────────────────
+// Types — inlined as part of Phase 3h. Originally lived in
+// src/hooks/useAnalyticsReports.ts (purged in 3g). The controller is the
+// canonical home; the types travel with it.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import type { AnalyticsReport, ReportType } from '../../contracts/agent/agent-tables.contract';
+
+export interface UseAnalyticsReportsResult {
+  reports: AnalyticsReport[];
+  latestDaily: AnalyticsReport | null;
+  latestWeekly: AnalyticsReport | null;
+  isLoading: boolean;
+  error: string | null;
+  reportType: ReportType | 'all';
+  setReportType: (t: ReportType | 'all') => void;
+  refetch: () => void;
+}
+
+
+import type { ControllerSlot } from '../primitives/controller';
+import { createControllerSlot, DisposeScope } from '../primitives/controller';
+import { retryWithBackoff } from '../../substrates/http/retry';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants — preserved verbatim from useAnalyticsReports.ts

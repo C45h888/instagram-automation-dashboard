@@ -17,12 +17,26 @@
  *   - UseActivityFeedResult interface
  */
 
-import { getAuditLog } from '../../../runtime/src-tauri/lib/domains/agent/activity-feed.service';
-import { supabase } from '../../../runtime/src-tauri/lib/substrates/supabase/client';
-import type { AuditLogEntry } from '../../../runtime/src-tauri/lib/contracts/agent/agent-tables.contract';
-import type { UseActivityFeedResult } from '../../hooks/useActivityFeed';
-import type { ControllerSlot } from './controller';
-import { DisposeScope, createControllerSlot } from './controller';
+// ─────────────────────────────────────────────────────────────────────────────
+// Types — inlined as part of Phase 3h. Originally lived in
+// src/hooks/useActivityFeed.ts (purged in 3g). The controller is the
+// canonical home; the types travel with it.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { getAuditLog } from '../../domains/agent/activity-feed.service';
+import { supabase } from '../../substrates/supabase/client';
+import type { AuditLogEntry } from '../../contracts/agent/agent-tables.contract';
+import type { ControllerSlot } from '../primitives/controller';
+import { DisposeScope, createControllerSlot } from '../primitives/controller';
+
+export interface UseActivityFeedResult {
+  events: AuditLogEntry[];
+  isLoading: boolean;
+  error: string | null;
+  refetch: () => Promise<void>;
+}
+
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants

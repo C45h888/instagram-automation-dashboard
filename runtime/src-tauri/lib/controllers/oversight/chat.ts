@@ -26,9 +26,9 @@
  *   - UseOversightChatResult interface
  */
 
-import { supabase } from '../../../runtime/src-tauri/lib/substrates/supabase/client';
-import { LIVENESS_THRESHOLD_MS } from './agentHealth';
-import type { Json } from '../../../runtime/src-tauri/lib/substrates/supabase/database.types';
+import { supabase } from '../../substrates/supabase/client';
+import { LIVENESS_THRESHOLD_MS } from './health';
+import type { Json } from '../../substrates/supabase/database.types';
 import type {
   OversightSession,
   OversightMessage,
@@ -37,11 +37,35 @@ import type {
   AgentDonePayload,
   AgentErrorPayload,
   BackendSSEError,
-} from '../../../runtime/src-tauri/lib/contracts/agent/oversight.contract';
-import { isAgentToken, isAgentDone, isAgentError, getSSEErrorMessage } from '../../../runtime/src-tauri/lib/contracts/agent/oversight.contract';
-import type { UseOversightChatResult } from '../../hooks/useOversightChat';
-import type { ControllerSlot } from './controller';
-import { DisposeScope, createControllerSlot } from './controller';
+} from '../../contracts/agent/oversight.contract';
+import { isAgentToken, isAgentDone, isAgentError, getSSEErrorMessage } from '../../contracts/agent/oversight.contract';
+// ─────────────────────────────────────────────────────────────────────────────
+// Types — inlined as part of Phase 3h. Originally lived in
+// src/hooks/useOversightChat.ts (purged in 3g). The controller is the
+// canonical home; the types travel with it.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import type {
+  OversightSession,
+  OversightMessage,
+} from '../../contracts/agent/oversight.contract';
+
+export interface UseOversightChatResult {
+  sessions: OversightSession[];
+  activeSession: OversightSession | null;
+  messages: OversightMessage[];
+  isStreaming: boolean;
+  streamBuffer: string;
+  error: string | null;
+  startSession: () => Promise<void>;
+  sendMessage: (content: string) => Promise<void>;
+  selectSession: (id: string) => void;
+  closeStream: () => void;
+}
+
+
+import type { ControllerSlot } from '../primitives/controller';
+import { DisposeScope, createControllerSlot } from '../primitives/controller';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants — preserved verbatim from useOversightChat.ts

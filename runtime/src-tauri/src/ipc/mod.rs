@@ -18,4 +18,5 @@ pub mod commands;
 pub mod types;
 
 pub use commands::*;
+pub use commands::kernel;
 pub use types::*;
