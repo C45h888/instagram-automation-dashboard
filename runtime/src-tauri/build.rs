@@ -25,6 +25,12 @@ fn main() {
                     "log_get_session_log_path",
                     "config_get_env",
                     "config_get_runtime_config",
+                    "fsm_publish_transition",
+                    "fsm_read_lineage",
+                    "fsm_rehydrate_state",
+                    "fsm_acquire_worker",
+                    "fsm_release_worker",
+                    "fsm_emit_heartbeat",
                 ]),
             ),
     )

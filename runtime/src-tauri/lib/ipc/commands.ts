@@ -25,6 +25,11 @@ import type {
   LogEmitDTO,
   EnvDTO,
   ConfigDTO,
+  Transition,
+  PublishReceipt,
+  HeartbeatPayload,
+  WorkerLease,
+  DomainSnapshot,
 } from './types';
 import { invoke } from './client';
 
@@ -129,6 +134,41 @@ export const configGetRuntimeConfig = (): Promise<ConfigDTO> =>
   invoke<ConfigDTO>('config_get_runtime_config');
 
 // ─────────────────────────────────────────────────────────────────
-// Total: 21 wrappers — matches generate_handler! list at
-// runtime/src-tauri/src/bootstrap/runtime.rs:92-114
+// FSM Redis transport (6 commands)
+//
+// These are the typed boundary between the renderer-side FSM and the
+// kernel-owned Redis socket. The renderer NEVER opens a socket; it
+// invokes these and the Rust kernel performs the Redis op.
+// ─────────────────────────────────────────────────────────────────
+
+/** Append a transition to the lineage ledger + WebView stream. */
+export const fsmPublishTransition = (transition: Transition): Promise<PublishReceipt> =>
+  invoke<PublishReceipt>('fsm_publish_transition', { transition });
+
+/** Read up to `count` most-recent transitions for a domain from the ledger. */
+export const fsmReadLineage = (
+  domain: string,
+  count: number,
+): Promise<Transition[]> => invoke<Transition[]>('fsm_read_lineage', { domain, count });
+
+/** Snapshot of a domain's state for boot-time FSM rehydrate. */
+export const fsmRehydrateState = (domain: string): Promise<DomainSnapshot> =>
+  invoke<DomainSnapshot>('fsm_rehydrate_state', { domain });
+
+/** Try to acquire a bounded worker lease. `null` when the pool is exhausted. */
+export const fsmAcquireWorker = (): Promise<WorkerLease | null> =>
+  invoke<WorkerLease | null>('fsm_acquire_worker');
+
+/** Release a previously acquired lease. */
+export const fsmReleaseWorker = (lease: WorkerLease): Promise<void> =>
+  invoke<void>('fsm_release_worker', { lease });
+
+/** Emit a liveness heartbeat observation for a domain. */
+export const fsmEmitHeartbeat = (payload: HeartbeatPayload): Promise<void> =>
+  invoke<void>('fsm_emit_heartbeat', { payload });
+
+// ─────────────────────────────────────────────────────────────────
+// Total: 27 wrappers — matches generate_handler! list at
+// runtime/src-tauri/src/ipc/commands.rs (kernel() builder)
+// 21 domain/runtime + 6 FSM Redis transport (FSM-GSC-2)
 // ─────────────────────────────────────────────────────────────────

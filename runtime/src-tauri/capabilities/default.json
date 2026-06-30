@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default capability set for the automation kernel. Phase 3e pass 5: kernel plugin registered via Builder (no #[tauri::plugin] proc macro), 21 commands exposed as kernel:allow-* permissions.",
+  "description": "Default capability set for the automation kernel. Phase 4 / FSM-GSC-2: 27 commands exposed (21 domain/runtime + 6 FSM Redis transport).",
   "windows": ["main"],
   "permissions": [
     "core:default",
@@ -25,6 +25,12 @@
     "kernel:allow-log-emit-event",
     "kernel:allow-log-get-session-log-path",
     "kernel:allow-config-get-env",
-    "kernel:allow-config-get-runtime-config"
+    "kernel:allow-config-get-runtime-config",
+    "kernel:allow-fsm-publish-transition",
+    "kernel:allow-fsm-read-lineage",
+    "kernel:allow-fsm-rehydrate-state",
+    "kernel:allow-fsm-acquire-worker",
+    "kernel:allow-fsm-release-worker",
+    "kernel:allow-fsm-emit-heartbeat"
   ]
 }

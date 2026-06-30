@@ -15,8 +15,10 @@
 //! authoritative contract.
 
 pub mod commands;
+pub mod fsm_commands;
 pub mod types;
 
 pub use commands::*;
 pub use commands::kernel;
+pub use fsm_commands::*;
 pub use types::*;

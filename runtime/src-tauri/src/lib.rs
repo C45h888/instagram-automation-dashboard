@@ -20,6 +20,7 @@ pub mod config;
 pub mod error;
 pub mod ipc;
 pub mod logging;
+pub mod redis;
 pub mod state;
 
 pub use error::runtime_error::{RuntimeError, RuntimeResult};

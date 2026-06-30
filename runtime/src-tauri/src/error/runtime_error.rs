@@ -47,6 +47,9 @@ pub enum RuntimeError {
     #[error("observability error: {message}")]
     ObservabilityError { message: String },
 
+    #[error("redis transport error: {message}")]
+    RedisError { message: String },
+
     #[error("internal runtime error: {message}")]
     InternalRuntimeError { message: String },
 }
@@ -102,6 +105,11 @@ impl RuntimeError {
         Self::ObservabilityError { message: message.into() }
     }
 
+    /// Construct a [`RuntimeError::RedisError`].
+    pub fn redis(message: impl Into<String>) -> Self {
+        Self::RedisError { message: message.into() }
+    }
+
     /// Construct a [`RuntimeError::InternalRuntimeError`].
     pub fn internal(message: impl Into<String>) -> Self {
         Self::InternalRuntimeError { message: message.into() }
@@ -124,6 +132,7 @@ impl RuntimeError {
             Self::PluginError { .. } => "RUNTIME_PLUGIN_ERROR",
             Self::SerializationError { .. } => "RUNTIME_SERIALIZATION_ERROR",
             Self::ObservabilityError { .. } => "RUNTIME_OBSERVABILITY_ERROR",
+            Self::RedisError { .. } => "RUNTIME_REDIS_ERROR",
             Self::InternalRuntimeError { .. } => "RUNTIME_INTERNAL_ERROR",
         }
     }
@@ -141,7 +150,8 @@ impl RuntimeError {
             | Self::PluginError { message }
             | Self::SerializationError { message }
             | Self::ObservabilityError { message }
-            | Self::InternalRuntimeError { message } => message,
+                    | Self::RedisError { message }
+                    | Self::InternalRuntimeError { message } => message,
         }
     }
 }
@@ -228,6 +238,7 @@ mod tests {
             RuntimeError::plugin("x"),
             RuntimeError::serialization("x"),
             RuntimeError::observability("x"),
+            RuntimeError::redis("x"),
             RuntimeError::internal("x"),
         ];
         let mut codes: Vec<&'static str> = variants.iter().map(|v| v.kind()).collect();
@@ -256,6 +267,10 @@ mod tests {
         assert_eq!(
             RuntimeError::observability("x").kind(),
             "RUNTIME_OBSERVABILITY_ERROR"
+        );
+        assert_eq!(
+            RuntimeError::redis("x").kind(),
+            "RUNTIME_REDIS_ERROR"
         );
         assert_eq!(
             RuntimeError::internal("x").kind(),

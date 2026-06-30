@@ -29,6 +29,7 @@ use crate::state::runtime_state::RuntimeState;
 use crate::state::session_state::{SessionState, ViewMetadata};
 use crate::state::settings_state::SettingsState;
 
+use super::fsm_commands::*;
 use super::types::{
     ConfigDTO, EnvDTO, IpcErrorDTO, LogEmitDTO, PhaseDTO, RuntimeStateDTO,
     SettingsStateDTO, ThemeDTO, ViewMetadataDTO, WindowPrefsDTO, WindowSizeDTO,
@@ -501,7 +502,10 @@ mod tests {
 // Tauri plugin — exposes all IPC commands to the WebView capability system.
 // =============================================================================
 
-/// Kernel plugin — exposes all 21 IPC commands to the WebView capability system.
+/// Kernel plugin — exposes all 27 IPC commands to the WebView capability system.
+///
+/// 21 domain/runtime commands from `commands.rs` (Phase 1-3e).
+/// 6 FSM Redis transport commands from `fsm_commands.rs` (Phase 4 / FSM-GSC-2).
 ///
 /// Plugin identifier: `"kernel"`. Permission names are prefixed accordingly
 /// (e.g. `kernel:default`, `kernel:allow-runtime-get-state`).
@@ -535,6 +539,12 @@ pub fn kernel() -> TauriPlugin<tauri::Wry> {
             log_get_session_log_path,
             config_get_env,
             config_get_runtime_config,
+            fsm_publish_transition,
+            fsm_read_lineage,
+            fsm_rehydrate_state,
+            fsm_acquire_worker,
+            fsm_release_worker,
+            fsm_emit_heartbeat,
         ])
         .build()
 }

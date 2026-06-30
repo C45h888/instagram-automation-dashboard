@@ -2205,6 +2205,42 @@
           "markdownDescription": "Enables the config_get_runtime_config command without any pre-configured scope."
         },
         {
+          "description": "Enables the fsm_acquire_worker command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:allow-fsm-acquire-worker",
+          "markdownDescription": "Enables the fsm_acquire_worker command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the fsm_emit_heartbeat command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:allow-fsm-emit-heartbeat",
+          "markdownDescription": "Enables the fsm_emit_heartbeat command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the fsm_publish_transition command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:allow-fsm-publish-transition",
+          "markdownDescription": "Enables the fsm_publish_transition command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the fsm_read_lineage command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:allow-fsm-read-lineage",
+          "markdownDescription": "Enables the fsm_read_lineage command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the fsm_rehydrate_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:allow-fsm-rehydrate-state",
+          "markdownDescription": "Enables the fsm_rehydrate_state command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the fsm_release_worker command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:allow-fsm-release-worker",
+          "markdownDescription": "Enables the fsm_release_worker command without any pre-configured scope."
+        },
+        {
           "description": "Enables the log_emit_event command without any pre-configured scope.",
           "type": "string",
           "const": "kernel:allow-log-emit-event",
@@ -2329,6 +2365,42 @@
           "type": "string",
           "const": "kernel:deny-config-get-runtime-config",
           "markdownDescription": "Denies the config_get_runtime_config command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the fsm_acquire_worker command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:deny-fsm-acquire-worker",
+          "markdownDescription": "Denies the fsm_acquire_worker command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the fsm_emit_heartbeat command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:deny-fsm-emit-heartbeat",
+          "markdownDescription": "Denies the fsm_emit_heartbeat command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the fsm_publish_transition command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:deny-fsm-publish-transition",
+          "markdownDescription": "Denies the fsm_publish_transition command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the fsm_read_lineage command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:deny-fsm-read-lineage",
+          "markdownDescription": "Denies the fsm_read_lineage command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the fsm_rehydrate_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:deny-fsm-rehydrate-state",
+          "markdownDescription": "Denies the fsm_rehydrate_state command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the fsm_release_worker command without any pre-configured scope.",
+          "type": "string",
+          "const": "kernel:deny-fsm-release-worker",
+          "markdownDescription": "Denies the fsm_release_worker command without any pre-configured scope."
         },
         {
           "description": "Denies the log_emit_event command without any pre-configured scope.",

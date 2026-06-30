@@ -110,3 +110,54 @@ export interface LogEmitDTO {
 // ─────────────────────────────────────────────────────────────────
 
 export type { EnvDTO, LoggingConfigDTO, WindowConfigDTO, ConfigDTO, LoggingFormat } from '../contracts/ipc/config.contract';
+
+// ─────────────────────────────────────────────────────────────────
+// FSM Redis transport (6 commands, Phase 4 / FSM-GSC-2)
+//
+// Mirrors `runtime/src-tauri/src/redis/commands.rs` DTOs. Field naming
+// is snake_case to match the Rust side. The substrate adapter
+// (`substrates/redis/`) wraps these types and adds substrate-level
+// error mapping; FSM code should consume the substrate, not this file.
+// ─────────────────────────────────────────────────────────────────
+
+/** FSM transition. RPUSHed to `lineage:ledger:entries` and XADDed to
+ *  `lineage:webview:transitions` in one publish op. */
+export interface Transition {
+  transition_id: string;
+  correlation_id: string;
+  domain: string;
+  from_state: string;
+  to_state: string;
+  event: string;
+  payload: Record<string, unknown> | null;
+  occurred_at_epoch_ms: number;
+}
+
+/** Receipt returned by `fsm_publish_transition`. */
+export interface PublishReceipt {
+  transition_id: string;
+  ledger_index: number;
+  stream_id: string;
+}
+
+/** Heartbeat payload — periodic liveness signal from the FSM. */
+export interface HeartbeatPayload {
+  correlation_id: string;
+  domain: string;
+  state: string;
+  observed_at_epoch_ms: number;
+}
+
+/** Worker lease returned by `fsm_acquire_worker`. */
+export interface WorkerLease {
+  lease_id: string;
+  acquired_at_epoch_ms: number;
+  remaining: number;
+}
+
+/** Snapshot of a domain — current state + recent transitions. */
+export interface DomainSnapshot {
+  domain: string;
+  current_state: string;
+  last_transitions: Transition[];
+}
