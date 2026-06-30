@@ -119,7 +119,7 @@ export const getSSEErrorMessage = (p: AgentErrorPayload | BackendSSEError): stri
 /** Complete state shape managed by useOversightChat */
 export interface OversightChatState {
   sessions:        OversightSession[]
-  activeSessionId: string | null
+  activeSession:   OversightSession | null
   messages:        OversightMessage[]
   isStreaming:     boolean
   /** Accumulates partial 'token' events until 'done' is received */

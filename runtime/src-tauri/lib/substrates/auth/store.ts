@@ -377,84 +377,91 @@ export const useAuthStore = create<AuthState>()(
 );
 
 // =====================================
-// onAuthStateChange listener (module-top, behavior-preserving)
+// onAuthStateChange listener (factory-registered, NOT module-top)
 // =====================================
+//
+// Phase-4 deferral from prior version is now resolved: the listener is
+// no longer registered at module import. Callers (the eventual Svelte
+// adapter) wire it up explicitly via startAuthListener(), which is
+// idempotent — repeated calls return the same registration.
+//
+// Concurrent calls to startAuthListener() produce a single registration.
+// stopAuthListener() unregisters; startAuthListener() after stop
+// re-registers. The store is unaffected.
+
+let authListenerUnsubscribe: (() => void) | null = null;
 
 /**
- * Module-level side effect: registers the auth state change listener
- * when this module is imported. The store updates its slot in response
- * to Supabase's auth events. Mirrors authStore.ts:744-822.
- *
- * Note: today this listener is module-top, meaning it registers on
- * every import. If substrates/auth/store is imported multiple times
- * (e.g. once via src/stores/authStore.ts and once directly somewhere
- * else), the listener registers multiple times. That's a known issue
- * deferred to Phase 4 per PHASE3_EXECUTION_PLAN.md §8.
+ * Start the auth state change listener. Idempotent — calling twice
+ * produces a single subscription. Returns the unsubscribe function so
+ * tests and teardown paths can detach without going through stopAuthListener.
  */
-onAuthStateChange((change) => {
-  const store = useAuthStore.getState();
+export function startAuthListener(): () => void {
+  if (authListenerUnsubscribe) return authListenerUnsubscribe;
 
-  switch (change.event) {
-    case 'INITIAL_SESSION':
-      if (change.providerToken) {
-        console.log('📦 Provider token captured from initial session');
-        useAuthStore.setState({ providerToken: change.providerToken });
-      }
-      if (change.session) {
-        store.checkSession();
-      }
-      break;
+  authListenerUnsubscribe = onAuthStateChange((change) => {
+    const store = useAuthStore.getState();
 
-    case 'SIGNED_IN':
-      if (change.providerToken) {
-        console.log('📦 Provider token captured from OAuth sign-in');
-        console.log(
-          '   Token prefix:',
-          change.providerToken.substring(0, 20) + '...',
-        );
-        useAuthStore.setState({ providerToken: change.providerToken });
-        // Backup to localStorage (per authStore.ts:777 — security-flagged
-        // for Phase 4, preserved for now).
-        try {
-          localStorage.setItem('fb_provider_token', change.providerToken);
-          console.log('   ✅ Provider token backed up to localStorage');
-        } catch {
-          console.warn('   ⚠️ Could not backup provider token to localStorage');
+    switch (change.event) {
+      case 'INITIAL_SESSION':
+        if (change.providerToken) {
+          useAuthStore.setState({ providerToken: change.providerToken });
         }
-      }
-      if (change.session) {
-        store.checkSession();
-      }
-      break;
+        if (change.session) {
+          store.checkSession();
+        }
+        break;
 
-    case 'SIGNED_OUT':
-      useAuthStore.setState({
-        user: null,
-        session: null,
-        token: null,
-        providerToken: null,
-        isAuthenticated: false,
-        isAdmin: false,
-        permissions: [],
-      });
-      try {
-        localStorage.removeItem('fb_provider_token');
-      } catch {
-        // Ignore
-      }
-      break;
+      case 'SIGNED_IN':
+        if (change.providerToken) {
+          useAuthStore.setState({ providerToken: change.providerToken });
+          // Transient only — per auth.contract.ts:96 the provider token
+          // must NOT be persisted to localStorage. Phase-4 security
+          // flag resolved: no localStorage backup, no removeItem on
+          // sign-out.
+        }
+        if (change.session) {
+          store.checkSession();
+        }
+        break;
 
-    case 'TOKEN_REFRESHED':
-      if (change.session) {
+      case 'SIGNED_OUT':
         useAuthStore.setState({
-          session: change.session,
-          token: (change.session as { access_token?: string }).access_token ?? null,
+          user: null,
+          session: null,
+          token: null,
+          providerToken: null,
+          isAuthenticated: false,
+          isAdmin: false,
+          permissions: [],
         });
-      }
-      break;
+        break;
 
-    case 'USER_UPDATED':
-      store.checkSession();
-      break;
+      case 'TOKEN_REFRESHED':
+        if (change.session) {
+          useAuthStore.setState({
+            session: change.session,
+            token: (change.session as { access_token?: string }).access_token ?? null,
+          });
+        }
+        break;
+
+      case 'USER_UPDATED':
+        store.checkSession();
+        break;
+    }
+  });
+
+  return authListenerUnsubscribe;
+}
+
+/**
+ * Stop the auth state change listener. Safe to call when no listener
+ * is registered.
+ */
+export function stopAuthListener(): void {
+  if (authListenerUnsubscribe) {
+    authListenerUnsubscribe();
+    authListenerUnsubscribe = null;
   }
-});
+}

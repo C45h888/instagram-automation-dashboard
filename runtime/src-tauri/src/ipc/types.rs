@@ -13,7 +13,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::config::config::{Environment, LoggingConfig};
+use crate::config::config::{Environment, LoggingFormat};
 use crate::error::runtime_error::RuntimeError;
 use crate::state::runtime_state::RuntimePhase;
 use crate::state::session_state::ViewMetadata;
@@ -294,7 +294,35 @@ impl From<EnvDTO> for Environment {
 pub struct ConfigDTO {
     pub env: EnvDTO,
     pub window: WindowConfigDTO,
-    pub logging: LoggingConfig,
+    pub logging: LoggingConfigDTO,
+}
+
+/// DTO mirror of [`crate::config::config::LoggingConfig`] for the WebView.
+///
+/// The kernel's internal `LoggingConfig` carries a `stdout: bool` toggle
+/// for `StdoutSink`. That field is a kernel implementation detail (whether
+/// the runtime writes logs to stdout in addition to any configured file)
+/// and is intentionally NOT exposed on the IPC wire — the WebView has no
+/// command that mutates logging config, so it has no use for the toggle.
+///
+/// Field set is the canonical contract: `level`, `format`, `file_path`.
+/// Any future addition here MUST also be added to the TS contract at
+/// `lib/contracts/ipc/config.contract.ts` in the same change.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LoggingConfigDTO {
+    pub level: String,
+    pub format: LoggingFormat,
+    pub file_path: Option<String>,
+}
+
+impl From<crate::config::config::LoggingConfig> for LoggingConfigDTO {
+    fn from(l: crate::config::config::LoggingConfig) -> Self {
+        Self {
+            level: l.level,
+            format: l.format,
+            file_path: l.file_path,
+        }
+    }
 }
 
 /// DTO mirror of [`crate::config::config::WindowConfig`].
@@ -326,7 +354,7 @@ impl From<crate::config::config::Config> for ConfigDTO {
         Self {
             env: c.environment.into(),
             window: c.window.into(),
-            logging: c.logging,
+            logging: c.logging.into(),
         }
     }
 }
@@ -391,5 +419,98 @@ mod tests {
         assert_eq!(value["phase"], "ready");
         assert_eq!(value["correlation_id"], "00000000-0000-0000-0000-000000000000");
         assert_eq!(value["booted_at_epoch_secs"], 1_700_000_000u64);
+    }
+
+    /// E.1 drift guard: the `logging` field on `ConfigDTO` serialises as
+    /// `{level, format, file_path}` ONLY. The kernel's internal
+    /// `LoggingConfig` carries a `stdout` toggle that is intentionally
+    /// dropped at the IPC seam — if a future edit accidentally re-exposes
+    /// it, this test fails.
+    ///
+    /// The TS contract at `lib/contracts/ipc/config.contract.ts` mirrors
+    /// this exact field set. Any change here must also update the
+    /// contract, and the field count assertion is what enforces it.
+    #[test]
+    fn logging_config_dto_wire_shape_drops_stdout() {
+        let dto = LoggingConfigDTO {
+            level: "info".into(),
+            format: LoggingFormat::Text,
+            file_path: None,
+        };
+        let value: serde_json::Value = serde_json::to_value(&dto).unwrap();
+        let obj = value.as_object().expect("logging serialises to JSON object");
+
+        // Expected fields are present
+        assert!(obj.contains_key("level"), "wire must include `level`");
+        assert!(obj.contains_key("format"), "wire must include `format`");
+        assert!(obj.contains_key("file_path"), "wire must include `file_path`");
+
+        // Forbidden field is absent
+        assert!(
+            !obj.contains_key("stdout"),
+            "wire must NOT include `stdout` — that is a kernel-internal toggle for StdoutSink; \
+             see ipc/types.rs::LoggingConfigDTO doc comment"
+        );
+
+        // Field count is pinned — adding a new field here requires updating
+        // the TS contract and this assertion in the same commit.
+        assert_eq!(
+            obj.len(),
+            3,
+            "LoggingConfigDTO wire shape changed: expected 3 fields, got {} ({:?})",
+            obj.len(),
+            obj.keys().collect::<Vec<_>>()
+        );
+
+        // format serialises to lowercase per LoggingFormat's rename_all
+        assert_eq!(value["format"], "text");
+
+        // Round-trip preserves the data
+        let json = serde_json::to_string(&dto).unwrap();
+        let back: LoggingConfigDTO = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.level, "info");
+        assert_eq!(back.format, LoggingFormat::Text);
+        assert_eq!(back.file_path, None);
+    }
+
+    /// E.1 drift guard: ConfigDTO logging sub-object uses the DTO shape
+    /// (no stdout), not the kernel's internal LoggingConfig (has stdout).
+    /// End-to-end: build a ConfigDTO from a real Config and assert stdout
+    /// does NOT leak onto the wire.
+    #[test]
+    fn config_dto_wire_does_not_leak_stdout_from_internal_logging_config() {
+        use crate::config::config::{Config, LoggingConfig, WindowConfig};
+
+        let cfg = Config {
+            environment: Environment::Dev,
+            window: WindowConfig::default(),
+            logging: LoggingConfig {
+                level: "debug".into(),
+                format: LoggingFormat::Json,
+                stdout: true,             // kernel-internal toggle
+                file_path: Some("/tmp/kernel.log".into()),
+            },
+            runtime: crate::config::config::RuntimeConfig::default(),
+        };
+        let dto: ConfigDTO = cfg.into();
+        let value: serde_json::Value = serde_json::to_value(&dto).unwrap();
+        let logging = &value["logging"];
+
+        // stdout is dropped at the seam
+        assert!(
+            logging.get("stdout").is_none(),
+            "ConfigDTO.logging.stdout leaked onto wire: {logging}"
+        );
+        // format survives the conversion (lowercase via rename_all)
+        assert_eq!(logging["format"], "json");
+        // level + file_path survive
+        assert_eq!(logging["level"], "debug");
+        assert_eq!(logging["file_path"], "/tmp/kernel.log");
+        // Field count pinned
+        assert_eq!(
+            logging.as_object().unwrap().len(),
+            3,
+            "ConfigDTO.logging wire shape drifted: {logging}"
+        );
     }
 }

@@ -102,33 +102,11 @@ export interface LogEmitDTO {
 
 // ─────────────────────────────────────────────────────────────────
 // Configuration / Environment
+//
+// Re-exported from the canonical contract at
+// `contracts/ipc/config.contract.ts`. Do NOT redefine these shapes
+// here — the contract is the single source of truth, mirrored into
+// Rust at `runtime/src-tauri/src/ipc/types.rs::LoggingConfigDTO`.
 // ─────────────────────────────────────────────────────────────────
 
-export type EnvDTO = 'dev' | 'staging' | 'prod';
-
-export interface WindowConfigDTO {
-  title: string;
-  width: number;
-  height: number;
-  min_width: number;
-  min_height: number;
-  resizable: boolean;
-}
-
-/**
- * Logging configuration — flat field mirror of
- * `crate::config::config::LoggingConfig`. The kernel passes this
- * through unchanged; the WebView only reads it for display.
- */
-export interface LoggingConfigDTO {
-  level: string;
-  file_path: string | null;
-  console: boolean;
-  structured: boolean;
-}
-
-export interface ConfigDTO {
-  env: EnvDTO;
-  window: WindowConfigDTO;
-  logging: LoggingConfigDTO;
-}
+export type { EnvDTO, LoggingConfigDTO, WindowConfigDTO, ConfigDTO, LoggingFormat } from '../contracts/ipc/config.contract';

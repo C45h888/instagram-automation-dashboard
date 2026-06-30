@@ -28,8 +28,13 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface UseTerminalKeyboardOptions {
+  onClearScreen?: () => void;
+  onCancel?: () => void;
+  onEscape?: () => void;
   onHistoryUp?: () => void;
   onHistoryDown?: () => void;
+  inputFocused?: boolean;
+  isStreaming?: boolean;
 }
 
 export interface UseTerminalKeyboardResult {

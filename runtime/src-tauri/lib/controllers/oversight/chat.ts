@@ -32,6 +32,7 @@ import type { Json } from '../../substrates/supabase/database.types';
 import type {
   OversightSession,
   OversightMessage,
+  OversightChatState,
   OversightSSEPayload,
   AgentTokenPayload,
   AgentDonePayload,
@@ -44,11 +45,6 @@ import { isAgentToken, isAgentDone, isAgentError, getSSEErrorMessage } from '../
 // src/hooks/useOversightChat.ts (purged in 3g). The controller is the
 // canonical home; the types travel with it.
 // ─────────────────────────────────────────────────────────────────────────────
-
-import type {
-  OversightSession,
-  OversightMessage,
-} from '../../contracts/agent/oversight.contract';
 
 export interface UseOversightChatResult {
   sessions: OversightSession[];
@@ -84,16 +80,10 @@ const API_BASE =
 // Internal state
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface OversightChatInternalState {
-  sessions: OversightSession[];
-  activeSession: OversightSession | null;
-  messages: OversightMessage[];
-  isStreaming: boolean;
-  streamBuffer: string;
-  error: string | null;
-}
+// OversightChatState is imported from the contract (single canonical shape).
+// Re-exported here so local references resolve to the contract type.
 
-const INITIAL_STATE: OversightChatInternalState = {
+const INITIAL_STATE: OversightChatState = {
   sessions: [],
   activeSession: null,
   messages: [],
@@ -152,7 +142,7 @@ export function createOversightChatController(
   subscribe(listener: (state: UseOversightChatResult) => void): () => void;
   dispose(): void;
 } {
-  const slot: ControllerSlot<OversightChatInternalState> = createControllerSlot(INITIAL_STATE);
+  const slot: ControllerSlot<OversightChatState> = createControllerSlot(INITIAL_STATE);
   const dispose = new DisposeScope();
 
   // ── SSE lifecycle refs ─────────────────────────────────────────────────────
@@ -498,7 +488,7 @@ export function createOversightChatController(
     dispose: () => dispose.dispose(),
   };
 
-  function buildResult(s: OversightChatInternalState): UseOversightChatResult {
+  function buildResult(s: OversightChatState): UseOversightChatResult {
     return {
       sessions: s.sessions,
       activeSession: s.activeSession,
