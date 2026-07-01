@@ -15,8 +15,12 @@
  * Use `substrates/supabase/client.ts` only from this file.
  */
 
+// ─────────────────────────────────────────────────────────────────────────────
+// vite-env types — enables import.meta.env.VITE_* in this compilation unit
+// ─────────────────────────────────────────────────────────────────────────────
+/// <reference types="vite/client" />
+
 import { supabase } from './client';
-import type { ServiceResponse, ServiceListResponse } from './query';
 import type {
   AgentHeartbeat,
   AgentWritableTableName,
@@ -560,7 +564,7 @@ export async function deleteUserDataRows(
  */
 async function callRpc<T>(name: string, params: Record<string, unknown>): Promise<ServiceResponse<T>> {
   try {
-    const { data, error } = await supabase.rpc(name, params);
+    const { data, error } = await supabase.rpc(name as any, params);
     if (error) throw error;
     return okOne<T>(data as T);
   } catch (err) {

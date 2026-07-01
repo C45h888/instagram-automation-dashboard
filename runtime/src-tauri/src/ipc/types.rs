@@ -289,12 +289,13 @@ impl From<EnvDTO> for Environment {
 }
 
 /// Snapshot of [`crate::config::config::Config`] for the WebView.
-/// Includes `env`, `window`, and `logging` sub-objects.
+/// Includes `env`, `window`, `logging`, and `frontend` sub-objects.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConfigDTO {
     pub env: EnvDTO,
     pub window: WindowConfigDTO,
     pub logging: LoggingConfigDTO,
+    pub frontend: FrontendConfigDTO,
 }
 
 /// DTO mirror of [`crate::config::config::LoggingConfig`] for the WebView.
@@ -349,12 +350,43 @@ impl From<crate::config::config::WindowConfig> for WindowConfigDTO {
     }
 }
 
+/// DTO mirror of [`crate::config::config::FrontendConfig`] — the
+/// WebView-facing subset of config that flows to the TS substrate via
+/// `config_get_runtime_config`.
+///
+/// This DTO carries ONLY the values the WebView needs; it intentionally
+/// omits any kernel-internal toggles. The TS contract at
+/// `lib/contracts/ipc/config.contract.ts` mirrors this exact shape.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FrontendConfigDTO {
+    pub api_base_url: String,
+    pub supabase_url: String,
+    pub supabase_tunnel_url: Option<String>,
+    pub supabase_direct_url: Option<String>,
+    pub supabase_anon_key: String,
+    pub admin_email: Option<String>,
+}
+
+impl From<crate::config::config::FrontendConfig> for FrontendConfigDTO {
+    fn from(f: crate::config::config::FrontendConfig) -> Self {
+        Self {
+            api_base_url: f.api_base_url,
+            supabase_url: f.supabase_url,
+            supabase_tunnel_url: f.supabase_tunnel_url,
+            supabase_direct_url: f.supabase_direct_url,
+            supabase_anon_key: f.supabase_anon_key,
+            admin_email: f.admin_email,
+        }
+    }
+}
+
 impl From<crate::config::config::Config> for ConfigDTO {
     fn from(c: crate::config::config::Config) -> Self {
         Self {
             env: c.environment.into(),
             window: c.window.into(),
             logging: c.logging.into(),
+            frontend: c.frontend.into(),
         }
     }
 }
@@ -487,10 +519,11 @@ mod tests {
             logging: LoggingConfig {
                 level: "debug".into(),
                 format: LoggingFormat::Json,
-                stdout: true,             // kernel-internal toggle
+                stdout: true, // kernel-internal toggle
                 file_path: Some("/tmp/kernel.log".into()),
             },
             runtime: crate::config::config::RuntimeConfig::default(),
+            frontend: crate::config::config::FrontendConfig::default(),
         };
         let dto: ConfigDTO = cfg.into();
         let value: serde_json::Value = serde_json::to_value(&dto).unwrap();

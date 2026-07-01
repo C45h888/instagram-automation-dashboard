@@ -28,6 +28,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { devtools } from 'zustand/middleware';
 
 import { hasRoleAtLeast } from '../../domains/identity/service';
+import { recordAuthCall } from './emissions';
 import {
   checkSession as transportCheckSession,
   createTestUser as transportCreateTestUser,
@@ -116,11 +117,19 @@ let devAdminEnv: DevAdminEnv | null = null;
  * call it without going through the store.
  */
 export function setDevAdminEnv(env: DevAdminEnv | null): void {
-  devAdminEnv = env;
+  const t0 = Date.now();
+  try {
+    devAdminEnv = env;
+    recordAuthCall({ op: 'set_dev_admin_env', success: true, latency_ms: Date.now() - t0 });
+  } catch (e) {
+    recordAuthCall({ op: 'set_dev_admin_env', success: false, latency_ms: Date.now() - t0, error_kind: String(e) });
+    throw e;
+  }
 }
 
 /** Getter for the current dev-admin env. The transport reads this. */
 export function getDevAdminEnv(): DevAdminEnv | null {
+  recordAuthCall({ op: 'get_dev_admin_env', success: true });
   return devAdminEnv;
 }
 
@@ -159,50 +168,92 @@ export const useAuthStore = create<AuthState>()(
         // =====================================
 
         login: (user, token) => {
-          set({
-            user,
-            token,
-            isAuthenticated: true,
-            isAdmin: hasRoleAtLeast(user.role, 'admin'),
-            permissions: user.permissions,
-            error: null,
-          });
-          console.log('✅ Legacy login successful:', user.username);
+          const t0 = Date.now();
+          try {
+            set({
+              user,
+              token,
+              isAuthenticated: true,
+              isAdmin: hasRoleAtLeast(user.role, 'admin'),
+              permissions: user.permissions,
+              error: null,
+            });
+            recordAuthCall({ op: 'login', success: true, latency_ms: Date.now() - t0 });
+            console.log('✅ Legacy login successful:', user.username);
+          } catch (e) {
+            recordAuthCall({ op: 'login', success: false, latency_ms: Date.now() - t0, error_kind: String(e) });
+            throw e;
+          }
         },
 
         adminLogin: (user, token) => {
-          set({
-            user,
-            token,
-            isAuthenticated: true,
-            isAdmin: true,
-            permissions: user.permissions,
-            error: null,
-          });
-          console.log('✅ Legacy admin login successful:', user.username);
+          const t0 = Date.now();
+          try {
+            set({
+              user,
+              token,
+              isAuthenticated: true,
+              isAdmin: true,
+              permissions: user.permissions,
+              error: null,
+            });
+            recordAuthCall({ op: 'admin_login', success: true, latency_ms: Date.now() - t0 });
+            console.log('✅ Legacy admin login successful:', user.username);
+          } catch (e) {
+            recordAuthCall({ op: 'admin_login', success: false, latency_ms: Date.now() - t0, error_kind: String(e) });
+            throw e;
+          }
         },
 
         logout: async () => {
-          await get().signOut();
+          const t0 = Date.now();
+          try {
+            await get().signOut();
+            recordAuthCall({ op: 'logout', success: true, latency_ms: Date.now() - t0 });
+          } catch (e) {
+            recordAuthCall({ op: 'logout', success: false, latency_ms: Date.now() - t0, error_kind: String(e) });
+            throw e;
+          }
         },
 
         refreshToken: (token) => {
-          set({ token });
+          const t0 = Date.now();
+          try {
+            set({ token });
+            recordAuthCall({ op: 'refresh_token', success: true, latency_ms: Date.now() - t0 });
+          } catch (e) {
+            recordAuthCall({ op: 'refresh_token', success: false, latency_ms: Date.now() - t0, error_kind: String(e) });
+            throw e;
+          }
         },
 
         updateUser: (updates) => {
-          set((state) => ({
-            user: state.user ? { ...state.user, ...updates } : null,
-          }));
+          const t0 = Date.now();
+          try {
+            set((state) => ({
+              user: state.user ? { ...state.user, ...updates } : null,
+            }));
+            recordAuthCall({ op: 'update_user', success: true, latency_ms: Date.now() - t0 });
+          } catch (e) {
+            recordAuthCall({ op: 'update_user', success: false, latency_ms: Date.now() - t0, error_kind: String(e) });
+            throw e;
+          }
         },
 
         checkAdminAccess: () => {
-          const state = get();
-          return (
-            state.isAuthenticated &&
-            state.isAdmin &&
-            hasRoleAtLeast(state.user?.role, 'admin')
-          );
+          const t0 = Date.now();
+          try {
+            const state = get();
+            const result =
+              state.isAuthenticated &&
+              state.isAdmin &&
+              hasRoleAtLeast(state.user?.role, 'admin');
+            recordAuthCall({ op: 'check_admin_access', success: true, latency_ms: Date.now() - t0 });
+            return result;
+          } catch (e) {
+            recordAuthCall({ op: 'check_admin_access', success: false, latency_ms: Date.now() - t0, error_kind: String(e) });
+            throw e;
+          }
         },
 
         // =====================================
@@ -210,6 +261,7 @@ export const useAuthStore = create<AuthState>()(
         // =====================================
 
         signInWithEmail: async (email, password) => {
+          const t0 = Date.now();
           set({ isLoading: true, error: null });
           try {
             const result = await transportSignInWithEmail(email, password);
@@ -223,6 +275,7 @@ export const useAuthStore = create<AuthState>()(
               isLoading: false,
               error: null,
             });
+            recordAuthCall({ op: 'sign_in_with_email', success: true, latency_ms: Date.now() - t0 });
           } catch (error: unknown) {
             const message = error instanceof Error ? error.message : 'Login failed';
             set({
@@ -233,6 +286,7 @@ export const useAuthStore = create<AuthState>()(
               token: null,
               session: null,
             });
+            recordAuthCall({ op: 'sign_in_with_email', success: false, latency_ms: Date.now() - t0, error_kind: message });
             throw error;
           }
         },
@@ -397,7 +451,11 @@ let authListenerUnsubscribe: (() => void) | null = null;
  * tests and teardown paths can detach without going through stopAuthListener.
  */
 export function startAuthListener(): () => void {
-  if (authListenerUnsubscribe) return authListenerUnsubscribe;
+  const t0 = Date.now();
+  if (authListenerUnsubscribe) {
+    recordAuthCall({ op: 'start_listener', success: true, latency_ms: Date.now() - t0 });
+    return authListenerUnsubscribe;
+  }
 
   authListenerUnsubscribe = onAuthStateChange((change) => {
     const store = useAuthStore.getState();
@@ -460,8 +518,10 @@ export function startAuthListener(): () => void {
  * is registered.
  */
 export function stopAuthListener(): void {
+  const t0 = Date.now();
   if (authListenerUnsubscribe) {
     authListenerUnsubscribe();
     authListenerUnsubscribe = null;
+    recordAuthCall({ op: 'stop_listener', success: true, latency_ms: Date.now() - t0 });
   }
 }

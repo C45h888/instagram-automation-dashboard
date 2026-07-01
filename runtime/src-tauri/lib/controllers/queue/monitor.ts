@@ -22,13 +22,7 @@
 
 import { getQueueOverview, retryQueueItem } from '../../domains/agent/queue-monitor.service';
 import type { QueueStatusSummary, QueueDLQItem, QueueOverview } from '../../contracts/agent/agent-tables.contract';
-// ─────────────────────────────────────────────────────────────────────────────
-// Types — inlined as part of Phase 3h. Originally lived in
-// src/hooks/useQueueMonitor.ts (purged in 3g). The controller is the
-// canonical home; the types travel with it.
-// ─────────────────────────────────────────────────────────────────────────────
-
-import type { QueueStatusSummary, QueueDLQItem } from '../../contracts/agent/agent-tables.contract';
+import { recordQueueMonitorCall } from './monitor.emissions';
 
 export interface UseQueueMonitorResult {
   summary: QueueStatusSummary;
@@ -175,7 +169,14 @@ export function createQueueMonitorController(): {
   }
 
   function refetch(): void {
-    void fetchOverview();
+    const t0 = Date.now();
+    try {
+      void fetchOverview();
+      recordQueueMonitorCall({ op: 'refetch', success: true, latency_ms: Date.now() - t0 });
+    } catch (e) {
+      recordQueueMonitorCall({ op: 'refetch', success: false, latency_ms: Date.now() - t0, error_kind: String(e) });
+      throw e;
+    }
   }
 
   // Boot

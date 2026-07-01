@@ -25,13 +25,7 @@
 
 import { getAnalyticsReports } from '../../domains/agent/analytics-reports.service';
 import type { AnalyticsReport, ReportType } from '../../contracts/agent/agent-tables.contract';
-// ─────────────────────────────────────────────────────────────────────────────
-// Types — inlined as part of Phase 3h. Originally lived in
-// src/hooks/useAnalyticsReports.ts (purged in 3g). The controller is the
-// canonical home; the types travel with it.
-// ─────────────────────────────────────────────────────────────────────────────
-
-import type { AnalyticsReport, ReportType } from '../../contracts/agent/agent-tables.contract';
+import { recordAnalyticsReportsCall } from './reports.emissions';
 
 export interface UseAnalyticsReportsResult {
   reports: AnalyticsReport[];
@@ -153,7 +147,14 @@ export function createAnalyticsReportsController(
   }
 
   function refetch(): void {
-    void fetchReports();
+    const t0 = Date.now();
+    try {
+      void fetchReports();
+      recordAnalyticsReportsCall({ op: 'refetch', success: true, latency_ms: Date.now() - t0 });
+    } catch (e) {
+      recordAnalyticsReportsCall({ op: 'refetch', success: false, latency_ms: Date.now() - t0, error_kind: String(e) });
+      throw e;
+    }
   }
 
   // Boot

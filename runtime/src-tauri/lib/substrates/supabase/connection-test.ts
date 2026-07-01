@@ -7,6 +7,7 @@
  */
 
 import { supabase } from './client';
+import { recordSupabaseCall } from './emissions';
 
 export interface ConnectionTestResult {
   connected: boolean;
@@ -22,10 +23,17 @@ export interface ConnectionTestResult {
 
 // Read the URL the same way client.ts does. If client.ts loaded successfully,
 // these values are guaranteed non-null because client.ts throws on missing env.
+// Cast to a permissive type because vite/client.d.ts doesn't enumerate every
+// VITE_* env var — only the canonical `import.meta.env` keys are typed.
+const env = import.meta.env as unknown as {
+  VITE_SUPABASE_URL?: string;
+  VITE_SUPABASE_TUNNEL_URL?: string;
+  VITE_SUPABASE_DIRECT_URL?: string;
+};
 const supabaseUrl =
-  import.meta.env.VITE_SUPABASE_URL ||
-  import.meta.env.VITE_SUPABASE_TUNNEL_URL ||
-  import.meta.env.VITE_SUPABASE_DIRECT_URL ||
+  env.VITE_SUPABASE_URL ||
+  env.VITE_SUPABASE_TUNNEL_URL ||
+  env.VITE_SUPABASE_DIRECT_URL ||
   '';
 
 export const testSupabaseConnection = async (): Promise<ConnectionTestResult> => {
@@ -42,6 +50,12 @@ export const testSupabaseConnection = async (): Promise<ConnectionTestResult> =>
     if (error) {
       // eslint-disable-next-line no-console
       console.error('❌ Supabase connection error:', error);
+      recordSupabaseCall({
+        op: 'connection_test',
+        success: false,
+        latency_ms: Date.now() - startTime,
+        error_kind: error.message,
+      });
       return {
         connected: false,
         error: error.message,
@@ -55,6 +69,12 @@ export const testSupabaseConnection = async (): Promise<ConnectionTestResult> =>
 
     // eslint-disable-next-line no-console
     console.log('✅ Frontend Supabase connected successfully');
+
+    recordSupabaseCall({
+      op: 'connection_test',
+      success: true,
+      latency_ms: responseTime,
+    });
 
     return {
       connected: true,
@@ -72,6 +92,12 @@ export const testSupabaseConnection = async (): Promise<ConnectionTestResult> =>
     const message = err instanceof Error ? err.message : String(err);
     // eslint-disable-next-line no-console
     console.error('❌ Connection test failed:', err);
+    recordSupabaseCall({
+      op: 'connection_test',
+      success: false,
+      latency_ms: Date.now() - startTime,
+      error_kind: message,
+    });
     return {
       connected: false,
       error: message,

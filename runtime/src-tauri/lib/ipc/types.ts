@@ -109,7 +109,7 @@ export interface LogEmitDTO {
 // Rust at `runtime/src-tauri/src/ipc/types.rs::LoggingConfigDTO`.
 // ─────────────────────────────────────────────────────────────────
 
-export type { EnvDTO, LoggingConfigDTO, WindowConfigDTO, ConfigDTO, LoggingFormat } from '../contracts/ipc/config.contract';
+export type { EnvDTO, LoggingConfigDTO, WindowConfigDTO, ConfigDTO, LoggingFormat, FrontendConfigDTO } from '../contracts/ipc/config.contract';
 
 // ─────────────────────────────────────────────────────────────────
 // FSM Redis transport (6 commands, Phase 4 / FSM-GSC-2)

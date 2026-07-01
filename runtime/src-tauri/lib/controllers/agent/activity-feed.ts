@@ -28,6 +28,7 @@ import { supabase } from '../../substrates/supabase/client';
 import type { AuditLogEntry } from '../../contracts/agent/agent-tables.contract';
 import type { ControllerSlot } from '../primitives/controller';
 import { DisposeScope, createControllerSlot } from '../primitives/controller';
+import { recordActivityFeedCall } from './activity-feed.emissions';
 
 export interface UseActivityFeedResult {
   events: AuditLogEntry[];
@@ -130,10 +131,17 @@ export function createActivityFeedController(
 
   // Refetch — calls getAuditLog directly, re-filters
   async function refetch(): Promise<void> {
-    const result = await getAuditLog(MAX_EVENTS);
-    if (!result.success) throw new Error(result.error ?? 'Failed to fetch audit log');
-    const filtered = filterEvents(result.data as AuditLogEntry[]);
-    setState({ events: filtered, error: null });
+    const t0 = Date.now();
+    try {
+      const result = await getAuditLog(MAX_EVENTS);
+      if (!result.success) throw new Error(result.error ?? 'Failed to fetch audit log');
+      const filtered = filterEvents(result.data as AuditLogEntry[]);
+      setState({ events: filtered, error: null });
+      recordActivityFeedCall({ op: 'refetch', success: true, latency_ms: Date.now() - t0 });
+    } catch (e) {
+      recordActivityFeedCall({ op: 'refetch', success: false, latency_ms: Date.now() - t0, error_kind: String(e) });
+      throw e;
+    }
   }
 
   // Boot

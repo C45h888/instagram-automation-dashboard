@@ -11,6 +11,7 @@
 import { queryAgentHeartbeats } from '../../substrates/supabase/query';
 import { fetchWithRetry } from '../../substrates/http/retry';
 import { getCurrentSession } from '../../substrates/auth/transports/supabase';
+import { getApiBaseUrl } from '../../substrates/config';
 import type { ServiceResponse, ServiceListResponse } from '../../substrates/supabase/query';
 import type { AgentHeartbeat, AgentHeartbeatStatus } from '../../contracts/agent/agent-tables.contract';
 
@@ -28,7 +29,7 @@ export async function getAgentStatus(): Promise<ServiceResponse<{
   agent_id: string | null;
 }>> {
   try {
-    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
+    const apiBaseUrl = getApiBaseUrl();
     const session = await getCurrentSession();
     const headers: Record<string, string> = session?.access_token
       ? { Authorization: `Bearer ${session.access_token}` }

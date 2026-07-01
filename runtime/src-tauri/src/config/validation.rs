@@ -41,5 +41,13 @@ pub fn validate(config: &Config) -> RuntimeResult<()> {
             "logging.level must not be empty",
         ));
     }
+    // Frontend config is validated — required fields must be present.
+    // api_base_url defaults to a safe fallback so we only error if it
+    // is explicitly set to empty string (meaning misconfigured).
+    if config.frontend.api_base_url.is_empty() {
+        return Err(RuntimeError::config(
+            "frontend.api_base_url must not be empty; set a valid URL or omit to use the default",
+        ));
+    }
     Ok(())
 }

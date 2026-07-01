@@ -5,7 +5,8 @@
  *   - EnvDTO
  *   - ConfigDTO
  *   - WindowConfigDTO
- *   - LoggingConfig (mirrored from runtime config)
+ *   - LoggingConfigDTO
+ *   - FrontendConfigDTO (re-exported from frontend-config.contract.ts)
  */
 
 export type EnvDTO = 'dev' | 'staging' | 'prod';
@@ -38,8 +39,14 @@ export interface LoggingConfigDTO {
   file_path: string | null;
 }
 
+// Re-exported from the canonical contract at `frontend-config.contract.ts`.
+// Do NOT redefine FrontendConfigDTO here — the contract lives in its own file
+// and is mirrored into Rust at `runtime/src-tauri/src/ipc/types.rs::FrontendConfigDTO`.
+export type { FrontendConfigDTO } from './frontend-config.contract';
+
 export interface ConfigDTO {
   env: EnvDTO;
   window: WindowConfigDTO;
   logging: LoggingConfigDTO;
+  frontend: FrontendConfigDTO;
 }

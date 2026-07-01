@@ -13,6 +13,8 @@
  *     (against the window environment), so it belongs here.
  */
 
+import { recordPlatformCall } from './emissions';
+
 export interface BrowserMetadata {
   userAgent: string;
   browserLanguage: string;
@@ -24,8 +26,25 @@ export interface BrowserMetadata {
  * (e.g. in non-browser environments like Tauri Rust commands or Node tests).
  */
 export function getBrowserMetadata(): BrowserMetadata {
-  return {
-    userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
-    browserLanguage: typeof navigator !== 'undefined' ? navigator.language : 'en',
-  };
+  const t0 = Date.now();
+  try {
+    const result = {
+      userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
+      browserLanguage: typeof navigator !== 'undefined' ? navigator.language : 'en',
+    };
+    recordPlatformCall({
+      op: 'get_browser_metadata',
+      success: true,
+      latency_ms: Date.now() - t0,
+    });
+    return result;
+  } catch (e) {
+    recordPlatformCall({
+      op: 'get_browser_metadata',
+      success: false,
+      latency_ms: Date.now() - t0,
+      error_kind: String(e),
+    });
+    throw e;
+  }
 }

@@ -11,6 +11,7 @@
 
 import { supabase } from './client';
 import type { Database } from './database.types';
+import { recordSupabaseCall } from './emissions';
 
 type Json = Database['public']['Tables']['audit_log']['Insert']['details'];
 
@@ -30,6 +31,7 @@ export const logAuditEvent = async (
   details?: unknown,
   options: AuditEventOptions = {},
 ): Promise<void> => {
+  const t0 = Date.now();
   try {
     const detailPayload: Json =
       details === undefined || details === null
@@ -56,9 +58,27 @@ export const logAuditEvent = async (
     if (error) {
       // eslint-disable-next-line no-console
       console.error('Audit log error:', error);
+      recordSupabaseCall({
+        op: 'audit_log',
+        success: false,
+        latency_ms: Date.now() - t0,
+        error_kind: error.message,
+      });
+    } else {
+      recordSupabaseCall({
+        op: 'audit_log',
+        success: true,
+        latency_ms: Date.now() - t0,
+      });
     }
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error('Failed to log audit event:', err);
+    recordSupabaseCall({
+      op: 'audit_log',
+      success: false,
+      latency_ms: Date.now() - t0,
+      error_kind: String(err),
+    });
   }
 };

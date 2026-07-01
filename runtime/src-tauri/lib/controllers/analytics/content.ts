@@ -23,17 +23,21 @@
  */
 
 import type { MediaData } from '../../contracts/identity/permissions.contract';
-// ─────────────────────────────────────────────────────────────────────────────
-// Types — inlined as part of Phase 3h. Originally lived in
-// src/hooks/useContentAnalytics.ts (purged in 3g). The controller is the
-// canonical home; the types travel with it.
-// ─────────────────────────────────────────────────────────────────────────────
+import { getApiBaseUrl } from '../../substrates/config';
+import { recordAnalyticsContentCall } from './content.emissions';
 
-import type { MediaData } from '../../contracts/identity/permissions.contract';
+export interface ContentAnalytics {
+  totalPosts: number;
+  totalLikes: number;
+  totalComments: number;
+  totalReach: number;
+  avgEngagementRate: number;
+  topPerformer: MediaData | null;
+}
 
 export interface UseContentAnalyticsResult {
   media: MediaData[];
-  analytics: ReturnType<typeof calculateAnalytics>;
+  analytics: ContentAnalytics;
   isLoading: boolean;
   error: string | null;
   refetch: () => void;
@@ -108,9 +112,13 @@ export function createContentAnalyticsController(
   const slot: ControllerSlot<ContentAnalyticsInternalState> = createControllerSlot(INITIAL_STATE);
   const dispose = new DisposeScope();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const apiBaseUrl = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_BASE_URL)
-    || 'https://api.888intelligenceautomation.in';
+  const apiBaseUrl = (() => {
+  try {
+    return getApiBaseUrl();
+  } catch {
+    return 'https://api.888intelligenceautomation.in';
+  }
+})();
 
   function errorFrom(e: unknown): string {
     if (e instanceof Error) return e.message;
@@ -163,7 +171,14 @@ export function createContentAnalyticsController(
   }
 
   function refetch(): void {
-    void fetchMedia();
+    const t0 = Date.now();
+    try {
+      void fetchMedia();
+      recordAnalyticsContentCall({ op: 'refetch', success: true, latency_ms: Date.now() - t0 });
+    } catch (e) {
+      recordAnalyticsContentCall({ op: 'refetch', success: false, latency_ms: Date.now() - t0, error_kind: String(e) });
+      throw e;
+    }
   }
 
   // Boot — fetch immediately on construction (equivalent to useEffect mount)

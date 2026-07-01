@@ -30,13 +30,7 @@ import { getAgentStatus, getHeartbeats } from '../../domains/agent/health.servic
 import { getSystemAlerts, resolveAlert } from '../../domains/agent/alerts.service';
 import { supabase } from '../../substrates/supabase/client';
 import type { AgentHeartbeat, AgentHeartbeatStatus, SystemAlert } from '../../contracts/agent/agent-tables.contract';
-// ─────────────────────────────────────────────────────────────────────────────
-// Types — inlined as part of Phase 3h. Originally lived in
-// src/hooks/useAgentHealth.ts (purged in 3g). The controller is the
-// canonical home; the types travel with it.
-// ─────────────────────────────────────────────────────────────────────────────
-
-import type { AgentHeartbeat, AgentHeartbeatStatus, SystemAlert } from '../../contracts/agent/agent-tables.contract';
+import { recordAgentHealthCall } from './health.emissions';
 
 export interface UseAgentHealthResult {
   heartbeats: AgentHeartbeat[];
@@ -228,7 +222,7 @@ export function createAgentHealthController(
   // Resolve alert mutation — preserved semantics: service call then
   // optimistic cache removal. Throws on service failure (matches the
   // legacy hook's Promise<void> return contract).
-  async function resolveAlert(alertId: string): Promise<void> {
+  async function doResolveAlert(alertId: string): Promise<void> {
     const result = await resolveAlert(alertId);
     if (!result.success) {
       throw new Error(result.error ?? 'Failed to resolve alert');
@@ -237,7 +231,14 @@ export function createAgentHealthController(
   }
 
   function refetch(): void {
-    void refetchAll();
+    const t0 = Date.now();
+    try {
+      void refetchAll();
+      recordAgentHealthCall({ op: 'refetch', success: true, latency_ms: Date.now() - t0 });
+    } catch (e) {
+      recordAgentHealthCall({ op: 'refetch', success: false, latency_ms: Date.now() - t0, error_kind: String(e) });
+      throw e;
+    }
   }
 
   // Boot.
@@ -258,12 +259,12 @@ export function createAgentHealthController(
         agentStatus: s.agentStatus,
         isLoading: s.isLoading,
         error: s.error,
-        resolveAlert,
+        resolveAlert: doResolveAlert,
         refetch,
       };
     },
-    subscribe: (listener) => slot.subscribe((s) => listener(buildResult(s, resolveAlert, refetch))),
-    resolveAlert,
+    subscribe: (listener) => slot.subscribe((s) => listener(buildResult(s, doResolveAlert, refetch))),
+    resolveAlert: doResolveAlert,
     refetch,
     dispose: () => dispose.dispose(),
   };

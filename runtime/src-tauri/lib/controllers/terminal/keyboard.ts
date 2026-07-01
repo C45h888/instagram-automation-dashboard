@@ -21,11 +21,13 @@
  *   - UseTerminalKeyboardResult interface
  */
 
+// The React hook (useTerminalKeyboard.ts) is refactored to consume this
+// controller. Public exports unchanged:
+//   - UseTerminalKeyboardOptions interface
+//   - UseTerminalKeyboardResult interface
 // ─────────────────────────────────────────────────────────────────────────────
-// Types — inlined as part of Phase 3h. Originally lived in
-// src/hooks/useTerminalKeyboard.ts (purged in 3g). The controller is the
-// canonical home; the types travel with it.
-// ─────────────────────────────────────────────────────────────────────────────
+
+import { recordTerminalKeyboardCall } from './keyboard.emissions';
 
 export interface UseTerminalKeyboardOptions {
   onClearScreen?: () => void;
@@ -172,22 +174,42 @@ export function createTerminalKeyboardController(
   }
 
   function addToHistory(command: string): void {
-    if (!command.trim()) return;
-    if (history[history.length - 1] === command) return;
-    history.push(command);
-    if (history.length > MAX_HISTORY) history.shift();
-    historyIndex = history.length;
-    persist();
+    const t0 = Date.now();
+    try {
+      if (!command.trim()) {
+        recordTerminalKeyboardCall({ op: 'add_to_history', success: true, latency_ms: Date.now() - t0 });
+        return;
+      }
+      if (history[history.length - 1] === command) {
+        recordTerminalKeyboardCall({ op: 'add_to_history', success: true, latency_ms: Date.now() - t0 });
+        return;
+      }
+      history.push(command);
+      if (history.length > MAX_HISTORY) history.shift();
+      historyIndex = history.length;
+      persist();
+      recordTerminalKeyboardCall({ op: 'add_to_history', success: true, latency_ms: Date.now() - t0 });
+    } catch (e) {
+      recordTerminalKeyboardCall({ op: 'add_to_history', success: false, latency_ms: Date.now() - t0, error_kind: String(e) });
+      throw e;
+    }
   }
 
   // ── Public API ─────────────────────────────────────────────────────────────
 
   function register(element: HTMLElement | null): void {
-    if (currentElement && registeredListener) {
-      currentElement.removeEventListener('keydown', registeredListener);
+    const t0 = Date.now();
+    try {
+      if (currentElement && registeredListener) {
+        currentElement.removeEventListener('keydown', registeredListener);
+      }
+      currentElement = element;
+      rebuildListener();
+      recordTerminalKeyboardCall({ op: 'register', success: true, latency_ms: Date.now() - t0 });
+    } catch (e) {
+      recordTerminalKeyboardCall({ op: 'register', success: false, latency_ms: Date.now() - t0, error_kind: String(e) });
+      throw e;
     }
-    currentElement = element;
-    rebuildListener();
   }
 
   function updateOptions(newOpts: UseTerminalKeyboardOptions): void {

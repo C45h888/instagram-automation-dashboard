@@ -106,6 +106,10 @@ mod tests {
             [runtime]
             product_name = "test"
             identifier = "com.test"
+            [frontend]
+            api_base_url = "https://api.888intelligenceautomation.in"
+            supabase_url = "https://placeholder.supabase.co"
+            supabase_anon_key = "placeholder-anon-key"
             "#
         )
         .unwrap();
@@ -123,10 +127,13 @@ mod tests {
                 width: 100,
                 height: 100,
                 min_width: 200,
-                ..Default::default()
+                min_height: 200,
+                title: "bad".into(),
+                resizable: true,
             },
             logging: Default::default(),
             runtime: Default::default(),
+            frontend: Default::default(),
         };
         let err = validation::validate(&bad).unwrap_err();
         assert_eq!(err.kind(), "RUNTIME_CONFIG_ERROR");

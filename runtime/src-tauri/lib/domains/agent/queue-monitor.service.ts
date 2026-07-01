@@ -20,13 +20,11 @@ import { queryPostQueueOverview } from '../../substrates/supabase/query';
 import { isValidUUID } from '../../substrates/supabase/query';
 import { fetchWithRetry } from '../../substrates/http/retry';
 import { getCurrentSession } from '../../substrates/auth/transports/supabase';
+import { getApiBaseUrl } from '../../substrates/config';
 import type { ServiceResponse } from '../../substrates/supabase/query';
 import type { QueueOverview, QueueRetryResult } from '../../contracts/agent/agent-tables.contract';
 
-/** API base URL for backend Express routes (retry only) */
-function getApiBase(): string {
-  return import.meta.env.VITE_API_BASE_URL || 'https://api.888intelligenceautomation.in';
-}
+/** API base URL for backend Express routes (retry only) — provided by the kernel config substrate. */
 
 /** Single query replacing getQueueStatus + getQueueDLQ.
  *  Substrate: substrates/supabase/query.ts → queryPostQueueOverview */
@@ -45,7 +43,7 @@ export async function retryQueueItem(queueId: string): Promise<ServiceResponse<Q
       return { success: false, data: null, error: 'Not authenticated' };
     }
 
-    const response = await fetchWithRetry(`${getApiBase()}/api/instagram/post-queue/retry`, {
+    const response = await fetchWithRetry(`${getApiBaseUrl()}/api/instagram/post-queue/retry`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

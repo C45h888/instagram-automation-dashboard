@@ -6,6 +6,45 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Frontend-facing configuration values. Exposed to the WebView via IPC
+/// so that all WebView code reads config from the kernel rather than
+/// directly from Vite environment variables.
+///
+/// This separates **where config comes from** (kernel: TOML + env vars)
+/// from **who consumes it** (kernel + WebView via IPC).
+///
+/// Defaults are safe dev-mode fallbacks. Production values come from
+/// the TOML config file or environment variables resolved at boot.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FrontendConfig {
+    /// Base URL for the backend REST API (oversight chat, health,
+    /// queue-monitor, content analytics).
+    pub api_base_url: String,
+    /// Primary Supabase project URL.
+    pub supabase_url: String,
+    /// Optional tunnel URL for browser-based Supabase access.
+    pub supabase_tunnel_url: Option<String>,
+    /// Optional direct URL for Supabase (bypasses tunnel).
+    pub supabase_direct_url: Option<String>,
+    /// Supabase anon key (safe to expose to WebView).
+    pub supabase_anon_key: String,
+    /// Optional admin email for dev-admin policy gating.
+    pub admin_email: Option<String>,
+}
+
+impl Default for FrontendConfig {
+    fn default() -> Self {
+        Self {
+            api_base_url: "https://api.888intelligenceautomation.in".into(),
+            supabase_url: String::new(),
+            supabase_tunnel_url: None,
+            supabase_direct_url: None,
+            supabase_anon_key: String::new(),
+            admin_email: None,
+        }
+    }
+}
+
 /// Top-level runtime configuration.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Config {
@@ -13,6 +52,7 @@ pub struct Config {
     pub window: WindowConfig,
     pub logging: LoggingConfig,
     pub runtime: RuntimeConfig,
+    pub frontend: FrontendConfig,
 }
 
 impl Config {
@@ -24,6 +64,7 @@ impl Config {
             window: WindowConfig::default(),
             logging: LoggingConfig::default(),
             runtime: RuntimeConfig::default(),
+            frontend: FrontendConfig::default(),
         }
     }
 }

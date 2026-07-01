@@ -27,7 +27,8 @@
  */
 
 import { supabase } from '../../substrates/supabase/client';
-import { LIVENESS_THRESHOLD_MS } from './health';
+import { LIVENESS_THRESHOLD_MS } from '../agent/health';
+import { getApiBaseUrl } from '../../substrates/config';
 import type { Json } from '../../substrates/supabase/database.types';
 import type {
   OversightSession,
@@ -40,6 +41,7 @@ import type {
   BackendSSEError,
 } from '../../contracts/agent/oversight.contract';
 import { isAgentToken, isAgentDone, isAgentError, getSSEErrorMessage } from '../../contracts/agent/oversight.contract';
+import { recordOversightChatCall } from './chat.emissions';
 // ─────────────────────────────────────────────────────────────────────────────
 // Types — inlined as part of Phase 3h. Originally lived in
 // src/hooks/useOversightChat.ts (purged in 3g). The controller is the
@@ -57,6 +59,7 @@ export interface UseOversightChatResult {
   sendMessage: (content: string) => Promise<void>;
   selectSession: (id: string) => void;
   closeStream: () => void;
+  refetch: () => void;
 }
 
 
@@ -72,9 +75,18 @@ const MAX_STREAM_DURATION_MS = LIVENESS_THRESHOLD_MS * 5;
 
 const SESSION_CAP = 5;
 
-const API_BASE =
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) ||
-  'https://api.888intelligenceautomation.in';
+const API_BASE = (() => {
+  // NOTE: getApiBaseUrl() throws if configReady has not been awaited.
+  // App boot (main.ts) must `await configReady` before this controller
+  // is imported and used.
+  try {
+    return getApiBaseUrl();
+  } catch {
+    // Fallback for browser-dev / non-Tauri — will already have been
+    // populated by the config substrate's fallback path.
+    return 'https://api.888intelligenceautomation.in';
+  }
+})();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Internal state
@@ -459,6 +471,17 @@ export function createOversightChatController(
     cleanup();
   }
 
+  function refetch(): void {
+    const t0 = Date.now();
+    try {
+      void loadSessions();
+      recordOversightChatCall({ op: 'refetch', success: true, latency_ms: Date.now() - t0 });
+    } catch (e) {
+      recordOversightChatCall({ op: 'refetch', success: false, latency_ms: Date.now() - t0, error_kind: String(e) });
+      throw e;
+    }
+  }
+
   // ── Boot ──────────────────────────────────────────────────────────────────
 
   void loadSessions();
@@ -479,6 +502,7 @@ export function createOversightChatController(
         sendMessage,
         selectSession,
         closeStream,
+        refetch,
       };
     },
     subscribe: (listener) =>
@@ -500,6 +524,7 @@ export function createOversightChatController(
       sendMessage,
       selectSession,
       closeStream,
+      refetch,
     };
   }
 }

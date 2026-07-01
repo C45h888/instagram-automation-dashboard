@@ -24,6 +24,8 @@ export const MAX_RETRIES = 3;
 export const INITIAL_DELAY_MS = 1000;
 export const RETRY_CAP_MS = 30_000;
 
+import { recordHttpCall } from './emissions';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Layer 1: fetchWithRetry — raw fetch() with exponential backoff
 // ─────────────────────────────────────────────────────────────────────────────
@@ -62,12 +64,33 @@ export const fetchWithRetry = async (
   const initialDelayMs = config.initialDelayMs ?? INITIAL_DELAY_MS;
   const isRetryable = config.isRetryable ?? defaultIsRetryable;
 
+  const urlString = typeof url === 'string' ? url : url.toString();
+  const method = options.method ?? 'GET';
+  const t0 = Date.now();
+
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      return await fetch(url, options);
+      const response = await fetch(url, options);
+      recordHttpCall({
+        url: urlString,
+        method,
+        attempt,
+        success: response.ok,
+        status: response.status,
+        latency_ms: Date.now() - t0,
+      });
+      return response;
     } catch (error) {
       const isLastAttempt = attempt === maxRetries;
       if (!isRetryable(error) || isLastAttempt) {
+        recordHttpCall({
+          url: urlString,
+          method,
+          attempt,
+          success: false,
+          latency_ms: Date.now() - t0,
+          error_kind: String(error),
+        });
         throw error;
       }
       const delayMs = initialDelayMs * Math.pow(2, attempt);

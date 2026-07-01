@@ -12,6 +12,7 @@
 
 import { supabase } from './client';
 import { getCurrentUser } from '../auth/transports/supabase';
+import { recordSupabaseCall } from './emissions';
 
 export const logApiRequest = async (
   endpoint: string,
@@ -21,9 +22,18 @@ export const logApiRequest = async (
   success: boolean,
   errorMessage?: string,
 ): Promise<void> => {
+  const t0 = Date.now();
   try {
     const user = await getCurrentUser();
-    if (!user) return;
+    if (!user) {
+      recordSupabaseCall({
+        op: 'api_usage',
+        success: false,
+        latency_ms: Date.now() - t0,
+        error_kind: 'no_user',
+      });
+      return;
+    }
 
     const apiUsageEntry = {
       user_id: user.id,
@@ -38,12 +48,33 @@ export const logApiRequest = async (
       credits_consumed: 1,
     };
 
-    await supabase.from('api_usage').upsert([apiUsageEntry], {
+    const { error } = await supabase.from('api_usage').upsert([apiUsageEntry], {
       onConflict: 'user_id,business_account_id,endpoint,method,hour_bucket',
       ignoreDuplicates: false,
     });
+
+    if (error) {
+      recordSupabaseCall({
+        op: 'api_usage',
+        success: false,
+        latency_ms: Date.now() - t0,
+        error_kind: error.message,
+      });
+    } else {
+      recordSupabaseCall({
+        op: 'api_usage',
+        success: true,
+        latency_ms: Date.now() - t0,
+      });
+    }
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error('Failed to log API request:', error);
+    recordSupabaseCall({
+      op: 'api_usage',
+      success: false,
+      latency_ms: Date.now() - t0,
+      error_kind: String(error),
+    });
   }
 };
